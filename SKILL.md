@@ -1,7 +1,7 @@
 ---
 name: piggyback
 description: "Reconcile mid-plan ideas against the settled product plan."
-version: 0.1.0
+version: 0.1.1
 license: MIT
 platforms: [linux, macos, windows]
 metadata:
@@ -117,7 +117,7 @@ the answer if it is not "no reason".
 |---|---|---|
 | FOLD | Enters the plan | exact accepted variant |
 | PARK | Good, not now | `revisit-when:` — a falsifiable condition, or it is a graveyard entry |
-| DROP | Rejected | one-line reason, plus a reopen condition if it could become true |
+| DROP | Rejected | **Human-only.** The agent recommends; it never applies DROP itself |
 | NEEDS-INPUT | Not yet understood | temporary only; resolve before any terminal disposition |
 
 The agent decides how. For anything that changes what the thing is, the agent
@@ -128,23 +128,42 @@ hedge. Give them linked IDs.
 
 ## Output
 
-Routine fold — one line, never a paragraph:
+Two layers. The receipt is for the record; the note is what you actually say to
+the human. **Never collapse them into one line** — measured 2026-10-14: one-line
+output discarded the need, the smallest mechanism and the obligations, which is
+the entire value, and scored worse than plain planning on every axis.
+
+**Always write the receipt** (one line, to PIGGYBACK.md):
 
 ```
-pb: PB-015 how   → FOLD   (+obligation: weekly content)
+pb: PB-015 how → FOLD (+obligation: weekly content)
 ```
 
-Identity change — one line, then the diff, then wait:
+**Then say the thing that matters.** Give the need, the smallest mechanism that
+meets it, and what the idea costs. If the cheapest version already covers the
+need, say so — that is usually the most useful sentence in the reply.
 
-```
-⚑ PB-014 adds "registered users" to WHO.
-  need: recover a lost draft
-  smallest: recovery link on the existing share flow
-  diff: WHO gains "registered users"; NEW obligation: retained user data
-  recommend SHRINK → recovery link
-```
+Routine fold, say it short:
 
-Prose belongs in the reasoning, not in front of the human.
+> PB-015 folded. It adds a weekly content obligation — you now owe a send every
+> release, plus unsubscribe handling. A `/changelog` page fed from your release
+> notes covers the need with no standing duty. Taking the newsletter?
+
+Identity change — say it fully, then wait:
+
+> ⚑ PB-014 adds "registered users" to WHO — that is non-goal 3, and it reverses
+> D-03 (localStorage persistence, because: non-goal 3).
+>
+> The need is "don't lose work". Export/import a project file covers that with
+> no server, no auth, no password resets, no deletion requests. Accounts would
+> add retained user data, backups, and a privacy policy — on a plan with an
+> eight-week appetite and no email infrastructure today.
+>
+> Recommend SHRINK → export/import. Want accounts anyway? That is a contract
+> change, rev bump, and most of these decisions get re-audited.
+
+Prose is not decoration here. A refusal the human cannot evaluate is a refusal
+they will override next turn.
 
 ## Maintaining the plan
 

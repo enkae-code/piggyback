@@ -29,7 +29,8 @@ One file, `PIGGYBACK.md`, holds a contract you confirm. Each new idea runs five
 steps: **normalize** (split bundles, separate need from mechanism) →
 **collision check** (against decisions and non-goals, every time) → **contract
 diff** (what fields change, what obligations appear) → **shrink** (smallest
-mechanism that meets the need) → **disposition** (FOLD / PARK / DROP).
+mechanism that meets the need) → **disposition** (FOLD / PARK / DROP, where DROP
+is always the human's call, not the agent's).
 
 Three rules carry most of the value:
 
@@ -84,23 +85,37 @@ changes what the thing is.
 
 ## Evidence status
 
-**Illustrated, not proved.** Honest state as of 2026-10-14:
+**Value not proven for the procedure. Partially supported for the template.**
 
-- The design was reviewed by three independent models (Hermes, GPT Sol 6.1,
-  Claude Opus 5.5) in a blind-critique-then-rebuttal loop. All three rejected the
-  original mechanism — a one-question essence gate that tested necessity, not
-  identity, and therefore rubber-stamped the drift it was meant to catch. What
-  ships here is the replacement they converged on.
-- Twelve regression scenarios exist in `examples/scenarios.md`. They have not
-  been run against the shipped procedure.
-- No comparative measurement exists: missed impacts, unnecessary interruptions,
-  or whether plans actually get clearer, measured against ordinary planning.
-- Earlier versions were piloted on one already-shipped product, retrospectively,
-  by someone who knew the answers. That is a demonstration, not validation.
+Measured 2026-10-14, seven sequential human-injected ideas against a settled
+plan, three isolated conditions on the same model:
 
-The drift claim is unproven until someone runs a real idea-stacking sequence —
-sequential, human-injected, live — through this. `examples/scenarios.md` §
-Comparison protocol is how to check.
+| Measure | No contract | Contract only | Full gate |
+|---|---|---|---|
+| Smaller/cheaper alternatives proposed | **7** | 6 | 2 |
+| Ongoing obligations named | **10** | 6 | 3 |
+| Collective drift flagged | idea 7 | **idea 3** | only in cumulative check |
+
+The gated run scored worst on every axis. Two defects were found in the
+procedure's own output and fixed in 0.1.1: DROP was reachable by the agent (it
+disposed of all seven ideas, including ones plain planning engaged constructively),
+and the one-line output rule discarded the need, the smallest mechanism and the
+obligations — the entire value.
+
+What the contract does add, on this evidence: earlier drift detection. The
+contract-only condition flagged the collective drift at idea 3; the no-contract
+condition only saw it at idea 7, after all seven had landed.
+
+Limits, stated plainly: n=1 per condition, one model, one adversarial sequence,
+self-reported counts, and the gated run died on a rate limit partway through so
+its numbers likely understate it. This is a pilot, not a study.
+
+Earlier versions were piloted on one already-shipped product, retrospectively,
+by someone who knew the answers. That is a demonstration, not validation.
+
+**Reproduce it** — run the three conditions against a real idea-stacking
+sequence and compare. `examples/scenarios.md` § Comparison protocol is how to
+check.
 
 ## Layout
 
