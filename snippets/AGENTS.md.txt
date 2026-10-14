@@ -1,2 +1,0 @@
-Before adding anything to a settled plan, run the Piggyback gate
-(skill: piggyback, see PIGGYBACK.md at the repo root). Manual trigger: `pb:`.

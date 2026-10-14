@@ -4,14 +4,14 @@ One product. One plan. Copy this file to your project root, fill the CONTRACT,
 commit it. Everything below the contract is maintained *in place* — never
 append a session diary, replace stale rows.
 
-Run the gate on every idea before it enters the plan:
-**1. Normalize** — split bundled ideas; record the need separately from the
-proposed mechanism. Brainstorming is not instruction.
-**2. Collision check** — against decisions and non-goals. Every time, always.
-**3. Contract diff** — draft the contract as it would read if the idea shipped,
-plus the obligations it adds (data, security, content, support).
-**4. Shrink** — smallest mechanism that meets the need, inside the contract.
-**5. Disposition** — FOLD / PARK / DROP. NEEDS-INPUT until the idea is understood.
+**How to use this without a procedure:** the file's job is to survive when your
+memory doesn't. Long sessions get compacted and the plan evaporates from the
+agent's head; a file on disk cannot be compacted away. Before an idea enters
+the plan, read the CONTRACT and DECISIONS above this line and check the idea
+against them. When an idea changes the mechanism or the surface, re-read it —
+that habit is the whole technique. No per-idea ceremony: on real data, bug
+reports, polish and ops asks need no gate at all; only decisions that change
+what the thing is do.
 
 ---
 
@@ -82,10 +82,11 @@ pb: PB-016 parked → revisit-when: real users hit the 5-field limit
 material batch: re-diff the contract against *all* folds since the last
 checkpoint and weigh them against the appetite. If work went in, something
 comes out — name what moved later or got cut, or name the evidence it all fits.
+This is the step worth keeping: it is what sees that ten individually fine
+additions doubled the scope without changing the stated purpose.
 
-**Essence edits** — always shown as a before/after diff naming what got
-broader / narrower / removed / invalidated. Wording that only broadens is
-drift, not a refinement. On a confirmed FOLD, re-audit every decision briefly,
-then deeply the ones whose `because:` cites a changed field: KEEP or REVISIT.
-Three or more contract rewrites in one session → stop gating, run a short
-essence session.
+**Essence edits** — when the contract itself changes, show a before/after diff
+naming what got broader / narrower / removed / invalidated. Wording that only
+broadens is drift, not a refinement — flag it. The human confirms; `rev`
+increments. Re-audit every decision briefly, then deeply the ones whose
+`because:` cites a changed field.
