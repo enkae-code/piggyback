@@ -50,6 +50,37 @@ harness config. The one hard failure mode it protects against — the plan
 vanishing from the agent's head mid-session — is fixed by the file existing and
 being re-read, not by a workflow.
 
+## Drift alarm (spike — unvalidated)
+
+`piggyback.py` tests whether the one real catch from the validation was
+machine-detectable: it checks added lines against the prohibition-flavored
+rules in a contract file and reports lines that reuse a rule's vocabulary.
+
+    python3 piggyback.py CONTRACT [--since A..B] [--min-terms N]
+    python3 piggyback.py --self-test
+
+**Measured on the HollowPrismOS contract and four real commits:**
+
+| Commit | Real drift? | Findings | Caught? |
+|---|---|---|---|
+| e976593 v0.4.0 — embedded webviews | yes | 2 | **yes** (`deck.ts:103`, terms zoho+mail) |
+| 12ec041 v0.3.0 — compliant `embed: false` link | no | 4 | no (near-miss: same words as the violation) |
+| c7b5954 — the isolation fix | no | 3 | no (touches the forbidden surface to fix it) |
+| 7660178 — unrelated token split | no | 2 | no (architecture-vocabulary noise) |
+
+Recall is 1/1 on the one known violation; precision on ordinary commits is
+poor. The noise comes from rules whose vocabulary *is* the project's
+vocabulary — "live data from a VPS dashboard feed" matches every commit that
+touches the feed. There is no semantic layer: "webview" does not match
+"embedded", `embed: false` does not differ from `embed: true`, and fixing a
+violation still fires on the surface being fixed.
+
+**Verdict: a human-reviewed diagnostic, not a gate.** n=1, one contract, one
+author — the same limits as the validation itself. Use it to surface
+candidate drift for a human to read; do not wire it into CI on this
+evidence. Hunk-level matching was tried first and measured worse (4–7
+findings per ordinary commit); line-level is what shipped.
+
 ## Limits of the evidence
 
 n=1 real session, hand-run by the same author (self-interest bias), one model,
