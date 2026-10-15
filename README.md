@@ -50,7 +50,12 @@ harness config. The one hard failure mode it protects against — the plan
 vanishing from the agent's head mid-session — is fixed by the file existing and
 being re-read, not by a workflow.
 
-## Drift alarm (spike — unvalidated)
+## Drift alarm (early phase — unvalidated spike)
+
+**Status: early phase / experimental.** This tool is a research spike, not
+production software. It has been measured against exactly one contract and
+four commits; its interface, thresholds and parsing may change or be removed
+without notice. Read it as evidence for an idea, not as a tool to depend on.
 
 `piggyback.py` tests whether the one real catch from the validation was
 machine-detectable: it checks added lines against the prohibition-flavored
