@@ -1,163 +1,163 @@
 {
-  "source": "vault Specs/open-source-plan/phase-c-sets.md, section C1 (frozen 2026-11-17)",
+  "source": "vault Specs/open-source-plan/phase-c-sets.md, section C1, Set 2 (frozen 2026-11-21; Set 1 was run c1-gate-20261119)",
   "primary": [
     {
       "id": "C1-01",
-      "reference": "https://stripe.com/",
-      "build": "https://linear.app/",
-      "coverage": "SaaS landing, similar category"
+      "reference": "https://buffer.com/",
+      "build": "https://www.todoist.com/",
+      "coverage": "Similar: SaaS landing pages"
     },
     {
       "id": "C1-02",
-      "reference": "https://linear.app/",
-      "build": "https://vercel.com/",
-      "coverage": "SaaS landing, similar category; dark/light"
+      "reference": "https://bun.com/",
+      "build": "https://deno.com/",
+      "coverage": "Similar: JavaScript runtime developer tools"
     },
     {
       "id": "C1-03",
-      "reference": "https://vercel.com/",
-      "build": "https://docs.python.org/3/",
-      "coverage": "Dev tool to docs; dark/light"
+      "reference": "https://docs.deno.com/",
+      "build": "https://pkg.go.dev/",
+      "coverage": "Similar: runtime and package documentation"
     },
     {
       "id": "C1-04",
-      "reference": "https://docs.python.org/3/",
-      "build": "https://developer.mozilla.org/",
-      "coverage": "Docs, similar category"
+      "reference": "https://www.muji.us/",
+      "build": "https://www.llbean.com/",
+      "coverage": "Similar: consumer retail storefronts"
     },
     {
       "id": "C1-05",
-      "reference": "https://www.shopify.com/",
-      "build": "https://www.ikea.com/",
-      "coverage": "E-commerce, similar category"
+      "reference": "https://www.propublica.org/",
+      "build": "https://www.rockpapershotgun.com/",
+      "coverage": "Similar: investigative and games editorial"
     },
     {
       "id": "C1-06",
-      "reference": "https://www.apple.com/",
-      "build": "https://www.patagonia.com/",
-      "coverage": "E-commerce, cross-category; motion-heavy/static"
+      "reference": "https://www.guggenheim.org/",
+      "build": "https://www.getty.edu/",
+      "coverage": "Similar: cultural institutions"
     },
     {
       "id": "C1-07",
-      "reference": "https://www.bbc.com/",
-      "build": "https://www.theguardian.com/",
-      "coverage": "News/editorial, similar category; dense"
+      "reference": "https://www.census.gov/",
+      "build": "https://www.irs.gov/",
+      "coverage": "Similar: government and public services"
     },
     {
       "id": "C1-08",
-      "reference": "https://www.npr.org/",
-      "build": "https://www.metmuseum.org/",
-      "coverage": "Editorial to cultural institution"
+      "reference": "https://www.noodles.com/",
+      "build": "https://www.wagamama.com/",
+      "coverage": "Similar: restaurant homepages"
     },
     {
       "id": "C1-09",
-      "reference": "https://www.gov.uk/",
-      "build": "https://www.usa.gov/",
-      "coverage": "Government, similar category"
+      "reference": "https://bandcamp.com/",
+      "build": "https://www.abebooks.com/",
+      "coverage": "Similar: music and books marketplaces"
     },
     {
       "id": "C1-10",
-      "reference": "https://www.figma.com/",
-      "build": "https://github.com/",
-      "coverage": "Dev tool, cross-category"
+      "reference": "https://www.gimp.org/",
+      "build": "https://kde.org/",
+      "coverage": "Similar: open-source project homepages"
     },
     {
       "id": "C1-11",
-      "reference": "https://www.notion.com/",
-      "build": "https://www.mozilla.org/",
-      "coverage": "SaaS to nonprofit/open-source; sparse"
+      "reference": "https://www.loom.com/",
+      "build": "https://www.census.gov/",
+      "coverage": "Cross: video SaaS to government"
     },
     {
       "id": "C1-12",
-      "reference": "https://www.airbnb.com/",
-      "build": "https://www.ikea.com/",
-      "coverage": "Marketplace to retail; dense"
+      "reference": "https://bun.com/",
+      "build": "https://www.irs.gov/",
+      "coverage": "Cross: developer tool to public services"
     },
     {
       "id": "C1-13",
-      "reference": "https://www.nationalgeographic.com/",
-      "build": "https://www.bbc.com/",
-      "coverage": "Editorial, similar category; image-led"
+      "reference": "https://www.llbean.com/",
+      "build": "https://www.propublica.org/",
+      "coverage": "Cross: retail to investigative editorial"
     },
     {
       "id": "C1-14",
-      "reference": "https://www.nasa.gov/",
-      "build": "https://www.gov.uk/",
-      "coverage": "Government, cross-category; light/dense"
+      "reference": "https://www.noodles.com/",
+      "build": "https://pkg.go.dev/",
+      "coverage": "Cross: restaurant to docs; autoplay hero versus static search landing"
     },
     {
       "id": "C1-15",
-      "reference": "https://www.starbucks.com/",
-      "build": "https://www.chipotle.com/",
-      "coverage": "Restaurant, similar category"
+      "reference": "https://www.getty.edu/",
+      "build": "https://bandcamp.com/",
+      "coverage": "Cross: cultural institution to music marketplace"
     },
     {
       "id": "C1-16",
-      "reference": "https://www.sweetgreen.com/",
-      "build": "https://www.apple.com/",
-      "coverage": "Restaurant to e-commerce; motion-heavy/static"
+      "reference": "https://www.openstreetmap.org/",
+      "build": "https://www.todoist.com/",
+      "coverage": "Cross: nonprofit open-data map to productivity SaaS"
     },
     {
       "id": "C1-17",
-      "reference": "https://www.mozilla.org/",
-      "build": "https://vercel.com/",
-      "coverage": "Open-source to SaaS; dark/light"
+      "reference": "https://www.wagamama.com/",
+      "build": "https://www.muji.us/",
+      "coverage": "Cross: restaurant to retail"
     },
     {
       "id": "C1-18",
-      "reference": "https://www.metmuseum.org/",
-      "build": "https://www.airbnb.com/",
-      "coverage": "Cultural institution to marketplace"
+      "reference": "https://www.gimp.org/",
+      "build": "https://www.guggenheim.org/",
+      "coverage": "Cross: open-source project to museum"
     },
     {
       "id": "C1-19",
-      "reference": "https://www.usa.gov/",
-      "build": "https://www.npr.org/",
-      "coverage": "Government to editorial; dense/sparse"
+      "reference": "https://www.rockpapershotgun.com/",
+      "build": "https://go.dev/",
+      "coverage": "Cross: editorial to developer tool; dense/sparse candidate"
     },
     {
       "id": "C1-20",
-      "reference": "https://www.patagonia.com/",
-      "build": "https://www.figma.com/",
-      "coverage": "E-commerce to dev tool; motion-heavy/static"
+      "reference": "https://1password.com/",
+      "build": "https://www.irs.gov/",
+      "coverage": "Cross: security SaaS to public services; dark/light candidate"
     }
   ],
   "reserves": [
     {
       "id": "R1",
-      "reference": "https://www.w3.org/",
-      "build": "https://www.gov.uk/",
-      "coverage": "Standards/docs to government"
+      "reference": "https://miro.com/",
+      "build": "https://www.grammarly.com/",
+      "coverage": "Similar: collaboration and writing SaaS"
     },
     {
       "id": "R2",
-      "reference": "https://www.loc.gov/",
-      "build": "https://www.metmuseum.org/",
-      "coverage": "Public institutions"
+      "reference": "https://vite.dev/",
+      "build": "https://doc.rust-lang.org/",
+      "coverage": "Cross: developer tool to language docs"
     },
     {
       "id": "R3",
-      "reference": "https://www.dropbox.com/",
-      "build": "https://www.shopify.com/",
-      "coverage": "SaaS to e-commerce"
+      "reference": "https://www.nps.gov/",
+      "build": "https://www.guggenheim.org/",
+      "coverage": "Cross: public parks agency to cultural institution"
     },
     {
       "id": "R4",
-      "reference": "https://www.starbucks.com/",
-      "build": "https://www.bbc.com/",
-      "coverage": "Restaurant to editorial"
+      "reference": "https://www.culvers.com/",
+      "build": "https://www.everlane.com/",
+      "coverage": "Cross: restaurant to apparel retail"
     },
     {
       "id": "R5",
-      "reference": "https://www.nasa.gov/",
-      "build": "https://www.nationalgeographic.com/",
-      "coverage": "Science/editorial"
+      "reference": "https://www.wired.com/",
+      "build": "https://www.teacherspayteachers.com/",
+      "coverage": "Cross: tech editorial to teaching-materials marketplace"
     },
     {
       "id": "R6",
-      "reference": "https://www.ikea.com/",
-      "build": "https://linear.app/",
-      "coverage": "Retail to SaaS; light/dark"
+      "reference": "https://www.videolan.org/",
+      "build": "https://www.wingstop.com/",
+      "coverage": "Cross: nonprofit/open-source to restaurant"
     }
   ]
 }
