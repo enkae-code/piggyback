@@ -32,7 +32,7 @@ Each cell shows the pinned count. The other dispositions are listed beside it.
 
 The card slot scored 0 pins in both runs. This is a documented limitation of the current harness, not a finding about the sites:
 
-- The card overlay counts only when the card group sits fully inside the first 900px screen on both pages. Card grids sit below that fold on nearly every site in the set.
+- The card overlay counts only when the card group sits fully inside the first 900px screen on both pages. Card grids sit below that fold on nearly every site in the set. In run 2, 29 of the 39 sides with a card had it below the fold, and none of the 19 pairs with a card on both sides had it fully in view on both.
 - The card pin compares the card container's type. That container usually inherits the page's base type, so the comparison rarely finds a card-specific difference.
 - Heading and body rows marked *not found* were pages that truly lack that anchor.
 
