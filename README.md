@@ -1,8 +1,8 @@
 <h1 align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="assets/piggyback-logo-dark.svg">
-    <source media="(prefers-color-scheme: light)" srcset="assets/piggyback-logo-light.svg">
-    <img src="assets/piggyback-logo-light.svg" alt="Piggyback" width="440">
+    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/enkae-code/piggyback/v0.1.0/assets/piggyback-logo-dark.svg">
+    <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/enkae-code/piggyback/v0.1.0/assets/piggyback-logo-light.svg">
+    <img src="https://raw.githubusercontent.com/enkae-code/piggyback/v0.1.0/assets/piggyback-logo-light.svg" alt="Piggyback" width="440">
   </picture>
 </h1>
 
@@ -15,7 +15,7 @@
 </p>
 
 <p align="center">
-  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-2C3E50?style=flat" alt="License: MIT"></a>
+  <a href="https://github.com/enkae-code/piggyback/blob/v0.1.0/LICENSE"><img src="https://img.shields.io/badge/license-MIT-2C3E50?style=flat" alt="License: MIT"></a>
   <img src="https://img.shields.io/badge/python-3.11%2B-2C3E50?style=flat&logo=python&logoColor=white" alt="Python 3.11+">
   <a href="#status"><img src="https://img.shields.io/badge/status-0.1.0-2C3E50?style=flat" alt="Status: 0.1.0"></a>
 </p>
@@ -44,7 +44,7 @@ Every pin and brief line names the concept in plain words and says why it matter
 
 Type, palette, radius, anchors and container width are measured on the first screen (1440×900); container width is weighted by visible area. Spacing and motion are measured over the whole document.
 
-To try Piggyback without a page of your own, pick a **starter** in the reference slot. Starters are six CC0 pages shipped inside the package (`starter:<id>`, listed by `list_starters`). They are read from the package, never fetched, and their brief is labelled with the starter id. Their source pages are in [starters/](starters/README.md).
+To try Piggyback without a page of your own, pick a **starter** in the reference slot. Starters are six CC0 pages shipped inside the package (`starter:<id>`, listed by `list_starters`). They are read from the package, never fetched, and their brief is labelled with the starter id. Their source pages are in [starters/](https://github.com/enkae-code/piggyback/blob/v0.1.0/starters/README.md).
 
 | <img src="https://raw.githubusercontent.com/enkae-code/piggyback/main/piggyback/starters/northline-ops/screenshot.png" width="420" alt="Northline Field Ops starter, first screen at 1440×900"><br>`starter:northline-ops` | <img src="https://raw.githubusercontent.com/enkae-code/piggyback/main/piggyback/starters/mina-okafor/screenshot.png" width="420" alt="Mina Okafor starter, first screen at 1440×900"><br>`starter:mina-okafor` |
 |---|---|
@@ -57,7 +57,7 @@ On a reference's brief, press Borrow or Avoid on a measured row to add a note, w
 
 ## Status
 
-`0.1.0` is the current release. The pin-accuracy check passed on accuracy but failed its anchor-coverage bar twice, partly because no card pin had both boxes fully inside the first screen. See [bench/c1/RESULTS.md](bench/c1/RESULTS.md). Expect rough edges, and report them in the issues.
+`0.1.0` is the current release. The pin-accuracy check passed on accuracy but failed its anchor-coverage bar twice, partly because no card pin had both boxes fully inside the first screen. See [bench/c1/RESULTS.md](https://github.com/enkae-code/piggyback/blob/v0.1.0/bench/c1/RESULTS.md). Expect rough edges, and report them in the issues.
 
 ## Install
 
@@ -146,4 +146,4 @@ Run `scripts/check.sh` for the gates. To run them before every push, enable the 
 
 ## License
 
-MIT. See [LICENSE](LICENSE).
+MIT. See [LICENSE](https://github.com/enkae-code/piggyback/blob/v0.1.0/LICENSE).
