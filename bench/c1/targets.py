@@ -249,8 +249,8 @@ def _qualifies_as_card(snap, el, vw):
     )
 
 
-def _sibling_groups(els):
-    """Rendered elements sharing a parent, tag and class, in DOM order per group.
+def _sibling_groups(snap, els):
+    """Rendered elements sharing a light parent, tag and class, in DOM order per group.
 
     Walked as measure.js builds them: parents in first-seen order, then signatures within each
     parent in first-seen order, so a tie goes to the same group.
@@ -258,9 +258,10 @@ def _sibling_groups(els):
     by_parent = {}
     for el in els:
         cls = el.attrs.get("class")
-        if not cls or el.parent < 0:  # an empty class is no class, as in measure.js
+        parent = snap.light_parent(el.idx)
+        if not cls or parent < 0:  # an empty class is no class, as in measure.js
             continue
-        by_parent.setdefault(el.parent, {}).setdefault((el.tag, cls), []).append(el)
+        by_parent.setdefault(parent, {}).setdefault((el.tag, cls), []).append(el)
     return [group for sigs in by_parent.values() for group in sigs.values()]
 
 
@@ -269,7 +270,7 @@ def _card_group(snap, els, vw, vh):
     then the largest; the first group wins a tie. Mirrors measure.js.
     """
     groups = []
-    for members in _sibling_groups(els):
+    for members in _sibling_groups(snap, els):
         qualifying = [el for el in members if _qualifies_as_card(snap, el, vw)]
         if len(qualifying) >= 3:
             groups.append(qualifying)

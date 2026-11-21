@@ -44,7 +44,6 @@ class El:
     tag: str
     attrs: dict
     parent: int
-    children: list
     style: dict | None  # computed styles; None when the element has no layout (not rendered)
     box: tuple | None  # x, y, width, height in viewport px
     boxes: list = field(default_factory=list)  # boxes of the text under this element
@@ -106,9 +105,7 @@ class Snapshot:
                 box = self._shift(layout["bounds"][li])
             tag = self._text(nodes["nodeName"][idx]).lower()
             shadow = idx in self.shadow
-            els[idx] = El(
-                idx, tag, attrs, self.parents[idx], self.children[idx], style, box, shadow=shadow
-            )
+            els[idx] = El(idx, tag, attrs, self.parents[idx], style, box, shadow=shadow)
         return els
 
     def _attach_text_boxes(self, doc):
@@ -126,6 +123,13 @@ class Snapshot:
 
     def elements(self):
         return [self.els[idx] for idx in sorted(self.els) if not self.els[idx].shadow]
+
+    def light_parent(self, idx):
+        """Nearest non-shadow ancestor: the light-DOM parent, -1 at root."""
+        parent = self.parents[idx]
+        while parent >= 0 and parent in self.shadow:
+            parent = self.parents[parent]
+        return parent
 
     def light_children(self, idx):
         """Children of idx with shadow nodes transparent: a shadow node's children take its place.
