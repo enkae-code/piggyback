@@ -40,7 +40,8 @@ The browser test `tests.test_bench_c1_browser` needs Playwright and runs on the 
 
 Verdict is `pass`, `fail`, or `incomplete` (any unresolved pair).
 
-Known limits (shadow DOM, capture side): the DOMSnapshot is the flat tree, so ground truth sees
-light nodes slotted into named slots in slot order, not light-DOM order, and never sees unslotted
-light nodes. A DOM-order tie or a host's own text can then differ from measure.js. Left as is:
-2 of 72 captured pages had any `<slot>`; fixing it means `measure.py` recording light-DOM order.
+Known limits (shadow DOM, capture side): the flat-tree order changes any DOM-order choice for slotted
+nodes (first body, nav, card-group member, tie-breaks). Unslotted light nodes (text or child
+elements) are missing, so a host's own text and card content can differ. Exact parity needs
+`measure.py` to capture light-DOM order and the omitted unslotted nodes. Left as is: 2 of 72
+captured pages had any `<slot>`.

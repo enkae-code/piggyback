@@ -61,6 +61,17 @@ class ShadowGuards(unittest.TestCase):
         t = targets.lock_targets(data)["card"]
         self.assertEqual((t.get("count"), t.get("dom_index")), (3, 1))
 
+    def test_card_with_only_a_shadow_child_does_not_qualify(self):  # targets.py has_content
+        cards = []
+        for x, base in ((0, 1), (220, 3), (440, 5)):
+            cards += [
+                el("div", parent=0, box=(x, 0, 200, 120), attrs={"class": "card"}),  # base
+                el("div", parent=base),  # base+1: shadow div, no text, no light children
+            ]
+        data = evidence([el("div", box=(0, 0, 780, 200)), *cards])
+        with_shadow(data, [2, 4, 6])
+        self.assertEqual(targets.lock_targets(data)["card"], {"absent": True})
+
 
 class SplitSlotCards(unittest.TestCase):
     def test_cards_split_across_named_slots_group_under_the_host(self):
@@ -70,6 +81,7 @@ class SplitSlotCards(unittest.TestCase):
         data = json.loads((FIXTURE / "split.json").read_text(encoding="utf-8"))
         snap = Snapshot(data)
         self.assertEqual([snap.light_parent(i) for i in (10, 12, 16)], [7, 7, 7])
+        self.assertEqual(snap.light_parent(2), -1)  # <html>: its parent is the Document node
         t = targets.lock_targets(data)["card"]
         got = (t["count"], t["tag"], t["dom_index"], t["box"])
         self.assertEqual(got, (3, "div", 10, [0, 0, 200, 120]))

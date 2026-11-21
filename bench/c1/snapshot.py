@@ -125,11 +125,11 @@ class Snapshot:
         return [self.els[idx] for idx in sorted(self.els) if not self.els[idx].shadow]
 
     def light_parent(self, idx):
-        """Nearest non-shadow ancestor: the light-DOM parent, -1 at root."""
+        """Nearest non-shadow ancestor: the light-DOM parent, -1 if none or not an element."""
         parent = self.parents[idx]
         while parent >= 0 and parent in self.shadow:
             parent = self.parents[parent]
-        return parent
+        return parent if parent >= 0 and self.kind[parent] == 1 else -1
 
     def light_children(self, idx):
         """Children of idx with shadow nodes transparent: a shadow node's children take its place.
