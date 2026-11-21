@@ -17,7 +17,7 @@
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-2C3E50?style=flat" alt="License: MIT"></a>
   <img src="https://img.shields.io/badge/python-3.11%2B-2C3E50?style=flat&logo=python&logoColor=white" alt="Python 3.11+">
-  <a href="#status"><img src="https://img.shields.io/badge/status-pre--release-F39C12?style=flat" alt="Status: pre-release"></a>
+  <a href="#status"><img src="https://img.shields.io/badge/status-0.1.0-2C3E50?style=flat" alt="Status: 0.1.0"></a>
 </p>
 
 ## Why
@@ -57,7 +57,7 @@ On a reference's brief, press Borrow or Avoid on a measured row to add a note, w
 
 ## Status
 
-`0.1.0` is the current release. The pin-accuracy check passed on accuracy but failed its anchor-coverage bar twice, partly because the card anchor sits below the first screen on most sites and so never counts. See [bench/c1/RESULTS.md](bench/c1/RESULTS.md). Expect rough edges, and report them in the issues.
+`0.1.0` is the current release. The pin-accuracy check passed on accuracy but failed its anchor-coverage bar twice, partly because no card pin had both boxes fully inside the first screen. See [bench/c1/RESULTS.md](bench/c1/RESULTS.md). Expect rough edges, and report them in the issues.
 
 ## Install
 
@@ -70,7 +70,7 @@ uvx "piggyback-design[measure]"
 
 The second command opens the local screen. Run `uvx --from "piggyback-design[measure]" piggyback doctor` if a page will not measure; it checks Python, Playwright and whether Chromium starts with its sandbox.
 
-With pip, add `--pre` while only the release candidate exists: `pip install --pre "piggyback-design[measure]"`, then `python -m playwright install chromium`. `pip install piggyback` installs a different project; this one is `piggyback-design`.
+With pip: `pip install "piggyback-design[measure]"`, then `python -m playwright install chromium`. `pip install piggyback` installs a different project; this one is `piggyback-design`.
 
 ## Measure a list
 

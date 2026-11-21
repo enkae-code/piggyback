@@ -37,7 +37,7 @@ The card slot added nothing to coverage in either run. An anchor counts only whe
 | 1 | 14 | 10 | 22 / 4 / 7 | 0 |
 | 2 | 19 | 15 | 29 / 8 / 2 | 0 |
 
-Piggyback did produce card pins; they never counted because the cards sit below the first screen on most sites. This is a limit of the first-screen overlay rule, not a finding about the sites. The card pin also compares only the selected card element's own type (font size, line height, tracking), not the type of the text inside it.
+Piggyback did produce card pins; none counted because no card pin had both selected boxes fully inside the first screen. On most card sides the box sat below the fold (run 1: 9 of the 10 numbered card pins had a side below it; run 2: all 15). This is a limit of the first-screen overlay rule, not a finding about the sites. The card pin also compares only the selected card element's own type (font size, line height, tracking), not the type of the text inside it.
 
 ## Reading the other rows
 
