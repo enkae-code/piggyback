@@ -35,7 +35,12 @@ Run from the repository root, in order. Evidence goes to a store outside the rep
    replaced, so a later experiment needs a new run id.
    `python -m bench.c1.score --store STORE --run RUN`
 
-Tests: `PYTHONPATH=. python -m unittest tests.test_bench_c1 tests.test_bench_c1_round4 tests.test_bench_c1_round6` (no browser).
+Tests: `PYTHONPATH=. python -m unittest tests.test_bench_c1 tests.test_bench_c1_round4 tests.test_bench_c1_round6 tests.test_bench_c1_shadow` (no browser).
 The browser test `tests.test_bench_c1_browser` needs Playwright and runs on the host.
 
 Verdict is `pass`, `fail`, or `incomplete` (any unresolved pair).
+
+Known limits (shadow DOM, capture side): the DOMSnapshot is the flat tree, so ground truth sees
+light nodes slotted into named slots in slot order, not light-DOM order, and never sees unslotted
+light nodes. A DOM-order tie or a host's own text can then differ from measure.js. Left as is:
+2 of 72 captured pages had any `<slot>`; fixing it means `measure.py` recording light-DOM order.
