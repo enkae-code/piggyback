@@ -30,15 +30,22 @@ Each cell shows the pinned count. The other dispositions are listed beside it.
 
 ## Why the card slot scores 0
 
-The card slot scored 0 pins in both runs. This is a documented limitation of the current harness, not a finding about the sites:
+The card slot added nothing to coverage in either run. An anchor counts only when its overlay is fully inside the first 900px screen on both pages, and no pair had the selected card box fully in view on both sides.
 
-- The card overlay counts only when the card group sits fully inside the first 900px screen on both pages. Card grids sit below that fold on nearly every site in the set. In run 2, 29 of the 39 sides with a card had it below the fold, and none of the 19 pairs with a card on both sides had it fully in view on both.
-- The card pin compares the card container's type. That container usually inherits the page's base type, so the comparison rarely finds a card-specific difference.
-- Heading and body rows marked *not found* were pages that truly lack that anchor.
+| Run | Pairs with a card on both sides | Pairs with a numbered card pin | Card sides below / in / partly in the first screen | Pairs with both card boxes fully in view |
+|---|---|---|---|---|
+| 1 | 14 | 10 | 22 / 4 / 7 | 0 |
+| 2 | 19 | 15 | 29 / 8 / 2 | 0 |
+
+Piggyback did produce card pins; they never counted because the cards sit below the first screen on most sites. This is a limit of the first-screen overlay rule, not a finding about the sites. The card pin also compares only the selected card element's own type (font size, line height, tracking), not the type of the text inside it.
+
+## Reading the other rows
+
+In both runs, every heading or body row marked *not found* is on a side where the independently locked target also found no qualifying element under the benchmark's rules (for example, a heading must intersect the first screen).
 
 These results must not be read as complete difference detection. The anchor floor guarantees volume of pins, not recall: a pin set can meet the count and still miss differences the page has.
 
-No human spot-check was done, because both verdicts fail on a count, not on a judgment.
+No human spot-check was done for either run, because both verdicts failed on a count, not on a judgment.
 
 ## Per-pair results: `c1-gate-20261119`
 
