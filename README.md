@@ -57,7 +57,7 @@ On a reference's brief, press Borrow or Avoid on a measured row to add a note, w
 
 ## Status
 
-Release candidate: `0.1.0rc1` is on PyPI. `0.1.0` waits for the pin-accuracy check on 20 site pairs. Expect rough edges, and report them in the issues.
+`0.1.0` is on PyPI. The pin-accuracy check passed on accuracy but failed its anchor-coverage bar twice, partly because card grids usually sit below the first screen. See [bench/c1/RESULTS.md](bench/c1/RESULTS.md). Expect rough edges, and report them in the issues.
 
 ## Install
 

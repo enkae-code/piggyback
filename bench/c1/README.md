@@ -45,3 +45,5 @@ nodes (first body, nav, card-group member, tie-breaks). Unslotted light nodes (t
 elements) are missing, so a host's own text and card content can differ. Exact parity needs
 `measure.py` to capture light-DOM order and the omitted unslotted nodes. Left as is: 2 of 72
 captured pages had any `<slot>`.
+
+Results of the published runs: [RESULTS.md](RESULTS.md).
