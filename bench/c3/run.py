@@ -108,8 +108,19 @@ def check_checker(manifest):
 
 
 def check_conformance(run):
-    """Refuse further pages once any published page in this run was not model-conforming."""
-    for path in sorted((run / "pages").glob("*/*/run.json")):
+    """Refuse further pages once any published page in this run was not model-conforming, or a
+    claimed page was interrupted before it was published."""
+    for folder in sorted((run / "pages").glob("*/*")):
+        if not folder.is_dir():
+            continue
+        task_id, arm = folder.parent.name, folder.name
+        path = folder / "run.json"
+        if not path.is_file():
+            raise SystemExit(
+                f"refusing: {task_id}/{arm} was interrupted (no run.json); run "
+                f"`python -m bench.c3.run --run {run.name} --reconcile {task_id} {arm}` "
+                "to record it"
+            )
         try:
             saved = json.loads(path.read_text(encoding="utf-8"))
         except ValueError:
@@ -117,8 +128,9 @@ def check_conformance(run):
                 f"refusing: {path} is not readable JSON; the gate state is unknown"
             ) from None
         if saved.get("model_conforms") is not True:
-            name = f"{path.parent.parent.name}/{path.parent.name}"
-            raise SystemExit(f"refusing: {name} is not model-conforming; the gate is halted")
+            raise SystemExit(
+                f"refusing: {task_id}/{arm} is not model-conforming; the gate is halted"
+            )
 
 
 def task_row(task_id):
@@ -164,8 +176,14 @@ def call_turn(argv, project):
         raw = raw.decode("utf-8", "replace") if isinstance(raw, bytes) else raw
         error = f"turn timed out after {TURN_TIMEOUT_S} s"
         return turn_record(error, started), raw
+    return turn_from_output(proc.stdout, started, proc.returncode, proc.stderr), proc.stdout
+
+
+def turn_from_output(raw, started, returncode, stderr):
+    """The record of one turn from its raw output. A live turn and reconcile both read it this way.
+    reconcile passes returncode None: the exit status of an interrupted turn is not known."""
     try:
-        data = json.loads(proc.stdout)
+        data = json.loads(raw)
     except ValueError:
         data = None
     if not isinstance(data, dict):
@@ -178,15 +196,15 @@ def call_turn(argv, project):
         else []
     )
     error = None
-    if data is None or proc.returncode != 0 or data.get("is_error"):
-        error = f"exit {proc.returncode}: {proc.stderr.strip()[-500:] or 'no JSON result'}"
+    if data is None or returncode != 0 or data.get("is_error"):
+        error = f"exit {returncode}: {stderr.strip()[-500:] or 'no JSON result'}"
     elif usage is not None and not isinstance(usage, dict):
         error = "modelUsage is not an object"
     fields = model_usage_fields(usage) if isinstance(usage, dict) else {}
-    record = turn_record(
+    return turn_record(
         error,
         started,
-        returncode=proc.returncode,
+        returncode=returncode,
         session_id=data.get("session_id") if data else None,
         model_usage=fields,
         models=sorted(fields),
@@ -194,7 +212,6 @@ def call_turn(argv, project):
         duration_ms=data.get("duration_ms") if data else None,
         permission_denials=denials,
     )
-    return record, proc.stdout
 
 
 def model_usage_fields(usage):
@@ -342,8 +359,17 @@ def keep_transcript(out, project, session):
     return "kept"
 
 
-def publish(out, task_id, arm, session, rounds, started, status, model, error=None):
-    """Write run.json. Used for a finished loop and for a crash, with the rounds made so far."""
+def crash_status(rounds, model):
+    """An interrupted page is model_mismatch when any round it kept was on another model."""
+    off_model = any(not round_conforms(r["agent"], model) for r in rounds)
+    return MODEL_MISMATCH if off_model else RUNNER_CRASH
+
+
+def publish(
+    out, task_id, arm, session, rounds, started, status, model, error=None, reconciled=False
+):
+    """Write run.json. Used for a finished loop, a crash with the rounds made so far, and a
+    reconciled interrupted page."""
     (out / "rounds").mkdir(exist_ok=True)
     models = sorted({m for r in rounds for m in r["agent"]["models"]})
     runnable = [
@@ -377,24 +403,38 @@ def publish(out, task_id, arm, session, rounds, started, status, model, error=No
         "audit_flag": "permission_denials" if denials else None,
         "transcript": keep_transcript(out, out / "project", session),
         "total_wall_s": round(time.monotonic() - started, 1),
+        "reconciled": reconciled,
         "rounds": rounds,
     }
     publish_json(out / "run.json", result)
     return result
 
 
-def run_page(store, run_id, task_id, arm):
+def locked_run(store, run_id):
+    """The run folder and manifest, once the store, HEAD, harness, starters, inputs, CLI and
+    checker all match the lock."""
     refuse_store_links(store)
     run = run_folder(store, run_id)
     manifest = load_manifest(run)
     check_registered(run, manifest)
     check_cli(manifest)
     check_checker(manifest)
-    check_conformance(run)
+    return run, manifest
+
+
+def check_page_id(run, task_id, arm):
+    """Refuse an unknown task or arm, or a symbolic link on the way to the page folder."""
     task = task_row(task_id)
     if arm not in ARM_FILES:
         raise SystemExit(f"refusing: unknown arm {arm!r}")
     refuse_links(run, task_id, arm)
+    return task
+
+
+def run_page(store, run_id, task_id, arm):
+    run, manifest = locked_run(store, run_id)
+    check_conformance(run)
+    task = check_page_id(run, task_id, arm)
     project = run / "pages" / task_id / arm / "project"
     if len(slug_of(project)) > SLUG_LIMIT:
         raise SystemExit(
@@ -414,19 +454,58 @@ def run_page(store, run_id, task_id, arm):
         status = generate(out, out / "project", task_id, session, prompt, rounds, exe, model)
     except BaseException as exc:
         error = {"type": type(exc).__name__, "message": str(exc)}
-        publish(out, task_id, arm, session, rounds, started, RUNNER_CRASH, model, error)
+        status = crash_status(rounds, model)
+        publish(out, task_id, arm, session, rounds, started, status, model, error)
         raise
     return publish(out, task_id, arm, session, rounds, started, status, model)
+
+
+def reconcile(store, run_id, task_id, arm):
+    """Record an interrupted page from the rounds it kept. Re-runs no turn and never touches
+    project/: each agent-N.json is read as the turn it holds, then the page is published."""
+    run, manifest = locked_run(store, run_id)
+    check_page_id(run, task_id, arm)
+    out = run / "pages" / task_id / arm
+    if not out.is_dir():
+        raise SystemExit(f"refusing: {out} does not exist; there is nothing to reconcile")
+    if (out / "run.json").exists():
+        raise SystemExit(f"refusing: {out} already has run.json; nothing was interrupted")
+    started = time.monotonic()
+    rounds = []
+    while (out / "rounds" / f"agent-{len(rounds)}.json").is_file():
+        n = len(rounds)
+        raw = (out / "rounds" / f"agent-{n}.json").read_text(encoding="utf-8")
+        agent = turn_from_output(raw, started, None, "")
+        agent["error"] = "interrupted before publish"
+        rounds.append({"round": n, "agent": agent, "checklist": None})
+    session = next((r["agent"]["session_id"] for r in rounds if r["agent"]["session_id"]), None)
+    error = {
+        "type": "Interrupted",
+        "message": "runner stopped before publishing; reconciled from rounds/",
+    }
+    model = manifest["model"]
+    status = crash_status(rounds, model)
+    return publish(
+        out, task_id, arm, session, rounds, started, status, model, error, reconciled=True
+    )
 
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--store", default=str(DEFAULT_STORE))
     parser.add_argument("--run", required=True)
+    parser.add_argument(
+        "--reconcile",
+        action="store_true",
+        help="record an interrupted page from its rounds/ instead of running it",
+    )
     parser.add_argument("task", help="task id, T01 to T10")
     parser.add_argument("arm", help="one of the five arm ids")
     args = parser.parse_args(argv)
-    result = run_page(args.store, args.run, args.task, args.arm)
+    if args.reconcile:
+        result = reconcile(args.store, args.run, args.task, args.arm)
+    else:
+        result = run_page(args.store, args.run, args.task, args.arm)
     print(json.dumps({k: result[k] for k in ("status", "turns", "model_flag")}, indent=2))
     if not result["model_conforms"]:
         return 3

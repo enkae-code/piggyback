@@ -121,7 +121,15 @@ Run from the repository root, in order. Evidence goes to a store outside the rep
 and are rated as they stand. `checker_fault` scores 6, is rated and flagged. `no_output` and
 `runner_crash` score 6 and are a loss, not rated. `model_mismatch` scores 6, is flagged, is not
 rated, and halts the gate. A turn that errors but leaves a passing page is
-`pass`. `runner_crash` writes `run.json` with the rounds made so far, then re-raises.
+`pass`. `runner_crash` writes `run.json` with the rounds made so far, then re-raises; a crash after
+a round on another model is `model_mismatch`.
+
+Interrupted pages: a runner killed before publish leaves `pages/TASK/ARM/` with no `run.json`, and
+the next page of the run is refused until it is recorded. Run
+`python -m bench.c3.run --run RUN --reconcile TASK ARM`: it rebuilds the rounds from
+`rounds/agent-N.json` (no turn runs, `project/` is untouched) and publishes `run.json` with
+`reconciled: true`, status `model_mismatch` or `runner_crash`. Reconcile refuses an arm that already
+has `run.json` or does not exist.
 
 Tests: `PYTHONPATH=. python -m unittest tests.test_bench_c3_manifest tests.test_bench_c3_run` (no
 browser, no model; the agent call and the checklist are stubbed).

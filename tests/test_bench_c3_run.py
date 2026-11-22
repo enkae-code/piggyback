@@ -701,7 +701,8 @@ class ModelMismatch(unittest.TestCase):
             saved = json.loads(
                 (store / run_id / "pages" / "T01" / "screenshot" / "run.json").read_text()
             )
-            self.assertEqual(saved["status"], "runner_crash")
+            self.assertEqual(saved["status"], "model_mismatch")
+            self.assertEqual(saved["error"]["type"], "OSError")
             self.assertEqual(len(saved["rounds"]), 1)
             self.assertFalse(saved["model_conforms"])
             self.assertEqual(len(agent.calls), 1)
@@ -710,6 +711,106 @@ class ModelMismatch(unittest.TestCase):
                     runner.run_page(str(store), run_id, "T01", "hand-design-md")
             self.assertIn("T01/screenshot", str(caught.exception))
             self.assertFalse((store / run_id / "pages" / "T01" / "hand-design-md").exists())
+
+
+def interrupted_arm(store, run_id, task_id, arm, *turns):
+    """A claimed page that stopped before publish: a project folder and one raw output per turn."""
+    out = store / run_id / "pages" / task_id / arm
+    (out / "rounds").mkdir(parents=True)
+    (out / "project").mkdir()
+    (out / "project" / "index.html").write_text("<html>page</html>", encoding="utf-8")
+    for n, text in enumerate(turns):
+        (out / "rounds" / f"agent-{n}.json").write_text(text, encoding="utf-8")
+    return out
+
+
+class Interrupted(unittest.TestCase):
+    def test_an_interrupted_arm_refuses_the_next_page_with_no_agent_call(self):
+        # Negative check for the interrupted guard: without it a wrong-model turn left by a killed
+        # runner would not halt the gate, and the next page would run.
+        with tempfile.TemporaryDirectory() as tmp:
+            store, run_id = make_run(tmp)
+            wrong = agent_json(models=("claude-haiku-5-5",))
+            interrupted_arm(store, run_id, "T01", "screenshot", wrong)
+            agent = FakeAgent()
+            with registered(), mock.patch.object(runner, "agent_turn", side_effect=agent):
+                with self.assertRaises(SystemExit) as caught:
+                    runner.run_page(str(store), run_id, "T01", "hand-design-md")
+            self.assertIn("T01/screenshot was interrupted", str(caught.exception))
+            self.assertEqual(agent.calls, [])
+
+    def test_reconcile_records_a_wrong_model_interrupt_and_keeps_the_gate_halted(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            store, run_id = make_run(tmp)
+            out = interrupted_arm(
+                store, run_id, "T01", "screenshot", agent_json(models=("claude-haiku-5-5",))
+            )
+            no_turn = mock.patch.object(
+                runner, "agent_turn", side_effect=AssertionError("no agent")
+            )
+            with registered(), no_turn:
+                result = runner.reconcile(str(store), run_id, "T01", "screenshot")
+            saved = json.loads((out / "run.json").read_text(encoding="utf-8"))
+            self.assertEqual(saved["status"], "model_mismatch")
+            self.assertFalse(saved["model_conforms"])
+            self.assertTrue(saved["reconciled"])
+            self.assertEqual(saved["error"]["type"], "Interrupted")
+            self.assertEqual(saved["rounds"][0]["agent"]["error"], "interrupted before publish")
+            self.assertIsNone(saved["rounds"][0]["checklist"])
+            self.assertEqual(result, saved)
+            self.assertEqual(sorted(p.name for p in (out / "project").iterdir()), ["index.html"])
+            self.assertEqual((out / "project" / "index.html").read_text(), "<html>page</html>")
+            with registered(), mock.patch.object(runner, "agent_turn", side_effect=FakeAgent()):
+                with self.assertRaises(SystemExit) as caught:
+                    runner.run_page(str(store), run_id, "T01", "hand-design-md")
+            self.assertIn("T01/screenshot is not model-conforming", str(caught.exception))
+
+    def test_reconcile_of_a_conforming_interrupt_lets_the_next_page_run(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            store, run_id = make_run(tmp)
+            out = interrupted_arm(store, run_id, "T01", "screenshot", agent_json(session="sess-9"))
+            with registered():
+                saved = runner.reconcile(str(store), run_id, "T01", "screenshot")
+            self.assertEqual(saved["status"], "runner_crash")
+            self.assertTrue(saved["model_conforms"])
+            self.assertEqual(saved["session_id"], "sess-9")
+            self.assertTrue((out / "run.json").is_file())
+            passing = mock.patch.object(checklist, "run_bounded", return_value=report("pass"))
+            with (
+                registered(),
+                passing,
+                mock.patch.object(runner, "agent_turn", side_effect=FakeAgent()),
+            ):
+                result = runner.run_page(str(store), run_id, "T01", "hand-design-md")
+            self.assertEqual(result["status"], "pass")
+
+    def test_reconcile_refuses_an_arm_that_already_has_run_json(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            store, run_id = make_run(tmp)
+            out = interrupted_arm(store, run_id, "T01", "screenshot", agent_json())
+            (out / "run.json").write_text("{}", encoding="utf-8")
+            with registered(), self.assertRaises(SystemExit) as caught:
+                runner.reconcile(str(store), run_id, "T01", "screenshot")
+            self.assertIn("already has run.json", str(caught.exception))
+            self.assertEqual((out / "run.json").read_text(encoding="utf-8"), "{}")
+
+    def test_reconcile_refuses_a_missing_arm_folder(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            store, run_id = make_run(tmp)
+            with registered(), self.assertRaises(SystemExit) as caught:
+                runner.reconcile(str(store), run_id, "T01", "screenshot")
+            self.assertIn("does not exist", str(caught.exception))
+            self.assertFalse((store / run_id / "pages").exists())
+
+    def test_reconcile_cli_exits_3_on_a_model_mismatch(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            store, run_id = make_run(tmp)
+            interrupted_arm(
+                store, run_id, "T01", "screenshot", agent_json(models=("claude-haiku-5-5",))
+            )
+            argv = ["--store", str(store), "--run", run_id, "--reconcile", "T01", "screenshot"]
+            with registered(), contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(runner.main(argv), 3)
 
 
 def read_url(url):
