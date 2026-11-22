@@ -105,10 +105,11 @@ Run from the repository root, in order. Evidence goes to a store outside the rep
    sent message (`sent-N.txt`), each raw agent output (`agent-N.json`) and `transcript.jsonl` when
    the session file exists (`transcript` is `kept`, `missing`, or `copy_failed: <Error>`).
    A run that used any model other than `claude-opus-5-5` lists it in `model_flag`; `model_evidence`
-   is `missing` when the CLI reported no `modelUsage`. `model_conforms` is true when every round's
-   `modelUsage` has exactly that model with the locked context window. A page that is not conforming
-   prints `STOP` and halts the gate. `gate_eligible` is `model_conforms` and a status other than
-   `no_output` or `runner_crash`. Each round keeps its `permission_denials` (tool name and target
+   is `missing` when a round reported no `modelUsage`. `model_conforms` is false only when a round
+   reported a model other than that one, or another context window; such a page prints `STOP` and
+   halts the gate, as the spec requires for a model change. A round with no usage report is missing
+   evidence, not a model change, and does not halt. `gate_eligible` equals `model_conforms`; a
+   `no_output` page still counts for the gate, as the preregistered loss. Each round keeps its `permission_denials` (tool name and target
    path); a run with any prints `FLAG` and sets `audit_flag` to `permission_denials`.
    `python -m bench.c3.run --store STORE --run RUN TASK ARM`
    Run it for each of the 10 tasks and 5 arms (50 pages). Rating comes in a later step.

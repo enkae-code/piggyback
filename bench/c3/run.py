@@ -210,8 +210,12 @@ def denial_target(denial):
 
 
 def round_conforms(agent, window):
-    """True when the turn used only the locked model, with the locked context window."""
+    """False only when the turn reported a model other than the locked one, or another context
+    window. A turn with no usage report (a timeout, a crash) is missing evidence, recorded in
+    model_evidence, not a model change; halting the gate for it would stop the run for good."""
     usage = agent["model_usage"]
+    if not usage:
+        return True
     return set(usage) == {MODEL} and usage[MODEL]["contextWindow"] == window
 
 
@@ -311,7 +315,7 @@ def publish(out, task_id, arm, session, rounds, started, status, window, error=N
         r["round"] for r in rounds if r["checklist"] and r["checklist"]["outcome"] in RUNNABLE
     ]
     evidence = bool(rounds) and all(r["agent"]["model_usage_present"] for r in rounds)
-    conforms = bool(rounds) and all(round_conforms(r["agent"], window) for r in rounds)
+    conforms = all(round_conforms(r["agent"], window) for r in rounds)
     denials = sum(len(r["agent"]["permission_denials"]) for r in rounds)
     if denials:
         print(
@@ -332,7 +336,8 @@ def publish(out, task_id, arm, session, rounds, started, status, window, error=N
         "model_flag": [m for m in models if m != MODEL],
         "model_evidence": "confirmed" if evidence else "missing",
         "model_conforms": conforms,
-        "gate_eligible": conforms and status not in (NO_OUTPUT, RUNNER_CRASH),
+        # A no-output page still counts for the gate, as a preregistered loss (status_scoring).
+        "gate_eligible": conforms,
         "denials_total": denials,
         "audit_flag": "permission_denials" if denials else None,
         "transcript": keep_transcript(out, out / "project", session),

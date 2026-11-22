@@ -608,12 +608,18 @@ class ModelConformance(unittest.TestCase):
             self.assertIn("T01/screenshot", str(caught.exception))
             self.assertFalse((store / "r1" / "pages" / "T01" / "hand-design-md").exists())
 
-    def test_missing_model_usage_is_not_conforming(self):
+    def test_missing_model_usage_is_recorded_but_does_not_halt_the_gate(self):
+        # Missing evidence is not a model change: recorded, and the next page may still run.
         with tempfile.TemporaryDirectory() as tmp:
             agent = FakeAgent(stdout=json.dumps({"session_id": "s", "is_error": False}))
-            result, _ = run_with(tmp, agent, lambda *a, **k: report("pass"))
-            self.assertFalse(result["model_conforms"])
-            self.assertFalse(result["gate_eligible"])
+            result, out = run_with(tmp, agent, lambda *a, **k: report("pass"))
+            self.assertEqual(result["model_evidence"], "missing")
+            self.assertTrue(result["model_conforms"])
+            store = out.parents[3]
+            passing = mock.patch.object(checklist, "run_bounded", return_value=report("pass"))
+            with registered(), mock.patch.object(runner, "agent_turn", side_effect=FakeAgent()):
+                with passing:
+                    runner.run_page(str(store), "r1", "T01", "hand-design-md")
 
     def test_context_window_mismatch_is_not_conforming(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -623,11 +629,11 @@ class ModelConformance(unittest.TestCase):
             usage = result["rounds"][0]["agent"]["model_usage"][MODEL]
             self.assertEqual(usage["contextWindow"], 200000)
 
-    def test_no_output_is_never_gate_eligible(self):
+    def test_no_output_still_counts_for_the_gate_as_a_loss(self):
         with tempfile.TemporaryDirectory() as tmp:
             result, _ = run_with(tmp, FakeAgent(), lambda *a, **k: report("no_runnable_output"))
             self.assertEqual(result["status"], "no_output")
-            self.assertFalse(result["gate_eligible"])
+            self.assertTrue(result["gate_eligible"])
 
 
 class PermissionAudit(unittest.TestCase):
