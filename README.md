@@ -133,7 +133,7 @@ These are measurements of the reference pages, not a target. If you use a design
 
 Piggyback's wording was edited with [no-ai-slop](https://github.com/petergyang/no-ai-slop) (MIT).
 
-Piggyback is being tested against hand-written `DESIGN.md` files for six public-domain starters. Volunteers are welcome: [C3 writer guide](bench/c3/VOLUNTEER.md).
+Piggyback is being tested against hand-written `DESIGN.md` files for six public-domain starters: [C3 test](bench/c3/VOLUNTEER.md).
 
 ## Principles
 
