@@ -48,6 +48,8 @@ AGENT_FLAGS = [
     "--strict-mcp-config",
     "--tools",
     AGENT_TOOLS,
+    "--permission-mode",
+    "acceptEdits",
     "--output-format",
     "json",
 ]

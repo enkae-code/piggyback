@@ -101,6 +101,15 @@ class FakeAgent:
         return completed(self.stdout or agent_json(self.models))
 
 
+class ErrorOnCorrection(FakeAgent):
+    """The first turn succeeds; every later turn returns output that is not JSON."""
+
+    def __call__(self, argv, cwd):
+        if self.calls:
+            self.stdout = "not json"
+        return super().__call__(argv, cwd)
+
+
 def run_with(tmp, agent, checks, task="T01", arm="screenshot"):
     store, run_id = make_run(tmp)
     with registered(), mock.patch.object(runner, "agent_turn", side_effect=agent), \
@@ -158,10 +167,11 @@ class CorrectionLoop(unittest.TestCase):
             self.assertEqual((out / "run.json").exists(), True)
 
     def test_stops_after_five_correction_turns(self):
-        # Negative check for the bound: without it this loop never ends (or runs past five).
+        # Negative check for the bound: without it a seventh check fails fast on StopIteration.
         with tempfile.TemporaryDirectory() as tmp:
             agent = FakeAgent()
-            result, _ = run_with(tmp, agent, lambda *a, **k: report("fail", ["x (text)"]))
+            reports = iter([report("fail", ["x (text)"])] * 6)
+            result, _ = run_with(tmp, agent, lambda *a, **k: next(reports))
             self.assertEqual(result["status"], "failed_after_5")
             self.assertEqual(result["turns"], 5)
             self.assertEqual(len(agent.calls), 6)
@@ -180,6 +190,36 @@ class CorrectionLoop(unittest.TestCase):
             )
             self.assertEqual(second[2], checklist.correction_message(failed))
             self.assertEqual(second[:2], ["claude", "-p"])  # fmt: skip
+
+    def test_every_turn_runs_with_accept_edits(self):
+        # Negative check for the write permission: without it claude -p cannot write index.html.
+        with tempfile.TemporaryDirectory() as tmp:
+            reports = iter([report("fail", ["x (text)"]), report("pass")])
+            agent = FakeAgent()
+            run_with(tmp, agent, lambda *a, **k: next(reports))
+            self.assertEqual(len(agent.calls), 2)
+            for argv, _ in agent.calls:
+                pair = argv[argv.index("--permission-mode") : argv.index("--permission-mode") + 2]
+                self.assertEqual(pair, ["--permission-mode", "acceptEdits"])
+
+    def test_agent_error_on_correction_after_a_page_keeps_the_page(self):
+        # Negative check for the page rule: an error after a runnable round is not no_output.
+        with tempfile.TemporaryDirectory() as tmp:
+            agent = ErrorOnCorrection()
+            reports = iter([report("fail", ["x (text)"]), report("fail", ["x (text)"])])
+            result, out = run_with(tmp, agent, lambda *a, **k: next(reports))
+            self.assertEqual(result["status"], "agent_error_after_page")
+            self.assertEqual(len(agent.calls), 2)
+            self.assertIsNotNone(result["rounds"][1]["agent"]["error"])
+            self.assertTrue((out / "project" / "index.html").is_file())
+
+    def test_agent_error_on_correction_with_no_runnable_page_is_no_output(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            agent = ErrorOnCorrection()
+            reports = iter([report("fail", ["x (text)"]), report("no_runnable_output")])
+            result, _ = run_with(tmp, agent, lambda *a, **k: next(reports))
+            self.assertEqual(result["status"], "no_output")
+            self.assertEqual(len(agent.calls), 2)
 
     def test_missing_page_is_no_output_with_no_correction(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -257,7 +297,10 @@ class RegistrationGuards(unittest.TestCase):
             with registered(), mock.patch.object(runner, "harness_hashes", return_value=changed):
                 with self.assertRaises(SystemExit) as caught:
                     runner.run_page(str(store), run_id, "T01", "screenshot")
-            self.assertIn("harness", str(caught.exception))
+            self.assertEqual(
+                str(caught.exception),
+                "refusing: harness files changed since the manifest was locked",
+            )
 
     def test_changed_frozen_input_is_refused(self):
         # Negative check for the frozen-input guard: a swapped BRIEF.md must not be used.

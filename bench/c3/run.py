@@ -38,12 +38,14 @@ ARM_FILES = {
     "skill-alone": ("SKILL.md", "screenshot.png"),
     "skill-plus-piggyback": ("SKILL.md", "screenshot.png", "BRIEF.md"),
 }
-NO_OUTPUT, PASS, FAILED_AFTER, CHECKER_FAULT = (
+NO_OUTPUT, PASS, FAILED_AFTER, CHECKER_FAULT, AGENT_ERROR = (
     "no_output",
     "pass",
     "failed_after_5",
     "checker_fault",
+    "agent_error_after_page",
 )
+RUNNABLE = (checklist.PASS, checklist.FAIL)
 
 
 def load_manifest(run):
@@ -152,12 +154,16 @@ def generate(out, project, task_id, prompt):
         record, raw = call_turn(argv, project)
         (out / "rounds").mkdir(exist_ok=True)
         (out / "rounds" / f"agent-{len(rounds)}.json").write_text(raw, encoding="utf-8")
-        report = None if record["error"] else check_page(project, task_id)
+        # An agent error ends the loop, but only a page with no earlier runnable round is no_output.
+        had_page = any(r["checklist"] and r["checklist"]["outcome"] in RUNNABLE for r in rounds)
+        report = check_page(project, task_id) if not record["error"] or had_page else None
         rounds.append({"round": len(rounds), "agent": record, "checklist": report})
-        if record["error"] or report is None or report["outcome"] == checklist.NO_RUNNABLE:
+        if report is None or report["outcome"] == checklist.NO_RUNNABLE:
             return session, rounds, NO_OUTPUT, corrections
         if report["outcome"] == checklist.FAULT:
             return session, rounds, CHECKER_FAULT, corrections
+        if record["error"]:
+            return session, rounds, AGENT_ERROR, corrections
         if report["pass"]:
             return session, rounds, PASS, corrections
         if corrections == MAX_CORRECTIONS:

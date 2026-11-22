@@ -211,6 +211,8 @@ class AgentRecord(unittest.TestCase):
                 "--strict-mcp-config",
                 "--tools",
                 "Read,Write,Edit,Glob,Grep",
+                "--permission-mode",
+                "acceptEdits",
                 "--output-format",
                 "json",
             ],  # fmt: skip
