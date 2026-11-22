@@ -188,13 +188,15 @@ class OutputClaim(unittest.TestCase):
             store, run_id = make_run(tmp)
             out = store / run_id / "pages" / "T01" / "screenshot"
             out.mkdir(parents=True)
-            (out / "run.json").write_text("first", encoding="utf-8")
+            first = json.dumps({"task": "T01", "arm": "screenshot", "model_conforms": True})
+            (out / "run.json").write_text(first, encoding="utf-8")
             agent = FakeAgent()
             with registered(), mock.patch.object(runner, "agent_turn", side_effect=agent):
-                with self.assertRaises(SystemExit):
+                with self.assertRaises(SystemExit) as caught:
                     runner.run_page(str(store), run_id, "T01", "screenshot")
+            self.assertIn("the first attempt stands", str(caught.exception))
             self.assertEqual(agent.calls, [])
-            self.assertEqual((out / "run.json").read_text(encoding="utf-8"), "first")
+            self.assertEqual((out / "run.json").read_text(encoding="utf-8"), first)
 
 
 class CorrectionLoop(unittest.TestCase):
