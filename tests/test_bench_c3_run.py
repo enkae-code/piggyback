@@ -4,6 +4,8 @@ import contextlib
 import hashlib
 import json
 import os
+import re
+import shutil
 import subprocess
 import tempfile
 import unittest
@@ -11,11 +13,14 @@ from pathlib import Path
 from unittest import mock
 
 from bench.c3 import checklist, prompts
+from bench.c3 import manifest as mf
 from bench.c3 import run as runner
 
 COMMIT = "b" * 40
 MODEL = "claude-opus-5-5"
 CLI = "2.1.325 (Claude Code)"
+CHROME = "156.0.1"
+WINDOW = 1000000
 ARM_FILES = runner.ARM_FILES
 
 
@@ -25,6 +30,8 @@ def sha(data):
 
 def make_run(tmp, run_id="r1"):
     """A locked run folder with real input files and prompts, and a manifest that matches them."""
+    exe = Path(tmp) / "claude-2.1.325"
+    exe.write_text("", encoding="utf-8")
     run = Path(tmp) / "store" / run_id
     inputs = run / "inputs"
     for sid in sorted({t["starter_id"] for t in prompts.load_tasks()}):
@@ -47,7 +54,9 @@ def make_run(tmp, run_id="r1"):
         "piggyback_commit": COMMIT,
         "harness_sha256": {"run.py": "h"},
         "starters_sha256": {"s": "x"},
-        "model": {"model": MODEL, "claude_cli_version": CLI},
+        "model": {"model": MODEL, "claude_cli_version": CLI, "context_window": WINDOW},
+        "claude_executable": {"path": str(exe), "version": CLI},
+        "checker_browser": {"chromium_version": CHROME},
         "inputs_sha256": inputs_sha,
     }
     (run / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
@@ -64,18 +73,31 @@ def registered():
         )
         stack.enter_context(mock.patch.object(runner, "starter_hashes", return_value={"s": "x"}))
         stack.enter_context(mock.patch.object(runner, "claude_version", return_value=CLI))
+        stack.enter_context(
+            mock.patch.object(runner, "checker_chromium", return_value=(CHROME, "/x/chrome"))
+        )
         yield
 
 
-def agent_json(models=(MODEL,), session="sess-1", is_error=False):
-    return json.dumps(
-        {
-            "session_id": session,
-            "modelUsage": {m: {"inputTokens": 1} for m in models},
-            "duration_ms": 5,
-            "is_error": is_error,
-        }
-    )
+def usage(model, window=WINDOW):
+    return {
+        "inputTokens": 1,
+        "contextWindow": window,
+        "maxOutputTokens": 128000,
+        "provider": "firstParty",
+    }
+
+
+def agent_json(models=(MODEL,), session="sess-1", is_error=False, denials=None, window=WINDOW):
+    body = {
+        "session_id": session,
+        "modelUsage": {m: usage(m, window) for m in models},
+        "duration_ms": 5,
+        "is_error": is_error,
+    }
+    if denials is not None:
+        body["permission_denials"] = denials
+    return json.dumps(body)
 
 
 def completed(stdout, returncode=0, stderr=""):
@@ -113,7 +135,7 @@ class FakeAgent:
                 if "--session-id" in argv
                 else argv[argv.index("--resume") + 1]
             )
-            slug = str(Path(cwd).resolve()).replace("/", "-").replace(".", "-")
+            slug = re.sub(r"[^A-Za-z0-9]", "-", str(Path(cwd).resolve()))
             folder = Path(self.home) / ".claude" / "projects" / slug
             folder.mkdir(parents=True, exist_ok=True)
             (folder / f"{session}.jsonl").write_text("{}\n", encoding="utf-8")
@@ -210,7 +232,8 @@ class CorrectionLoop(unittest.TestCase):
                 second[second.index("--resume") + 1], first[first.index("--session-id") + 1]
             )
             self.assertEqual(second[2], checklist.correction_message(failed))
-            self.assertEqual(second[:2], ["claude", "-p"])  # fmt: skip
+            self.assertEqual(second[0], first[0])
+            self.assertEqual(second[1], "-p")
 
     def test_every_turn_runs_with_accept_edits(self):
         # Negative check for the write permission: without it claude -p cannot write index.html.
@@ -380,6 +403,32 @@ class ModelFlag(unittest.TestCase):
 
 
 class CliVersionPin(unittest.TestCase):
+    def test_every_turn_runs_the_recorded_executable_path(self):
+        # Negative check for the pin: without argv[0] from the lock, a PATH swap reaches the agent.
+        with tempfile.TemporaryDirectory() as tmp:
+            store, run_id = make_run(tmp)
+            pinned = json.loads((store / run_id / "manifest.json").read_text())
+            pinned = pinned["claude_executable"]["path"]
+            reports = iter([report("fail", ["x (text)"]), report("pass")])
+            agent = FakeAgent()
+            checks = lambda *a, **k: next(reports)  # noqa: E731
+            with registered(), mock.patch.object(runner, "agent_turn", side_effect=agent), \
+                    mock.patch.object(checklist, "run_bounded", side_effect=checks):  # fmt: skip
+                runner.run_page(str(store), run_id, "T01", "screenshot")
+            self.assertEqual([argv[0] for argv, _ in agent.calls], [pinned, pinned])
+
+    def test_missing_pinned_executable_is_refused_before_claim(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            store, run_id = make_run(tmp)
+            (Path(tmp) / "claude-2.1.325").unlink()
+            agent = FakeAgent()
+            with registered(), mock.patch.object(runner, "agent_turn", side_effect=agent):
+                with self.assertRaises(SystemExit) as caught:
+                    runner.run_page(str(store), run_id, "T01", "screenshot")
+            self.assertIn("missing", str(caught.exception))
+            self.assertEqual(agent.calls, [])
+            self.assertFalse((store / run_id / "pages").exists())
+
     def test_a_different_cli_is_refused_before_any_agent_call(self):
         with tempfile.TemporaryDirectory() as tmp:
             store, run_id = make_run(tmp)
@@ -390,6 +439,20 @@ class CliVersionPin(unittest.TestCase):
                     runner.run_page(str(store), run_id, "T01", "screenshot")
             self.assertIn("9.9.9", str(caught.exception))
             self.assertIn(CLI, str(caught.exception))
+            self.assertEqual(agent.calls, [])
+            self.assertFalse((store / run_id / "pages").exists())
+
+
+class CheckerRuntime(unittest.TestCase):
+    def test_a_different_checker_chromium_is_refused_before_claim(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            store, run_id = make_run(tmp)
+            agent = FakeAgent()
+            other = mock.patch.object(runner, "checker_chromium", return_value=("999", "x"))
+            with registered(), other, mock.patch.object(runner, "agent_turn", side_effect=agent):
+                with self.assertRaises(SystemExit) as caught:
+                    runner.run_page(str(store), run_id, "T01", "screenshot")
+            self.assertIn("999", str(caught.exception))
             self.assertEqual(agent.calls, [])
             self.assertFalse((store / run_id / "pages").exists())
 
@@ -415,16 +478,16 @@ class AgentEnvironment(unittest.TestCase):
         self.assertNotIn("CLAUDE_CODE_OAUTH_TOKEN", env)
         self.assertEqual(env["PATH"], "/usr/bin")
         self.assertEqual(env["HOME"], "/home/x")
-        self.assertEqual(set(env) - set(runner.ENV_ALLOWLIST), set(runner.AGENT_ENV))
+        self.assertEqual(env["DISABLE_AUTOUPDATER"], "1")
+        self.assertEqual(set(env) - set(mf.ENV_ALLOWLIST), set(mf.AGENT_ENV))
 
 
 class CrashReceipt(unittest.TestCase):
     def test_missing_executable_leaves_a_runner_crash_receipt_and_reraises(self):
         with tempfile.TemporaryDirectory() as tmp:
             store, run_id = make_run(tmp)
-            empty = Path(tmp) / "empty-bin"
-            empty.mkdir()
-            with registered(), mock.patch.dict(os.environ, {"PATH": str(empty)}):
+            gone = mock.patch.object(runner, "agent_turn", side_effect=FileNotFoundError("claude"))
+            with registered(), gone:
                 with self.assertRaises(FileNotFoundError):
                     runner.run_page(str(store), run_id, "T01", "screenshot")
             saved = json.loads(
@@ -483,6 +546,25 @@ class Transcript(unittest.TestCase):
         project = Path("/home/brodey/.hermes/cache/scratch/c3probe2")
         slug = runner.transcript_path(project, "s").parent.name
         self.assertEqual(slug, "-home-brodey--hermes-cache-scratch-c3probe2")
+        underscore = runner.transcript_path(Path("/tmp/a_b.c/x"), "s").parent.name
+        self.assertEqual(underscore, "-tmp-a-b-c-x")
+
+    def test_copy_failure_is_recorded_and_the_receipt_is_still_published(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp) / "home"
+            real_copy = shutil.copyfile
+
+            def fail_transcript(src, dst, *a, **k):
+                if str(dst).endswith("transcript.jsonl"):
+                    raise PermissionError("denied")
+                return real_copy(src, dst, *a, **k)
+
+            copy = mock.patch.object(runner.shutil, "copyfile", side_effect=fail_transcript)
+            with mock.patch.dict(os.environ, {"HOME": str(home)}), copy:
+                result, out = run_with(tmp, FakeAgent(home=home), lambda *a, **k: report("pass"))
+            self.assertEqual(result["transcript"], "copy_failed: PermissionError")
+            self.assertEqual(result["status"], "pass")
+            self.assertTrue((out / "run.json").is_file())
 
 
 class PathRefusals(unittest.TestCase):
@@ -500,6 +582,99 @@ class PathRefusals(unittest.TestCase):
             self.assertIn("symbolic link", str(caught.exception))
             self.assertEqual(agent.calls, [])
             self.assertEqual(list(elsewhere.iterdir()), [])
+
+
+class ModelConformance(unittest.TestCase):
+    def test_a_conforming_page_is_gate_eligible(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            result, _ = run_with(tmp, FakeAgent(), lambda *a, **k: report("pass"))
+            self.assertTrue(result["model_conforms"])
+            self.assertTrue(result["gate_eligible"])
+
+    def test_wrong_model_only_turn_is_not_conforming_and_halts_the_next_page(self):
+        # Negative check for the model gate: a Haiku-only turn must not be gate eligible, and the
+        # next page of the same run must be refused.
+        with tempfile.TemporaryDirectory() as tmp:
+            agent = FakeAgent(models=("claude-haiku-5-5",))
+            result, out = run_with(tmp, agent, lambda *a, **k: report("pass"))
+            self.assertFalse(result["model_conforms"])
+            self.assertFalse(result["gate_eligible"])
+            saved = json.loads((out / "run.json").read_text(encoding="utf-8"))
+            self.assertFalse(saved["model_conforms"])
+            store = out.parents[3]
+            with registered(), mock.patch.object(runner, "agent_turn", side_effect=FakeAgent()):
+                with self.assertRaises(SystemExit) as caught:
+                    runner.run_page(str(store), "r1", "T01", "hand-design-md")
+            self.assertIn("T01/screenshot", str(caught.exception))
+            self.assertFalse((store / "r1" / "pages" / "T01" / "hand-design-md").exists())
+
+    def test_missing_model_usage_is_not_conforming(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            agent = FakeAgent(stdout=json.dumps({"session_id": "s", "is_error": False}))
+            result, _ = run_with(tmp, agent, lambda *a, **k: report("pass"))
+            self.assertFalse(result["model_conforms"])
+            self.assertFalse(result["gate_eligible"])
+
+    def test_context_window_mismatch_is_not_conforming(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            agent = FakeAgent(stdout=agent_json(window=200000))
+            result, _ = run_with(tmp, agent, lambda *a, **k: report("pass"))
+            self.assertFalse(result["model_conforms"])
+            usage = result["rounds"][0]["agent"]["model_usage"][MODEL]
+            self.assertEqual(usage["contextWindow"], 200000)
+
+    def test_no_output_is_never_gate_eligible(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            result, _ = run_with(tmp, FakeAgent(), lambda *a, **k: report("no_runnable_output"))
+            self.assertEqual(result["status"], "no_output")
+            self.assertFalse(result["gate_eligible"])
+
+
+class PermissionAudit(unittest.TestCase):
+    def test_denials_are_recorded_by_tool_and_path_and_flagged(self):
+        # Negative check for the escape audit: without it a denied write leaves no trace.
+        denial = {
+            "tool_name": "Write",
+            "tool_use_id": "t1",
+            "tool_input": {"file_path": "/elsewhere/index.html", "content": "secret body"},
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            agent = FakeAgent(stdout=agent_json(denials=[denial]))
+            result, _ = run_with(tmp, agent, lambda *a, **k: report("pass"))
+            self.assertEqual(result["denials_total"], 1)
+            self.assertEqual(result["audit_flag"], "permission_denials")
+            kept = result["rounds"][0]["agent"]["permission_denials"]
+            self.assertEqual(kept, [{"tool_name": "Write", "path": "/elsewhere/index.html"}])
+
+    def test_no_denials_leaves_no_flag(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            result, _ = run_with(tmp, FakeAgent(), lambda *a, **k: report("pass"))
+            self.assertEqual(result["denials_total"], 0)
+            self.assertIsNone(result["audit_flag"])
+
+
+class StorePath(unittest.TestCase):
+    def test_a_symlinked_store_is_refused_before_any_agent_call(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            store, run_id = make_run(tmp)
+            link = Path(tmp) / "link"
+            link.symlink_to(store, target_is_directory=True)
+            agent = FakeAgent()
+            with registered(), mock.patch.object(runner, "agent_turn", side_effect=agent):
+                with self.assertRaises(SystemExit) as caught:
+                    runner.run_page(str(link), run_id, "T01", "screenshot")
+            self.assertIn("symbolic link", str(caught.exception))
+            self.assertEqual(agent.calls, [])
+
+    def test_a_symlinked_parent_of_the_store_is_refused(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            store, run_id = make_run(tmp)
+            up = Path(tmp) / "up"
+            up.symlink_to(Path(tmp), target_is_directory=True)
+            with registered(), mock.patch.object(runner, "agent_turn", side_effect=FakeAgent()):
+                with self.assertRaises(SystemExit) as caught:
+                    runner.run_page(str(up / "store"), run_id, "T01", "screenshot")
+            self.assertIn("symbolic link", str(caught.exception))
 
 
 class Refusals(unittest.TestCase):

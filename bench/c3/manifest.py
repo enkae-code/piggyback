@@ -1,12 +1,13 @@
 """Register a C3 run before any generation: a dated manifest and its frozen inputs, locked once.
 
 The manifest refuses a dirty Piggyback or Impeccable worktree, an existing manifest or a non-empty
-run folder, and a missing or blank DESIGN.md for any starter. It records the commit, the sha256 of
-the harness, the starters, the prompts and every frozen input, the checker and capture Chromium
-versions, the axe-core version, the Impeccable skill and commit, the model, the claude CLI version,
-the context window and settings, the exact agent invocation and env, the status scoring and the
-rater seed. Each starter's screenshot and brief come from Piggyback's own measure of its local
-index.html. Nothing here starts a model. It is written once (never replaced).
+run folder, a symbolic link on the store path, and a missing or blank DESIGN.md for any starter. It
+records the commit, the sha256 of the harness, the starters, the prompts (with their text) and every
+frozen input, the checker and capture Chromium versions, the axe-core version, the Impeccable skill,
+commit and version, the model, the pinned claude executable and its version, the context window and
+settings, the exact agent invocation and env, the status scoring and the rater seed. Each starter's
+screenshot and brief come from Piggyback's own measure of its local index.html. Nothing here starts
+a model. It is written once (never replaced).
 
 Usage: python -m bench.c3.manifest --store STORE --run RUN_ID --design-md DIR --seed N
 """
@@ -40,6 +41,9 @@ DEFAULT_STORE = Path("/home/brodey/projects/piggyback-evidence/c3")
 IMPECCABLE = Path("/home/brodey/repos/impeccable")
 SKILL_PATH = IMPECCABLE / ".hermes/skills/impeccable/SKILL.md"
 MODEL = "claude-opus-5-5"
+# As reported by Claude Code 2.1.325 for claude-opus-5-5 in modelUsage.
+CONTEXT_WINDOW = 1000000
+MAX_OUTPUT_TOKENS = 128000
 VIEWPORT = (1440, 900)
 TURN_TIMEOUT_S = 1800
 MAX_CORRECTIONS = 5
@@ -61,6 +65,7 @@ AGENT_ENV = {
     "CLAUDE_CODE_DISABLE_CLAUDE_MDS": "1",
     "CLAUDE_CODE_DISABLE_AUTO_MEMORY": "1",
     "CLAUDE_CODE_DISABLE_BUNDLED_SKILLS": "1",
+    "DISABLE_AUTOUPDATER": "1",
 }
 # The only host variables the agent gets. No ANTHROPIC_*, no other CLAUDE_CODE_*.
 ENV_ALLOWLIST = (
@@ -135,6 +140,14 @@ def design_files(design_dir):
     return found
 
 
+def refuse_store_links(store):
+    """Refuse when the store path, or any folder above it, is a symbolic link."""
+    path = Path(store).absolute()
+    for part in (path, *path.parents):
+        if part.is_symlink():
+            raise SystemExit(f"refusing: {part} is a symbolic link")
+
+
 def png_size(path):
     head = Path(path).read_bytes()[:24]
     if head[:8] != b"\x89PNG\r\n\x1a\n":
@@ -165,14 +178,37 @@ def measure_starter(starter, folder):
     (folder / "BRIEF.md").write_text(brief, encoding="utf-8")
 
 
-def claude_version():
+def agent_env():
+    """The allowlisted host variables that are set, plus the frozen additions. Nothing else, so
+    an ANTHROPIC_* key in the host environment never reaches the agent."""
+    host = {k: os.environ[k] for k in ENV_ALLOWLIST if k in os.environ}
+    return {**host, **AGENT_ENV}
+
+
+def claude_version(path):
+    """The --version of the claude executable at path, run with the agent env."""
     try:
         out = subprocess.run(
-            ["claude", "--version"], capture_output=True, text=True, check=True, timeout=60
+            [path, "--version"],
+            env=agent_env(),
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=60,
         )
     except (OSError, subprocess.SubprocessError) as exc:
         raise SystemExit(f"refusing: the claude CLI did not answer --version: {exc}") from None
     return out.stdout.strip()
+
+
+def claude_executable():
+    """(realpath, version) of the claude CLI on PATH. The real file is pinned, so an auto-update
+    that moves the link does not change the executable a run uses."""
+    found = shutil.which("claude")
+    if found is None:
+        raise SystemExit("refusing: no claude CLI on PATH")
+    path = os.path.realpath(found)
+    return path, claude_version(path)
 
 
 def checker_chromium():
@@ -196,6 +232,14 @@ def impeccable_commit():
     ).stdout.strip()
 
 
+def impeccable_version():
+    """The 'version' of the Impeccable checkout's package.json, or None when there is none."""
+    pkg = IMPECCABLE / "package.json"
+    if not pkg.is_file():
+        return None
+    return json.loads(pkg.read_text(encoding="utf-8")).get("version")
+
+
 def impeccable_clean():
     """Refuse when the Impeccable checkout has any uncommitted change."""
     status = subprocess.run(
@@ -211,9 +255,16 @@ def impeccable_clean():
 def agent_record():
     """The agent invocation, as the runner makes it. Recorded so a re-run can audit it."""
     return {
-        "argv_first_turn": ["claude", "-p", "<prompt>", *AGENT_FLAGS, "--session-id", "<uuid4>"],
+        "argv_first_turn": [
+            "<claude_executable>",
+            "-p",
+            "<prompt>",
+            *AGENT_FLAGS,
+            "--session-id",
+            "<uuid4>",
+        ],
         "argv_correction_turn": [
-            "claude",
+            "<claude_executable>",
             "-p",
             "<correction>",
             "--resume",
@@ -228,7 +279,15 @@ def agent_record():
     }
 
 
-def write_inputs(run, designs):
+def prompt_texts():
+    """task ID -> arm -> the exact text of that prompt file."""
+    return {
+        task["id"]: {arm: prompts.expand(task, arm) + "\n" for arm in prompts.ARM_BLOCKS}
+        for task in prompts.load_tasks()
+    }
+
+
+def write_inputs(run, designs, texts):
     inputs = run / "inputs"
     for sid, design in designs.items():
         folder = inputs / sid
@@ -237,11 +296,11 @@ def write_inputs(run, designs):
         shutil.copyfile(design, folder / "DESIGN.md")
     (inputs / "impeccable").mkdir()
     shutil.copyfile(SKILL_PATH, inputs / "impeccable" / "SKILL.md")
-    for task in prompts.load_tasks():
-        for arm in prompts.ARM_BLOCKS:
-            path = run / "prompts" / task["id"] / f"{arm}.txt"
+    for task_id, arms in texts.items():
+        for arm, text in arms.items():
+            path = run / "prompts" / task_id / f"{arm}.txt"
             path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text(prompts.expand(task, arm) + "\n", encoding="utf-8")
+            path.write_text(text, encoding="utf-8")
 
 
 def prompt_hashes(run):
@@ -268,6 +327,7 @@ def publish_once(path, data):
 
 
 def build(store, run_id, design_dir, seed):
+    refuse_store_links(store)
     run = run_folder(store, run_id)
     path = run / "manifest.json"
     if path.exists() or path.is_symlink():
@@ -279,9 +339,10 @@ def build(store, run_id, design_dir, seed):
     designs = design_files(design_dir)
     chromium, label = bundled_chromium()
     checker_version, checker_exe = checker_chromium()
-    cli_version = claude_version()
+    exe, cli_version = claude_executable()
     run.mkdir(mode=0o700, parents=True, exist_ok=True)
-    write_inputs(run, designs)
+    texts = prompt_texts()
+    write_inputs(run, designs, texts)
     manifest = {
         "locked_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "piggyback_commit": commit,
@@ -299,12 +360,15 @@ def build(store, run_id, design_dir, seed):
             "skill_path": str(SKILL_PATH),
             "skill_sha256": sha256_file(SKILL_PATH),
             "commit": impeccable_commit(),
+            "version": impeccable_version(),
         },
+        "claude_executable": {"path": exe, "version": cli_version},
         "model": {
             "provider": "anthropic via Claude Code (Claude Max)",
             "model": MODEL,
             "claude_cli_version": cli_version,
-            "context_window": f"CLI default for {MODEL} at {cli_version}",
+            "context_window": CONTEXT_WINDOW,
+            "max_output_tokens": MAX_OUTPUT_TOKENS,
             "settings": (
                 "CLI defaults: no model, effort, thinking or temperature flags; "
                 "--setting-sources project; the env allowlist in agent.env_allowlist"
@@ -313,6 +377,7 @@ def build(store, run_id, design_dir, seed):
         "agent": agent_record(),
         "status_scoring": STATUS_SCORING,
         "rater_seed": seed,
+        "prompts": texts,
         "prompts_sha256": prompt_hashes(run),
         "inputs_sha256": frozen_hashes(run),
     }

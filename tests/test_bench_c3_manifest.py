@@ -13,6 +13,8 @@ from bench.c1 import manifest as c1_manifest
 from bench.c3 import manifest, prompts
 
 COMMIT = "a" * 40
+CLI = "2.1.325 (Claude Code)"
+CLAUDE = "/x/claude-2.1.325"
 STARTERS = manifest.starter_ids()
 ARM_IDS = list(prompts.ARM_BLOCKS)
 
@@ -45,9 +47,10 @@ def stubbed(tmp):
         mock.patch.object(manifest, "bundled_chromium", return_value=("156.0.1", "bundled")),
         mock.patch.object(manifest, "measure_starter", side_effect=fake_measure),
         mock.patch.object(manifest, "checker_chromium", return_value=("156.0.1", "/x/chrome")),
-        mock.patch.object(manifest, "claude_version", return_value="2.1.325 (Claude Code)"),
+        mock.patch.object(manifest, "claude_executable", return_value=(CLAUDE, CLI)),
         mock.patch.object(manifest, "impeccable_clean", return_value=None),
         mock.patch.object(manifest, "impeccable_commit", return_value="035c8f3"),
+        mock.patch.object(manifest, "impeccable_version", return_value="1.2.3"),
         mock.patch.object(manifest, "SKILL_PATH", skill),
     ]
 
@@ -195,11 +198,13 @@ class BuildLayout(unittest.TestCase):
             self.assertEqual(saved["rater_seed"], 7)
             self.assertEqual(saved["model"]["model"], "claude-opus-5-5")
             self.assertTrue(saved["model"]["settings"].startswith("CLI defaults"))
-            self.assertEqual(saved["model"]["claude_cli_version"], "2.1.325 (Claude Code)")
-            self.assertEqual(
-                saved["model"]["context_window"],
-                f"CLI default for {manifest.MODEL} at 2.1.325 (Claude Code)",
-            )
+            self.assertEqual(saved["model"]["claude_cli_version"], CLI)
+            self.assertEqual(saved["model"]["context_window"], 1000000)
+            self.assertEqual(saved["model"]["max_output_tokens"], 128000)
+            self.assertEqual(saved["claude_executable"], {"path": CLAUDE, "version": CLI})
+            self.assertEqual(saved["impeccable"]["version"], "1.2.3")
+            self.assertEqual(saved["prompts"]["T01"]["screenshot"], prompts.expand(
+                prompts.load_tasks()[0], "screenshot") + "\n")  # fmt: skip
             self.assertEqual(saved["checker_browser"]["chromium_version"], "156.0.1")
             self.assertEqual(saved["capture_browser"]["browser"], "bundled")
             self.assertEqual(saved["impeccable"]["commit"], "035c8f3")
@@ -216,12 +221,44 @@ class BuildLayout(unittest.TestCase):
             self.assertIn("northline-ops/index.html", saved["starters_sha256"])
             self.assertTrue(all(len(v) == 64 for v in saved["starters_sha256"].values()))
 
+    def test_manifest_embeds_all_fifty_prompt_bodies(self):
+        with tempfile.TemporaryDirectory() as tmp, locked_run(tmp) as (run, _):
+            saved = json.loads((run / "manifest.json").read_text(encoding="utf-8"))
+            self.assertEqual(
+                sorted(saved["prompts"]), sorted(t["id"] for t in prompts.load_tasks())
+            )
+            count = sum(len(arms) for arms in saved["prompts"].values())
+            self.assertEqual(count, 50)
+            for task in prompts.load_tasks():
+                for arm in ARM_IDS:
+                    text = saved["prompts"][task["id"]][arm]
+                    self.assertEqual(text, prompts.expand(task, arm) + "\n")
+
     def test_manifest_file_is_owner_only(self):
         with tempfile.TemporaryDirectory() as tmp, locked_run(tmp) as (run, _):
             self.assertEqual((run / "manifest.json").stat().st_mode & 0o777, 0o600)
 
 
 class AgentRecord(unittest.TestCase):
+    def test_agent_env_disables_the_auto_updater(self):
+        self.assertEqual(manifest.AGENT_ENV["DISABLE_AUTOUPDATER"], "1")
+
+    def test_a_symlinked_store_is_refused_before_any_write(self):
+        # Negative check for the store guard: a link to the store must not reach the write path.
+        with tempfile.TemporaryDirectory() as tmp:
+            real = Path(tmp) / "real"
+            real.mkdir()
+            link = Path(tmp) / "link"
+            link.symlink_to(real, target_is_directory=True)
+            designs = write_designs(Path(tmp) / "designs")
+            with contextlib.ExitStack() as stack:
+                for patcher in stubbed(tmp):
+                    stack.enter_context(patcher)
+                with self.assertRaises(SystemExit) as caught:
+                    manifest.build(str(link), "r1", str(designs), 1)
+            self.assertIn("symbolic link", str(caught.exception))
+            self.assertEqual(list(real.iterdir()), [])
+
     def test_invocation_is_the_frozen_argv_and_env(self):
         self.assertEqual(
             manifest.AGENT_FLAGS,
@@ -245,6 +282,7 @@ class AgentRecord(unittest.TestCase):
                 "CLAUDE_CODE_DISABLE_CLAUDE_MDS": "1",
                 "CLAUDE_CODE_DISABLE_AUTO_MEMORY": "1",
                 "CLAUDE_CODE_DISABLE_BUNDLED_SKILLS": "1",
+                "DISABLE_AUTOUPDATER": "1",
             },
         )  # fmt: skip
 

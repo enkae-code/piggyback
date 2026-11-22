@@ -86,20 +86,30 @@ Run from the repository root, in order. Evidence goes to a store outside the rep
    folder, and a missing or blank `DIR/<starter_id>.md` for any starter in `tasks.json`. It measures
    each starter's `index.html` with the bundled Chromium (1440x900 screenshot and `BRIEF.md`), copies
    the DESIGN.md files, the Impeccable `SKILL.md`, and writes the 50 prompts. It locks the commit,
-   harness, starter and frozen-input hashes, Chromium and axe-core versions, the Impeccable commit,
-   the model, the claude CLI version, the context window and settings, the agent env allowlist (names
-   only), the prompt hashes, the checker and capture Chromium, a clean Impeccable checkout, and the
-   rater seed. It is written once.
+   harness, starter and frozen-input hashes, Chromium and axe-core versions, the Impeccable commit and
+   package version, the model, the pinned claude executable (realpath and `--version`), the context
+   window (1000000) and max output tokens (128000) as Claude Code 2.1.325 reports them for
+   `claude-opus-5-5`, the agent env allowlist (names only), the 50 prompt bodies and their hashes, the
+   checker and capture Chromium, a clean Impeccable checkout, and the rater seed. It is written once.
+   A store path with a symbolic link on it or above it is refused.
    `python -m bench.c3.manifest --store STORE --run RUN --design-md DIR --seed N`
 2. **Generate.** One task and one arm per call. Refused without the manifest, when HEAD, the harness,
    the starters, a frozen input or the claude CLI version changed since the lock, when the task or
    arm is unknown, when a folder on the way to `pages/TASK/ARM` is a symlink, or when that page
-   folder already exists (the first attempt stands). The project folder holds only that arm's
+   folder already exists (the first attempt stands). Each turn runs the pinned claude executable
+   with `DISABLE_AUTOUPDATER=1`. The runner also refuses when the pinned CLI is missing or reports
+   another version, when the Chromium that runs the checklist differs from the manifest, or when an
+   earlier page's `run.json` is not model-conforming. The project folder holds only that arm's
    allowed inputs. The checklist runs after every turn, errors included; up to five correction turns
    follow a runnable failing page. The record is `pages/TASK/ARM/run.json`. `rounds/` holds each
    sent message (`sent-N.txt`), each raw agent output (`agent-N.json`) and `transcript.jsonl` when
-   the session file exists. A run that used any model other than `claude-opus-5-5` lists it in
-   `model_flag`; `model_evidence` is `missing` when the CLI reported no `modelUsage`.
+   the session file exists (`transcript` is `kept`, `missing`, or `copy_failed: <Error>`).
+   A run that used any model other than `claude-opus-5-5` lists it in `model_flag`; `model_evidence`
+   is `missing` when the CLI reported no `modelUsage`. `model_conforms` is true when every round's
+   `modelUsage` has exactly that model with the locked context window. A page that is not conforming
+   prints `STOP` and halts the gate. `gate_eligible` is `model_conforms` and a status other than
+   `no_output` or `runner_crash`. Each round keeps its `permission_denials` (tool name and target
+   path); a run with any prints `FLAG` and sets `audit_flag` to `permission_denials`.
    `python -m bench.c3.run --store STORE --run RUN TASK ARM`
    Run it for each of the 10 tasks and 5 arms (50 pages). Rating comes in a later step.
 
