@@ -82,8 +82,8 @@ item line carries its rule in parentheses.
 Run from the repository root, in order. Evidence goes to a store outside the repo (default
 `/home/brodey/projects/piggyback-evidence/c3/<run-id>/`).
 
-1. **Commit, then register.** `manifest` refuses a dirty worktree, an existing or non-empty run
-   folder. It measures
+1. **Commit, then register.** `manifest` refuses a dirty worktree, an existing manifest, or a
+   non-empty run folder. It measures
    each starter's `index.html` with the bundled Chromium (1440x900 screenshot and `BRIEF.md`), copies
    the Impeccable `SKILL.md`, and writes the 40 prompts. It locks the commit,
    harness, starter and frozen-input hashes, Chromium and axe-core versions, the Impeccable commit and
