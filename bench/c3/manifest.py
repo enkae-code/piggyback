@@ -79,18 +79,57 @@ ENV_ALLOWLIST = (
     "XDG_CONFIG_HOME",
 )
 # Scoring, preregistered before any generation. turn_score is the number used for the turn total.
+# halts_gate: the page is not model-conforming, so the runner refuses the next page of the run.
 STATUS_SCORING = {
     "pass": {
         "turn_score": "actual correction count",
         "rated": True,
         "loss": False,
         "flagged": False,
+        "halts_gate": False,
     },
-    "failed_after_5": {"turn_score": 6, "rated": True, "loss": False, "flagged": False},
-    "agent_error": {"turn_score": 6, "rated": True, "loss": False, "flagged": False},
-    "no_output": {"turn_score": 6, "rated": False, "loss": True, "flagged": False},
-    "runner_crash": {"turn_score": 6, "rated": False, "loss": True, "flagged": False},
-    "checker_fault": {"turn_score": 6, "rated": True, "loss": False, "flagged": True},
+    "failed_after_5": {
+        "turn_score": 6,
+        "rated": True,
+        "loss": False,
+        "flagged": False,
+        "halts_gate": False,
+    },
+    "agent_error": {
+        "turn_score": 6,
+        "rated": True,
+        "loss": False,
+        "flagged": False,
+        "halts_gate": False,
+    },
+    "no_output": {
+        "turn_score": 6,
+        "rated": False,
+        "loss": True,
+        "flagged": False,
+        "halts_gate": False,
+    },
+    "runner_crash": {
+        "turn_score": 6,
+        "rated": False,
+        "loss": True,
+        "flagged": False,
+        "halts_gate": False,
+    },
+    "checker_fault": {
+        "turn_score": 6,
+        "rated": True,
+        "loss": False,
+        "flagged": True,
+        "halts_gate": False,
+    },
+    "model_mismatch": {
+        "turn_score": 6,
+        "rated": False,
+        "loss": False,
+        "flagged": True,
+        "halts_gate": True,
+    },
 }
 
 

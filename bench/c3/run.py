@@ -17,8 +17,11 @@ import re
 import shutil
 import subprocess
 import sys
+import threading
 import time
 import uuid
+from functools import partial
+from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 from bench.c1.manifest import clean_commit, run_folder, sha256_file
@@ -45,16 +48,19 @@ ARM_FILES = {
     "skill-alone": ("SKILL.md", "screenshot.png"),
     "skill-plus-piggyback": ("SKILL.md", "screenshot.png", "BRIEF.md"),
 }
-PASS, FAILED_AFTER, NO_OUTPUT, CHECKER_FAULT, AGENT_ERROR, RUNNER_CRASH = (
+PASS, FAILED_AFTER, NO_OUTPUT, CHECKER_FAULT, AGENT_ERROR, RUNNER_CRASH, MODEL_MISMATCH = (
     "pass",
     "failed_after_5",
     "no_output",
     "checker_fault",
     "agent_error",
     "runner_crash",
+    "model_mismatch",
 )
 RUNNABLE = (checklist.PASS, checklist.FAIL)
 USAGE_FIELDS = ("contextWindow", "maxOutputTokens", "provider")
+# A file name is at most 255 bytes; Claude Code names the transcript folder after the project path.
+SLUG_LIMIT = 255
 
 
 def load_manifest(run):
@@ -111,7 +117,7 @@ def check_conformance(run):
                 f"refusing: {path} is not readable JSON; the gate state is unknown"
             ) from None
         if saved.get("model_conforms") is not True:
-            name = f"{saved.get('task')}/{saved.get('arm')}"
+            name = f"{path.parent.parent.name}/{path.parent.name}"
             raise SystemExit(f"refusing: {name} is not model-conforming; the gate is halted")
 
 
@@ -209,14 +215,18 @@ def denial_target(denial):
     }
 
 
-def round_conforms(agent, window):
+def round_conforms(agent, model):
     """False only when the turn reported a model other than the locked one, or another context
-    window. A turn with no usage report (a timeout, a crash) is missing evidence, recorded in
-    model_evidence, not a model change; halting the gate for it would stop the run for good."""
+    window or output cap. A turn with no usage report (a timeout, a crash) is missing evidence,
+    recorded in model_evidence, not a model change; halting the gate for it would stop the run."""
     usage = agent["model_usage"]
     if not usage:
         return True
-    return set(usage) == {MODEL} and usage[MODEL]["contextWindow"] == window
+    return (
+        set(usage) == {MODEL}
+        and usage[MODEL]["contextWindow"] == model["context_window"]
+        and usage[MODEL]["maxOutputTokens"] == model["max_output_tokens"]
+    )
 
 
 def agent_turn(argv, cwd):
@@ -250,20 +260,37 @@ def turn_record(error, started, **fields):
     return {**record, **fields}
 
 
+class QuietHandler(SimpleHTTPRequestHandler):
+    def log_message(self, *args):
+        pass
+
+
 def check_page(project, task_id):
-    """The frozen checklist on index.html, or None when there is no page file to check."""
+    """The frozen checklist on index.html, or None when there is no page file to check.
+
+    The page loads from a loopback server that serves only the project folder, for the length of
+    this check, so it cannot reach the evidence store beside the project. The server always stops.
+    """
     page = project / "index.html"
     if not page.is_file() or page.is_symlink():
         return None
-    return checklist.run_bounded(str(page), task_id)
+    server = ThreadingHTTPServer(("127.0.0.1", 0), partial(QuietHandler, directory=str(project)))
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    try:
+        return checklist.run_bounded(f"http://127.0.0.1:{server.server_port}/index.html", task_id)
+    finally:
+        server.shutdown()
+        server.server_close()
 
 
-def generate(out, project, task_id, session, prompt, rounds, exe):
+def generate(out, project, task_id, session, prompt, rounds, exe, model):
     """Run turns, appending to rounds in place so a crash keeps them. Returns the status.
 
-    The checklist runs after every turn, errors included. Its result decides the page: a
-    runnable passing page is pass whatever the agent did; an agent error ends the loop only when
-    the page is runnable and does not pass.
+    Each turn's round is recorded before the checklist runs, so a crash in the checker keeps it.
+    The checklist runs after every turn, errors included. A turn on another model or context
+    window or output cap returns model_mismatch at once, with no further agent call. Otherwise the
+    checklist result decides the page: a runnable passing page is pass whatever the agent did; an
+    agent error ends the loop only when the page is runnable and does not pass.
     """
     (out / "rounds").mkdir(exist_ok=True)
     message = prompt
@@ -273,8 +300,12 @@ def generate(out, project, task_id, session, prompt, rounds, exe):
         (out / "rounds" / f"sent-{n}.txt").write_text(message, encoding="utf-8")
         record, raw = call_turn(argv, project)
         (out / "rounds" / f"agent-{n}.json").write_text(raw, encoding="utf-8")
+        entry = {"round": n, "agent": record, "checklist": None}
+        rounds.append(entry)
         report = check_page(project, task_id)
-        rounds.append({"round": n, "agent": record, "checklist": report})
+        entry["checklist"] = report
+        if not round_conforms(record, model):
+            return MODEL_MISMATCH
         if report is None or report["outcome"] == checklist.NO_RUNNABLE:
             return NO_OUTPUT
         if report["outcome"] == checklist.FAULT:
@@ -289,25 +320,29 @@ def generate(out, project, task_id, session, prompt, rounds, exe):
         argv = [exe, "-p", message, "--resume", session, *AGENT_FLAGS]
 
 
+def slug_of(project):
+    """The Claude Code folder name for this project path. Claude Code 2.1.325 maps every character
+    outside [A-Za-z0-9] to '-'."""
+    return re.sub(r"[^A-Za-z0-9]", "-", str(project.resolve()))
+
+
 def transcript_path(project, session):
-    """The Claude Code session file for this project and session under the current HOME.
-    Claude Code 2.1.325 maps every character outside [A-Za-z0-9] to '-' in the folder name."""
-    slug = re.sub(r"[^A-Za-z0-9]", "-", str(project.resolve()))
-    return Path.home() / ".claude" / "projects" / slug / f"{session}.jsonl"
+    """The Claude Code session file for this project and session under the current HOME."""
+    return Path.home() / ".claude" / "projects" / slug_of(project) / f"{session}.jsonl"
 
 
 def keep_transcript(out, project, session):
-    src = transcript_path(project, session)
-    if not src.is_file() or src.is_symlink():
-        return "missing"
     try:
+        src = transcript_path(project, session)
+        if not src.is_file() or src.is_symlink():
+            return "missing"
         shutil.copyfile(src, out / "rounds" / "transcript.jsonl")
     except OSError as exc:
-        return f"copy_failed: {type(exc).__name__}"
+        return f"lookup_failed: {type(exc).__name__}"
     return "kept"
 
 
-def publish(out, task_id, arm, session, rounds, started, status, window, error=None):
+def publish(out, task_id, arm, session, rounds, started, status, model, error=None):
     """Write run.json. Used for a finished loop and for a crash, with the rounds made so far."""
     (out / "rounds").mkdir(exist_ok=True)
     models = sorted({m for r in rounds for m in r["agent"]["models"]})
@@ -315,7 +350,7 @@ def publish(out, task_id, arm, session, rounds, started, status, window, error=N
         r["round"] for r in rounds if r["checklist"] and r["checklist"]["outcome"] in RUNNABLE
     ]
     evidence = bool(rounds) and all(r["agent"]["model_usage_present"] for r in rounds)
-    conforms = all(round_conforms(r["agent"], window) for r in rounds)
+    conforms = all(round_conforms(r["agent"], model) for r in rounds)
     denials = sum(len(r["agent"]["permission_denials"]) for r in rounds)
     if denials:
         print(
@@ -360,22 +395,28 @@ def run_page(store, run_id, task_id, arm):
     if arm not in ARM_FILES:
         raise SystemExit(f"refusing: unknown arm {arm!r}")
     refuse_links(run, task_id, arm)
+    project = run / "pages" / task_id / arm / "project"
+    if len(slug_of(project)) > SLUG_LIMIT:
+        raise SystemExit(
+            f"refusing: the transcript folder name for {project} is {len(slug_of(project))} "
+            f"characters; the limit is {SLUG_LIMIT}"
+        )
     prompt = (run / "prompts" / task_id / f"{arm}.txt").read_text(encoding="utf-8")
     out = claim(run, task_id, arm)
     session = str(uuid.uuid4())
     rounds = []
     started = time.monotonic()
-    window = manifest["model"]["context_window"]
+    model = manifest["model"]
     exe = manifest["claude_executable"]["path"]
     try:
         (out / "project").mkdir()
         copy_inputs(run, task["starter_id"], arm, out / "project")
-        status = generate(out, out / "project", task_id, session, prompt, rounds, exe)
+        status = generate(out, out / "project", task_id, session, prompt, rounds, exe, model)
     except BaseException as exc:
         error = {"type": type(exc).__name__, "message": str(exc)}
-        publish(out, task_id, arm, session, rounds, started, RUNNER_CRASH, window, error)
+        publish(out, task_id, arm, session, rounds, started, RUNNER_CRASH, model, error)
         raise
-    return publish(out, task_id, arm, session, rounds, started, status, window)
+    return publish(out, task_id, arm, session, rounds, started, status, model)
 
 
 def main(argv=None):
@@ -387,6 +428,8 @@ def main(argv=None):
     args = parser.parse_args(argv)
     result = run_page(args.store, args.run, args.task, args.arm)
     print(json.dumps({k: result[k] for k in ("status", "turns", "model_flag")}, indent=2))
+    if not result["model_conforms"]:
+        return 3
     return 2 if result["status"] == CHECKER_FAULT else 0
 
 

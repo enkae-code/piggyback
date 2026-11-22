@@ -106,9 +106,11 @@ Run from the repository root, in order. Evidence goes to a store outside the rep
    the session file exists (`transcript` is `kept`, `missing`, or `copy_failed: <Error>`).
    A run that used any model other than `claude-opus-5-5` lists it in `model_flag`; `model_evidence`
    is `missing` when a round reported no `modelUsage`. `model_conforms` is false only when a round
-   reported a model other than that one, or another context window; such a page prints `STOP` and
-   halts the gate, as the spec requires for a model change. A round with no usage report is missing
-   evidence, not a model change, and does not halt. `gate_eligible` equals `model_conforms`; a
+   reported a model other than that one, another context window, or another `maxOutputTokens` than
+   the manifest's `max_output_tokens`. Such a turn ends the page at once with status
+   `model_mismatch`, with no further agent call. The checklist still runs on that turn's page, for
+   the record. The page prints `STOP` to stderr, the CLI exits 3, and the next page of the run is
+   refused. A round with no usage report is missing evidence, not a model change, and does not halt. `gate_eligible` equals `model_conforms`; a
    `no_output` page still counts for the gate, as the preregistered loss. Each round keeps its `permission_denials` (tool name and target
    path); a run with any prints `FLAG` and sets `audit_flag` to `permission_denials`.
    `python -m bench.c3.run --store STORE --run RUN TASK ARM`
@@ -117,11 +119,17 @@ Run from the repository root, in order. Evidence goes to a store outside the rep
 **Status scoring** (preregistered in the manifest as `status_scoring`, before any generation).
 `pass` scores its actual correction count and is rated. `failed_after_5` and `agent_error` score 6
 and are rated as they stand. `checker_fault` scores 6, is rated and flagged. `no_output` and
-`runner_crash` score 6 and are a loss, not rated. A turn that errors but leaves a passing page is
+`runner_crash` score 6 and are a loss, not rated. `model_mismatch` scores 6, is flagged, is not
+rated, and halts the gate. A turn that errors but leaves a passing page is
 `pass`. `runner_crash` writes `run.json` with the rounds made so far, then re-raises.
 
 Tests: `PYTHONPATH=. python -m unittest tests.test_bench_c3_manifest tests.test_bench_c3_run` (no
 browser, no model; the agent call and the checklist are stubbed).
+
+The checklist loads each page from a loopback server (`127.0.0.1`, a free port) that serves only
+that arm's project folder, and only for the length of one check. The evidence store beside the
+project is not reachable from the page, so `../` and `%2e%2e` requests do not return outside files.
+The server is shut down after every check.
 
 ## Limits
 

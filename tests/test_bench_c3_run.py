@@ -2,15 +2,20 @@
 
 import contextlib
 import hashlib
+import io
 import json
 import os
 import re
 import shutil
+import socket
 import subprocess
 import tempfile
 import unittest
+import urllib.error
+import urllib.request
 from pathlib import Path
 from unittest import mock
+from urllib.parse import urlsplit
 
 from bench.c3 import checklist, prompts
 from bench.c3 import manifest as mf
@@ -54,7 +59,12 @@ def make_run(tmp, run_id="r1"):
         "piggyback_commit": COMMIT,
         "harness_sha256": {"run.py": "h"},
         "starters_sha256": {"s": "x"},
-        "model": {"model": MODEL, "claude_cli_version": CLI, "context_window": WINDOW},
+        "model": {
+            "model": MODEL,
+            "claude_cli_version": CLI,
+            "context_window": WINDOW,
+            "max_output_tokens": 128000,
+        },
         "claude_executable": {"path": str(exe), "version": CLI},
         "checker_browser": {"chromium_version": CHROME},
         "inputs_sha256": inputs_sha,
@@ -79,19 +89,21 @@ def registered():
         yield
 
 
-def usage(model, window=WINDOW):
+def usage(model, window=WINDOW, max_out=128000):
     return {
         "inputTokens": 1,
         "contextWindow": window,
-        "maxOutputTokens": 128000,
+        "maxOutputTokens": max_out,
         "provider": "firstParty",
     }
 
 
-def agent_json(models=(MODEL,), session="sess-1", is_error=False, denials=None, window=WINDOW):
+def agent_json(
+    models=(MODEL,), session="sess-1", is_error=False, denials=None, window=WINDOW, max_out=128000
+):
     body = {
         "session_id": session,
-        "modelUsage": {m: usage(m, window) for m in models},
+        "modelUsage": {m: usage(m, window, max_out) for m in models},
         "duration_ms": 5,
         "is_error": is_error,
     }
@@ -384,6 +396,7 @@ class ModelFlag(unittest.TestCase):
             agent = FakeAgent(models=(MODEL, "claude-haiku-5-5"))
             result, out = run_with(tmp, agent, lambda *a, **k: report("pass"))
             self.assertEqual(result["model_ids"], sorted([MODEL, "claude-haiku-5-5"]))
+            self.assertFalse(result["model_conforms"])
             self.assertEqual(result["model_flag"], ["claude-haiku-5-5"])
             self.assertEqual(result["model_evidence"], "confirmed")
             saved = json.loads((out / "run.json").read_text(encoding="utf-8"))
@@ -564,7 +577,7 @@ class Transcript(unittest.TestCase):
             copy = mock.patch.object(runner.shutil, "copyfile", side_effect=fail_transcript)
             with mock.patch.dict(os.environ, {"HOME": str(home)}), copy:
                 result, out = run_with(tmp, FakeAgent(home=home), lambda *a, **k: report("pass"))
-            self.assertEqual(result["transcript"], "copy_failed: PermissionError")
+            self.assertEqual(result["transcript"], "lookup_failed: PermissionError")
             self.assertEqual(result["status"], "pass")
             self.assertTrue((out / "run.json").is_file())
 
@@ -598,7 +611,11 @@ class ModelConformance(unittest.TestCase):
         # next page of the same run must be refused.
         with tempfile.TemporaryDirectory() as tmp:
             agent = FakeAgent(models=("claude-haiku-5-5",))
-            result, out = run_with(tmp, agent, lambda *a, **k: report("pass"))
+            stderr = io.StringIO()
+            with contextlib.redirect_stderr(stderr):
+                result, out = run_with(tmp, agent, lambda *a, **k: report("pass"))
+            self.assertIn("STOP: T01/screenshot", stderr.getvalue())
+            self.assertEqual(result["status"], "model_mismatch")
             self.assertFalse(result["model_conforms"])
             self.assertFalse(result["gate_eligible"])
             saved = json.loads((out / "run.json").read_text(encoding="utf-8"))
@@ -636,6 +653,162 @@ class ModelConformance(unittest.TestCase):
             result, _ = run_with(tmp, FakeAgent(), lambda *a, **k: report("no_runnable_output"))
             self.assertEqual(result["status"], "no_output")
             self.assertTrue(result["gate_eligible"])
+
+
+class ModelMismatch(unittest.TestCase):
+    def test_a_wrong_model_turn_with_a_failing_page_makes_no_further_agent_call(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            agent = FakeAgent(models=("claude-haiku-5-5",))
+            result, _ = run_with(tmp, agent, lambda *a, **k: report("fail", ["x"]))
+            self.assertEqual(result["status"], "model_mismatch")
+            self.assertFalse(result["model_conforms"])
+            self.assertEqual(len(agent.calls), 1)
+
+    def test_the_cli_exits_3_on_a_model_mismatch(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            store, run_id = make_run(tmp)
+            agent = FakeAgent(models=("claude-haiku-5-5",))
+            turn = mock.patch.object(runner, "agent_turn", side_effect=agent)
+            passing = mock.patch.object(checklist, "run_bounded", return_value=report("pass"))
+            argv = ["--store", str(store), "--run", run_id, "T01", "screenshot"]
+            with registered(), turn, passing, contextlib.redirect_stderr(io.StringIO()):
+                code = runner.main(argv)
+            self.assertEqual(code, 3)
+
+    def test_an_output_cap_other_than_the_lock_is_a_mismatch_with_no_further_call(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            agent = FakeAgent(stdout=agent_json(max_out=64000))
+            result, _ = run_with(tmp, agent, lambda *a, **k: report("fail", ["x"]))
+            self.assertEqual(result["status"], "model_mismatch")
+            self.assertFalse(result["model_conforms"])
+            self.assertEqual(len(agent.calls), 1)
+            usage_seen = result["rounds"][0]["agent"]["model_usage"][MODEL]
+            self.assertEqual(usage_seen["maxOutputTokens"], 64000)
+
+    def test_checker_error_after_a_wrong_model_turn_keeps_the_round_and_halts_the_gate(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            store, run_id = make_run(tmp)
+            agent = FakeAgent(models=("claude-haiku-5-5",))
+
+            def checker_down(*a, **k):
+                raise OSError("checker down")
+
+            turn = mock.patch.object(runner, "agent_turn", side_effect=agent)
+            checks = mock.patch.object(checklist, "run_bounded", side_effect=checker_down)
+            with registered(), turn, checks:
+                with self.assertRaises(OSError):
+                    runner.run_page(str(store), run_id, "T01", "screenshot")
+            saved = json.loads(
+                (store / run_id / "pages" / "T01" / "screenshot" / "run.json").read_text()
+            )
+            self.assertEqual(saved["status"], "runner_crash")
+            self.assertEqual(len(saved["rounds"]), 1)
+            self.assertFalse(saved["model_conforms"])
+            self.assertEqual(len(agent.calls), 1)
+            with registered(), mock.patch.object(runner, "agent_turn", side_effect=FakeAgent()):
+                with self.assertRaises(SystemExit) as caught:
+                    runner.run_page(str(store), run_id, "T01", "hand-design-md")
+            self.assertIn("T01/screenshot", str(caught.exception))
+            self.assertFalse((store / run_id / "pages" / "T01" / "hand-design-md").exists())
+
+
+def read_url(url):
+    try:
+        with urllib.request.urlopen(url, timeout=10) as resp:
+            return resp.read().decode("utf-8", "replace")
+    except urllib.error.HTTPError as exc:
+        with exc:
+            return f"HTTP {exc.code}"
+
+
+class LoopbackChecker(unittest.TestCase):
+    def check(self, project, fetch=None):
+        """Runs check_page with the checklist stubbed; returns the URL it was given."""
+        seen = []
+
+        def run_bounded(url, task_id, *a, **k):
+            seen.append(url)
+            if fetch is not None:
+                fetch(url)
+            return report("pass")
+
+        with mock.patch.object(checklist, "run_bounded", side_effect=run_bounded):
+            runner.check_page(project, "T01")
+        return seen[0]
+
+    def project(self, tmp):
+        project = Path(tmp) / "project"
+        project.mkdir()
+        (project / "index.html").write_text("<html>page</html>", encoding="utf-8")
+        return project
+
+    def test_the_checklist_gets_a_loopback_url_not_a_file_path(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            url = self.check(self.project(tmp))
+            self.assertRegex(url, r"^http://127\.0\.0\.1:\d+/index\.html$")
+
+    def test_requests_cannot_reach_files_outside_the_project(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            project = self.project(tmp)
+            (Path(tmp) / "outside.txt").write_text("OUTSIDE SECRET", encoding="utf-8")
+            got = {}
+
+            def fetch(url):
+                base = url[: -len("/index.html")]
+                got["page"] = read_url(base + "/index.html")
+                for path in ("/../outside.txt", "/%2e%2e/outside.txt"):
+                    got[path] = read_url(base + path)
+
+            self.check(project, fetch)
+            self.assertEqual(got["page"], "<html>page</html>")
+            self.assertNotIn("OUTSIDE SECRET", got["/../outside.txt"])
+            self.assertNotIn("OUTSIDE SECRET", got["/%2e%2e/outside.txt"])
+
+    def test_the_server_is_down_once_the_check_ends(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            port = urlsplit(self.check(self.project(tmp))).port
+            with self.assertRaises(OSError):
+                socket.create_connection(("127.0.0.1", port), timeout=5)
+
+
+class PathLength(unittest.TestCase):
+    def test_a_transcript_folder_name_over_255_is_refused_before_claim(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            deep = Path(tmp) / ("d" * 120) / ("e" * 120)
+            deep.mkdir(parents=True)
+            store, run_id = make_run(deep)
+            agent = FakeAgent()
+            with registered(), mock.patch.object(runner, "agent_turn", side_effect=agent):
+                with self.assertRaises(SystemExit) as caught:
+                    runner.run_page(str(store), run_id, "T01", "screenshot")
+            self.assertRegex(str(caught.exception), r"is \d+ characters; the limit is 255")
+            self.assertEqual(agent.calls, [])
+            self.assertFalse((store / run_id / "pages").exists())
+
+
+class ConformanceFailsClosed(unittest.TestCase):
+    def prior(self, store, run_id, text):
+        out = store / run_id / "pages" / "T02" / "screenshot"
+        out.mkdir(parents=True)
+        (out / "run.json").write_text(text, encoding="utf-8")
+
+    def refused(self, text):
+        with tempfile.TemporaryDirectory() as tmp:
+            store, run_id = make_run(tmp)
+            self.prior(store, run_id, text)
+            agent = FakeAgent()
+            with registered(), mock.patch.object(runner, "agent_turn", side_effect=agent):
+                with self.assertRaises(SystemExit) as caught:
+                    runner.run_page(str(store), run_id, "T01", "hand-design-md")
+            self.assertEqual(agent.calls, [])
+            self.assertFalse((store / run_id / "pages" / "T01").exists())
+            return str(caught.exception)
+
+    def test_a_prior_run_json_with_no_verdict_refuses_before_claim(self):
+        self.assertIn("T02/screenshot is not model-conforming", self.refused("{}"))
+
+    def test_a_prior_run_json_that_is_not_json_refuses_before_claim(self):
+        self.assertIn("is not readable JSON", self.refused("x"))
 
 
 class PermissionAudit(unittest.TestCase):

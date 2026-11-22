@@ -67,6 +67,24 @@ def locked_run(tmp, run_id="r1", seed=7):
     yield store / run_id, data
 
 
+class ClaudeExecutable(unittest.TestCase):
+    def test_a_symlink_resolves_to_its_target_and_version_runs_with_the_agent_env(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            target = Path(tmp) / "claude-2.1.325"
+            target.write_text("", encoding="utf-8")
+            link = Path(tmp) / "claude"
+            link.symlink_to(target)
+            answer = subprocess.CompletedProcess([], 0, stdout=f"{CLI}\n", stderr="")
+            which = mock.patch.object(manifest.shutil, "which", return_value=str(link))
+            ran = mock.patch.object(manifest.subprocess, "run", return_value=answer)
+            with which, ran as run:
+                path, version = manifest.claude_executable()
+            self.assertEqual(path, str(target.resolve()))
+            self.assertEqual(version, CLI)
+            self.assertEqual(run.call_args.args[0], [str(target.resolve()), "--version"])
+            self.assertEqual(run.call_args.kwargs["env"], manifest.agent_env())
+
+
 class RunFolderNames(unittest.TestCase):
     def test_bad_run_ids_are_refused(self):
         with tempfile.TemporaryDirectory() as tmp:
