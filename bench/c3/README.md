@@ -1,6 +1,6 @@
 # C3 acceptance checklist and prompt assembly
 
-Frozen by `phase-c-sets.md`, section C3. The task rows, the shared instruction and the five arm
+Frozen by `phase-c-sets.md`, section C3. The task rows, the shared instruction and the four arm
 blocks are copied verbatim; `tests/fixtures/c3/spec_text.json` holds the frozen text and
 `tests/test_bench_c3.py` asserts equality with it.
 
@@ -83,16 +83,16 @@ Run from the repository root, in order. Evidence goes to a store outside the rep
 `/home/brodey/projects/piggyback-evidence/c3/<run-id>/`).
 
 1. **Commit, then register.** `manifest` refuses a dirty worktree, an existing or non-empty run
-   folder, and a missing or blank `DIR/<starter_id>.md` for any starter in `tasks.json`. It measures
+   folder. It measures
    each starter's `index.html` with the bundled Chromium (1440x900 screenshot and `BRIEF.md`), copies
-   the DESIGN.md files, the Impeccable `SKILL.md`, and writes the 50 prompts. It locks the commit,
+   the Impeccable `SKILL.md`, and writes the 40 prompts. It locks the commit,
    harness, starter and frozen-input hashes, Chromium and axe-core versions, the Impeccable commit and
    package version, the model, the pinned claude executable (realpath and `--version`), the context
    window (1000000) and max output tokens (128000) as Claude Code 2.1.325 reports them for
-   `claude-opus-5-5`, the agent env allowlist (names only), the 50 prompt bodies and their hashes, the
+   `claude-opus-5-5`, the agent env allowlist (names only), the 40 prompt bodies and their hashes, the
    checker and capture Chromium, a clean Impeccable checkout, and the rater seed. It is written once.
    A store path with a symbolic link on it or above it is refused.
-   `python -m bench.c3.manifest --store STORE --run RUN --design-md DIR --seed N`
+   `python -m bench.c3.manifest --store STORE --run RUN --seed N`
 2. **Generate.** One task and one arm per call. Refused without the manifest, when HEAD, the harness,
    the starters, a frozen input or the claude CLI version changed since the lock, when the task or
    arm is unknown, when a folder on the way to `pages/TASK/ARM` is a symlink, or when that page
@@ -114,7 +114,11 @@ Run from the repository root, in order. Evidence goes to a store outside the rep
    `no_output` page still counts for the gate, as the preregistered loss. Each round keeps its `permission_denials` (tool name and target
    path); a run with any prints `FLAG` and sets `audit_flag` to `permission_denials`.
    `python -m bench.c3.run --store STORE --run RUN TASK ARM`
-   Run it for each of the 10 tasks and 5 arms (50 pages). Rating comes in a later step.
+   Run it for each of the 10 tasks and 4 arms (40 pages). Rating comes in a later step.
+
+**Gate** (preregistered, amendment of 2026-11-22). Two-way, on the gate arms only: the Piggyback brief
+wins at least 8 of 10 tasks, and its turn total is strictly lower than the screenshot arm's. The works-with
+pair (skill alone against skill plus brief) is reported beside it and decides nothing.
 
 **Status scoring** (preregistered in the manifest as `status_scoring`, before any generation).
 `pass` scores its actual correction count and is rated. `failed_after_5` and `agent_error` score 6

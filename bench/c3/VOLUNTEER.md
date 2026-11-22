@@ -2,11 +2,11 @@
 
 ## What the test is and why
 
-Piggyback reads a web page and writes a short brief of its measured design: colours, fonts, spacing and layout. C3 compares three ways of telling an AI what a design should look like: the Piggyback brief, a screenshot, and a DESIGN.md that a person wrote by hand. Piggyback may lose. We will publish the results either way, as we did for C1.
+Piggyback reads a web page and writes a short brief of its measured design: colours, fonts, spacing and layout. C3 compares two ways of telling an AI what a design should look like, the Piggyback brief and a screenshot, and tests a design skill with and without the brief. Piggyback may lose. We will publish the results either way, as we did for C1.
 
 ## Writers
 
-The six hand-written DESIGN.md files are written by the project's operator, who does not build or rate the pages. No writer submissions are needed.
+No writers are needed. The pages are generated from the starters' references, and the test does not depend on anyone writing a design file.
 
 ## Raters: later
 

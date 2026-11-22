@@ -1,7 +1,7 @@
 """Register a C3 run before any generation: a dated manifest and its frozen inputs, locked once.
 
 The manifest refuses a dirty Piggyback or Impeccable worktree, an existing manifest or a non-empty
-run folder, a symbolic link on the store path, and a missing or blank DESIGN.md for any starter. It
+run folder, a symbolic link on the store path. It
 records the commit, the sha256 of the harness, the starters, the prompts (with their text) and every
 frozen input, the checker and capture Chromium versions, the axe-core version, the Impeccable skill,
 commit and version, the model, the pinned claude executable and its version, the context window and
@@ -9,7 +9,7 @@ settings, the exact agent invocation and env, the status scoring and the rater s
 screenshot and brief come from Piggyback's own measure of its local index.html. Nothing here starts
 a model. It is written once (never replaced).
 
-Usage: python -m bench.c3.manifest --store STORE --run RUN_ID --design-md DIR --seed N
+Usage: python -m bench.c3.manifest --store STORE --run RUN_ID --seed N
 """
 
 import argparse
@@ -165,20 +165,6 @@ def frozen_hashes(run):
     }
 
 
-def design_files(design_dir):
-    """starter ID -> DESIGN.md path. Refuses unless every starter has a non-blank file."""
-    root = Path(design_dir)
-    if not root.is_dir():
-        raise SystemExit(f"refusing: design dir {root} is not a directory")
-    found = {}
-    for sid in starter_ids():
-        src = root / f"{sid}.md"
-        if src.is_symlink() or not src.is_file() or not src.read_text(encoding="utf-8").strip():
-            raise SystemExit(f"refusing: {src} is missing or blank")
-        found[sid] = src
-    return found
-
-
 def refuse_store_links(store):
     """Refuse when the store path, or any folder above it, is a symbolic link."""
     path = Path(store).absolute()
@@ -326,13 +312,12 @@ def prompt_texts():
     }
 
 
-def write_inputs(run, designs, texts):
+def write_inputs(run, texts):
     inputs = run / "inputs"
-    for sid, design in designs.items():
+    for sid in starter_ids():
         folder = inputs / sid
         folder.mkdir(parents=True)
         measure_starter(sid, folder)
-        shutil.copyfile(design, folder / "DESIGN.md")
     (inputs / "impeccable").mkdir()
     shutil.copyfile(SKILL_PATH, inputs / "impeccable" / "SKILL.md")
     for task_id, arms in texts.items():
@@ -365,7 +350,7 @@ def publish_once(path, data):
         os.unlink(tmp)
 
 
-def build(store, run_id, design_dir, seed):
+def build(store, run_id, seed):
     refuse_store_links(store)
     run = run_folder(store, run_id)
     path = run / "manifest.json"
@@ -375,13 +360,12 @@ def build(store, run_id, design_dir, seed):
         raise SystemExit(f"refusing: run folder {run} is not empty; a run ID is used once")
     commit = clean_commit()
     impeccable_clean()
-    designs = design_files(design_dir)
     chromium, label = bundled_chromium()
     checker_version, checker_exe = checker_chromium()
     exe, cli_version = claude_executable()
     run.mkdir(mode=0o700, parents=True, exist_ok=True)
     texts = prompt_texts()
-    write_inputs(run, designs, texts)
+    write_inputs(run, texts)
     manifest = {
         "locked_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "piggyback_commit": commit,
@@ -428,10 +412,9 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--store", default=str(DEFAULT_STORE))
     parser.add_argument("--run", required=True)
-    parser.add_argument("--design-md", required=True, metavar="DIR")
     parser.add_argument("--seed", type=int, required=True)
     args = parser.parse_args(argv)
-    path, manifest = build(args.store, args.run, args.design_md, args.seed)
+    path, manifest = build(args.store, args.run, args.seed)
     print(json.dumps({"manifest": str(path), "inputs": len(manifest["inputs_sha256"])}, indent=2))
     return 0
 

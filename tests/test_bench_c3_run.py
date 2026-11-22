@@ -42,7 +42,6 @@ def make_run(tmp, run_id="r1"):
     for sid in sorted({t["starter_id"] for t in prompts.load_tasks()}):
         (inputs / sid).mkdir(parents=True)
         (inputs / sid / "BRIEF.md").write_text(f"brief {sid}\n", encoding="utf-8")
-        (inputs / sid / "DESIGN.md").write_text(f"design {sid}\n", encoding="utf-8")
         (inputs / sid / "screenshot.png").write_bytes(b"\x89PNG " + sid.encode())
     (inputs / "impeccable").mkdir(parents=True)
     (inputs / "impeccable" / "SKILL.md").write_text("skill\n", encoding="utf-8")
@@ -623,9 +622,9 @@ class ModelConformance(unittest.TestCase):
             store = out.parents[3]
             with registered(), mock.patch.object(runner, "agent_turn", side_effect=FakeAgent()):
                 with self.assertRaises(SystemExit) as caught:
-                    runner.run_page(str(store), "r1", "T01", "hand-design-md")
+                    runner.run_page(str(store), "r1", "T01", "skill-alone")
             self.assertIn("T01/screenshot", str(caught.exception))
-            self.assertFalse((store / "r1" / "pages" / "T01" / "hand-design-md").exists())
+            self.assertFalse((store / "r1" / "pages" / "T01" / "skill-alone").exists())
 
     def test_missing_model_usage_is_recorded_but_does_not_halt_the_gate(self):
         # Missing evidence is not a model change: recorded, and the next page may still run.
@@ -638,7 +637,7 @@ class ModelConformance(unittest.TestCase):
             passing = mock.patch.object(checklist, "run_bounded", return_value=report("pass"))
             with registered(), mock.patch.object(runner, "agent_turn", side_effect=FakeAgent()):
                 with passing:
-                    runner.run_page(str(store), "r1", "T01", "hand-design-md")
+                    runner.run_page(str(store), "r1", "T01", "skill-alone")
 
     def test_context_window_mismatch_is_not_conforming(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -708,9 +707,9 @@ class ModelMismatch(unittest.TestCase):
             self.assertEqual(len(agent.calls), 1)
             with registered(), mock.patch.object(runner, "agent_turn", side_effect=FakeAgent()):
                 with self.assertRaises(SystemExit) as caught:
-                    runner.run_page(str(store), run_id, "T01", "hand-design-md")
+                    runner.run_page(str(store), run_id, "T01", "skill-alone")
             self.assertIn("T01/screenshot", str(caught.exception))
-            self.assertFalse((store / run_id / "pages" / "T01" / "hand-design-md").exists())
+            self.assertFalse((store / run_id / "pages" / "T01" / "skill-alone").exists())
 
 
 def interrupted_arm(store, run_id, task_id, arm, *turns):
@@ -735,7 +734,7 @@ class Interrupted(unittest.TestCase):
             agent = FakeAgent()
             with registered(), mock.patch.object(runner, "agent_turn", side_effect=agent):
                 with self.assertRaises(SystemExit) as caught:
-                    runner.run_page(str(store), run_id, "T01", "hand-design-md")
+                    runner.run_page(str(store), run_id, "T01", "skill-alone")
             self.assertIn("T01/screenshot was interrupted", str(caught.exception))
             self.assertEqual(agent.calls, [])
 
@@ -762,7 +761,7 @@ class Interrupted(unittest.TestCase):
             self.assertEqual((out / "project" / "index.html").read_text(), "<html>page</html>")
             with registered(), mock.patch.object(runner, "agent_turn", side_effect=FakeAgent()):
                 with self.assertRaises(SystemExit) as caught:
-                    runner.run_page(str(store), run_id, "T01", "hand-design-md")
+                    runner.run_page(str(store), run_id, "T01", "skill-alone")
             self.assertIn("T01/screenshot is not model-conforming", str(caught.exception))
 
     def test_reconcile_of_a_conforming_interrupt_lets_the_next_page_run(self):
@@ -781,7 +780,7 @@ class Interrupted(unittest.TestCase):
                 passing,
                 mock.patch.object(runner, "agent_turn", side_effect=FakeAgent()),
             ):
-                result = runner.run_page(str(store), run_id, "T01", "hand-design-md")
+                result = runner.run_page(str(store), run_id, "T01", "skill-alone")
             self.assertEqual(result["status"], "pass")
 
     def test_reconcile_refuses_an_arm_that_already_has_run_json(self):
@@ -857,7 +856,7 @@ class EvidenceBeforeParse(unittest.TestCase):
             self.assertFalse(saved["model_conforms"])
             with registered(), mock.patch.object(runner, "agent_turn", side_effect=FakeAgent()):
                 with self.assertRaises(SystemExit) as caught:
-                    runner.run_page(str(store), run_id, "T01", "hand-design-md")
+                    runner.run_page(str(store), run_id, "T01", "skill-alone")
             self.assertIn("T01/screenshot is not model-conforming", str(caught.exception))
 
 
@@ -870,7 +869,7 @@ class RunLock(unittest.TestCase):
             turn = mock.patch.object(runner, "agent_turn", side_effect=agent)
             with registered(), turn, runner.run_lock(store / run_id):
                 for call in (
-                    lambda: runner.run_page(str(store), run_id, "T01", "hand-design-md"),
+                    lambda: runner.run_page(str(store), run_id, "T01", "skill-alone"),
                     lambda: runner.reconcile(str(store), run_id, "T01", "screenshot"),
                 ):
                     with self.assertRaises(SystemExit) as caught:
@@ -886,7 +885,7 @@ class RunLock(unittest.TestCase):
             turn = mock.patch.object(runner, "agent_turn", side_effect=FakeAgent())
             with registered(), turn, passing:
                 first = runner.run_page(str(store), run_id, "T01", "screenshot")
-                second = runner.run_page(str(store), run_id, "T01", "hand-design-md")
+                second = runner.run_page(str(store), run_id, "T01", "skill-alone")
             self.assertEqual((first["status"], second["status"]), ("pass", "pass"))
 
 
@@ -1013,7 +1012,7 @@ class ConformanceFailsClosed(unittest.TestCase):
             agent = FakeAgent()
             with registered(), mock.patch.object(runner, "agent_turn", side_effect=agent):
                 with self.assertRaises(SystemExit) as caught:
-                    runner.run_page(str(store), run_id, "T01", "hand-design-md")
+                    runner.run_page(str(store), run_id, "T01", "skill-alone")
             self.assertEqual(agent.calls, [])
             self.assertFalse((store / run_id / "pages" / "T01").exists())
             return str(caught.exception)

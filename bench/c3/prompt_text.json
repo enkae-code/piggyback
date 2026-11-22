@@ -4,7 +4,6 @@
   "arms": {
     "piggyback-brief": "Use the supplied Piggyback BRIEF.md measured from the named CC0 starter as the visual specification. Do not receive the starter screenshot or source. Preserve the task content; implement the measured design decisions rather than copying text.",
     "screenshot": "Use the supplied 1440×900 screenshot of the named CC0 starter as the visual reference. Do not receive a Piggyback brief, DESIGN.md, or starter source. Infer the design and reproduce its visual language for the task content.",
-    "hand-design-md": "Use the supplied human-written DESIGN.md for the named CC0 starter as the visual specification. Do not receive a screenshot, Piggyback brief, or starter source. Preserve the task content and follow the design file.",
     "skill-alone": "Use the named design skill's supplied instructions and the supplied 1440×900 screenshot of the named CC0 starter as your design guidance. Do not receive a Piggyback brief or starter source.",
     "skill-plus-piggyback": "Use the named design skill's same instructions, the same 1440×900 screenshot of the named CC0 starter, and the supplied Piggyback BRIEF.md measured from it. Do not receive starter source. If the brief and the screenshot seem to conflict, follow the measured brief for visual values and the task for content."
   },

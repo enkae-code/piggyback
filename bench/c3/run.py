@@ -47,7 +47,6 @@ from piggyback.measure import publish_json
 ARM_FILES = {
     "piggyback-brief": ("BRIEF.md",),
     "screenshot": ("screenshot.png",),
-    "hand-design-md": ("DESIGN.md",),
     "skill-alone": ("SKILL.md", "screenshot.png"),
     "skill-plus-piggyback": ("SKILL.md", "screenshot.png", "BRIEF.md"),
 }
@@ -533,7 +532,7 @@ def main(argv=None):
         help="record an interrupted page from its rounds/ instead of running it",
     )
     parser.add_argument("task", help="task id, T01 to T10")
-    parser.add_argument("arm", help="one of the five arm ids")
+    parser.add_argument("arm", help="one of the four arm ids")
     args = parser.parse_args(argv)
     if args.reconcile:
         result = reconcile(args.store, args.run, args.task, args.arm)

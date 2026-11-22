@@ -27,7 +27,7 @@ ROOT = Path(__file__).resolve().parent.parent
 FIXTURE = ROOT / "tests" / "fixtures" / "c3" / "spec_text.json"
 AXE = ROOT / "bench" / "c3" / "vendor" / "axe-core" / "axe.min.js"
 README = ROOT / "bench" / "c3" / "README.md"
-ARM_IDS = ["piggyback-brief", "screenshot", "hand-design-md", "skill-alone", "skill-plus-piggyback"]
+ARM_IDS = ["piggyback-brief", "screenshot", "skill-alone", "skill-plus-piggyback"]
 
 
 def spec_text():
@@ -77,11 +77,11 @@ class SpecFreeze(unittest.TestCase):
     def test_runtime_default_is_the_hermes_ruling(self):
         self.assertEqual(prompts.RUNTIME_DEFAULT, RUNTIME_RULING)
 
-    def test_write_all_writes_fifty_prompts_in_full(self):
+    def test_write_all_writes_forty_prompts_in_full(self):
         with tempfile.TemporaryDirectory() as tmp:
             written = prompts.write_all(tmp)
-            self.assertEqual(len(written), 50)
-            self.assertEqual(len(list(Path(tmp).glob("*.txt"))), 50)
+            self.assertEqual(len(written), 40)
+            self.assertEqual(len(list(Path(tmp).glob("*.txt"))), 40)
             task = prompts.load_tasks()[0]
             text = (Path(tmp) / "T01-screenshot.txt").read_text(encoding="utf-8")
             self.assertEqual(text, prompts.expand(task, "screenshot") + "\n")

@@ -1,4 +1,4 @@
-"""Expand the five C3 arm prompts for each fixed task, verbatim from the frozen spec.
+"""Expand the four C3 arm prompts for each fixed task, verbatim from the frozen spec.
 
 A prompt is: shared instruction, task build request, reference direction, exactly one arm block,
 and the runtime/tool placeholder. The placeholder is filled at manifest time. Nothing here runs a

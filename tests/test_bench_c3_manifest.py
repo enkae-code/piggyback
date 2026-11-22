@@ -29,15 +29,6 @@ def fake_measure(starter, folder):
     (folder / "BRIEF.md").write_text(f"brief for {starter}\n", encoding="utf-8")
 
 
-def write_designs(folder, skip=None, blank=None):
-    folder.mkdir(parents=True, exist_ok=True)
-    for sid in STARTERS:
-        if sid == skip:
-            continue
-        (folder / f"{sid}.md").write_text("" if sid == blank else f"# {sid}\n", encoding="utf-8")
-    return folder
-
-
 def stubbed(tmp):
     """Patches for every external call a build makes. Returns the patchers, not yet entered."""
     skill = Path(tmp) / "SKILL.md"
@@ -59,11 +50,10 @@ def stubbed(tmp):
 def locked_run(tmp, run_id="r1", seed=7):
     """A run locked by the real build (real hashes of the repo), with stubbed browser and CLI."""
     store = Path(tmp) / "store"
-    designs = write_designs(Path(tmp) / "designs")
     with contextlib.ExitStack() as stack:
         for patcher in stubbed(tmp):
             stack.enter_context(patcher)
-        path, data = manifest.build(str(store), run_id, str(designs), seed)
+        path, data = manifest.build(str(store), run_id, seed)
     yield store / run_id, data
 
 
@@ -90,40 +80,18 @@ class RunFolderNames(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             for bad in ("../escape", "a/b", ""):
                 with self.subTest(run_id=bad), self.assertRaises(SystemExit):
-                    manifest.build(tmp, bad, tmp, 1)
+                    manifest.build(tmp, bad, 1)
 
 
 class BuildRefusals(unittest.TestCase):
-    def test_missing_design_md_is_refused_before_any_write(self):
-        # Negative check for the design guard: removing the check would let this build finish.
-        with tempfile.TemporaryDirectory() as tmp:
-            designs = write_designs(Path(tmp) / "d", skip=STARTERS[0])
-            with contextlib.ExitStack() as stack:
-                for patcher in stubbed(tmp):
-                    stack.enter_context(patcher)
-                with self.assertRaises(SystemExit) as caught:
-                    manifest.build(str(Path(tmp) / "s"), "r1", str(designs), 1)
-            self.assertIn(STARTERS[0], str(caught.exception))
-            self.assertFalse((Path(tmp) / "s" / "r1").exists())
-
-    def test_blank_design_md_is_refused(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            designs = write_designs(Path(tmp) / "d", blank=STARTERS[-1])
-            with contextlib.ExitStack() as stack:
-                for patcher in stubbed(tmp):
-                    stack.enter_context(patcher)
-                with self.assertRaises(SystemExit):
-                    manifest.build(str(Path(tmp) / "s"), "r1", str(designs), 1)
-
     def test_existing_manifest_is_never_replaced(self):
         with tempfile.TemporaryDirectory() as tmp, locked_run(tmp) as (run, data):
             before = (run / "manifest.json").read_bytes()
-            designs = write_designs(Path(tmp) / "designs")
             with contextlib.ExitStack() as stack:
                 for patcher in stubbed(tmp):
                     stack.enter_context(patcher)
                 with self.assertRaises(SystemExit) as caught:
-                    manifest.build(str(run.parent), run.name, str(designs), 99)
+                    manifest.build(str(run.parent), run.name, 99)
             self.assertIn("already locked", str(caught.exception))
             self.assertEqual((run / "manifest.json").read_bytes(), before)
 
@@ -133,20 +101,18 @@ class BuildRefusals(unittest.TestCase):
             run = Path(tmp) / "store" / "r1"
             run.mkdir(parents=True)
             (run / "stale.txt").write_text("x", encoding="utf-8")
-            designs = write_designs(Path(tmp) / "designs")
             with contextlib.ExitStack() as stack:
                 for patcher in stubbed(tmp):
                     stack.enter_context(patcher)
                 with self.assertRaises(SystemExit):
-                    manifest.build(str(run.parent), "r1", str(designs), 1)
+                    manifest.build(str(run.parent), "r1", 1)
 
     def test_dirty_worktree_is_refused(self):
         # Negative check for the clean-tree guard: the real clean_commit runs, git reports a change.
         with tempfile.TemporaryDirectory() as tmp:
-            designs = write_designs(Path(tmp) / "designs")
             with mock.patch.object(c1_manifest, "_git", return_value=" M bench/c3/run.py"):
                 with self.assertRaises(SystemExit) as caught:
-                    manifest.build(str(Path(tmp) / "s"), "r1", str(designs), 1)
+                    manifest.build(str(Path(tmp) / "s"), "r1", 1)
             self.assertIn("dirty", str(caught.exception))
             self.assertFalse((Path(tmp) / "s" / "r1").exists())
 
@@ -188,16 +154,12 @@ class BuildLayout(unittest.TestCase):
             )
             for sid in STARTERS:
                 names = sorted(p.name for p in (run / "inputs" / sid).iterdir())
-                self.assertEqual(names, ["BRIEF.md", "DESIGN.md", "screenshot.png"])
-                self.assertEqual(
-                    (run / "inputs" / sid / "DESIGN.md").read_text(encoding="utf-8"),
-                    f"# {sid}\n",
-                )
+                self.assertEqual(names, ["BRIEF.md", "screenshot.png"])
             self.assertEqual(
                 [p.name for p in (run / "inputs" / "impeccable").iterdir()], ["SKILL.md"]
             )
 
-    def test_prompts_are_the_expanded_fifty(self):
+    def test_prompts_are_the_expanded_forty(self):
         with tempfile.TemporaryDirectory() as tmp, locked_run(tmp) as (run, _):
             count = 0
             for task in prompts.load_tasks():
@@ -206,7 +168,7 @@ class BuildLayout(unittest.TestCase):
                     text = path.read_text(encoding="utf-8")
                     self.assertEqual(text, prompts.expand(task, arm) + "\n")
                     count += 1
-            self.assertEqual(count, 50)
+            self.assertEqual(count, 40)
 
     def test_manifest_records_locked_facts(self):
         with tempfile.TemporaryDirectory() as tmp, locked_run(tmp, seed=7) as (run, data):
@@ -230,7 +192,7 @@ class BuildLayout(unittest.TestCase):
             self.assertEqual(saved["agent"]["env_adds"], sorted(manifest.AGENT_ENV))
             self.assertEqual(saved["agent"]["env_allowlist"], list(manifest.ENV_ALLOWLIST))
             self.assertEqual(saved["status_scoring"], manifest.STATUS_SCORING)
-            self.assertEqual(len(saved["prompts_sha256"]), 50)
+            self.assertEqual(len(saved["prompts_sha256"]), 40)
             self.assertTrue(all(len(v) == 64 for v in saved["prompts_sha256"].values()))
             self.assertEqual(saved["agent"]["max_correction_turns"], 5)
             self.assertIn("--strict-mcp-config", saved["agent"]["argv_first_turn"])
@@ -239,14 +201,14 @@ class BuildLayout(unittest.TestCase):
             self.assertIn("northline-ops/index.html", saved["starters_sha256"])
             self.assertTrue(all(len(v) == 64 for v in saved["starters_sha256"].values()))
 
-    def test_manifest_embeds_all_fifty_prompt_bodies(self):
+    def test_manifest_embeds_all_forty_prompt_bodies(self):
         with tempfile.TemporaryDirectory() as tmp, locked_run(tmp) as (run, _):
             saved = json.loads((run / "manifest.json").read_text(encoding="utf-8"))
             self.assertEqual(
                 sorted(saved["prompts"]), sorted(t["id"] for t in prompts.load_tasks())
             )
             count = sum(len(arms) for arms in saved["prompts"].values())
-            self.assertEqual(count, 50)
+            self.assertEqual(count, 40)
             for task in prompts.load_tasks():
                 for arm in ARM_IDS:
                     text = saved["prompts"][task["id"]][arm]
@@ -268,12 +230,11 @@ class AgentRecord(unittest.TestCase):
             real.mkdir()
             link = Path(tmp) / "link"
             link.symlink_to(real, target_is_directory=True)
-            designs = write_designs(Path(tmp) / "designs")
             with contextlib.ExitStack() as stack:
                 for patcher in stubbed(tmp):
                     stack.enter_context(patcher)
                 with self.assertRaises(SystemExit) as caught:
-                    manifest.build(str(link), "r1", str(designs), 1)
+                    manifest.build(str(link), "r1", 1)
             self.assertIn("symbolic link", str(caught.exception))
             self.assertEqual(list(real.iterdir()), [])
 
