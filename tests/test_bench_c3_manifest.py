@@ -132,10 +132,11 @@ class BuildRefusals(unittest.TestCase):
     def test_dirty_impeccable_checkout_is_refused(self):
         # Negative check for the Impeccable guard: the skill must come from a clean checkout.
         dirty = subprocess.CompletedProcess(["git"], 0, stdout=" M SKILL.md\n", stderr="")
-        with mock.patch.object(manifest.subprocess, "run", return_value=dirty):
+        with mock.patch.object(manifest.subprocess, "run", return_value=dirty) as run:
             with self.assertRaises(SystemExit) as caught:
                 manifest.impeccable_clean()
         self.assertIn("dirty", str(caught.exception))
+        self.assertEqual(run.call_args.args[0][-2:], ["status", "--porcelain"])
 
     def test_screenshot_not_1440_by_900_is_refused(self):
         # Negative check for the viewport guard in measure_starter, with the measure stubbed.
