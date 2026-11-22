@@ -3,6 +3,7 @@
 import contextlib
 import json
 import struct
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -43,7 +44,9 @@ def stubbed(tmp):
         mock.patch.object(manifest, "clean_commit", return_value=COMMIT),
         mock.patch.object(manifest, "bundled_chromium", return_value=("156.0.1", "bundled")),
         mock.patch.object(manifest, "measure_starter", side_effect=fake_measure),
+        mock.patch.object(manifest, "checker_chromium", return_value=("156.0.1", "/x/chrome")),
         mock.patch.object(manifest, "claude_version", return_value="2.1.325 (Claude Code)"),
+        mock.patch.object(manifest, "impeccable_clean", return_value=None),
         mock.patch.object(manifest, "impeccable_commit", return_value="035c8f3"),
         mock.patch.object(manifest, "SKILL_PATH", skill),
     ]
@@ -126,6 +129,14 @@ class BuildRefusals(unittest.TestCase):
             self.assertIn("dirty", str(caught.exception))
             self.assertFalse((Path(tmp) / "s" / "r1").exists())
 
+    def test_dirty_impeccable_checkout_is_refused(self):
+        # Negative check for the Impeccable guard: the skill must come from a clean checkout.
+        dirty = subprocess.CompletedProcess(["git"], 0, stdout=" M SKILL.md\n", stderr="")
+        with mock.patch.object(manifest.subprocess, "run", return_value=dirty):
+            with self.assertRaises(SystemExit) as caught:
+                manifest.impeccable_clean()
+        self.assertIn("dirty", str(caught.exception))
+
     def test_screenshot_not_1440_by_900_is_refused(self):
         # Negative check for the viewport guard in measure_starter, with the measure stubbed.
         with tempfile.TemporaryDirectory() as tmp:
@@ -182,11 +193,21 @@ class BuildLayout(unittest.TestCase):
             self.assertEqual(saved["piggyback_commit"], COMMIT)
             self.assertEqual(saved["rater_seed"], 7)
             self.assertEqual(saved["model"]["model"], "claude-opus-5-5")
-            self.assertEqual(saved["model"]["settings"], "defaults")
+            self.assertTrue(saved["model"]["settings"].startswith("CLI defaults"))
             self.assertEqual(saved["model"]["claude_cli_version"], "2.1.325 (Claude Code)")
+            self.assertEqual(
+                saved["model"]["context_window"],
+                f"CLI default for {manifest.MODEL} at 2.1.325 (Claude Code)",
+            )
+            self.assertEqual(saved["checker_browser"]["chromium_version"], "156.0.1")
+            self.assertEqual(saved["capture_browser"]["browser"], "bundled")
             self.assertEqual(saved["impeccable"]["commit"], "035c8f3")
             self.assertEqual(saved["axe_core"]["version"], "4.14.1")
-            self.assertEqual(saved["agent"]["env_adds"], manifest.AGENT_ENV)
+            self.assertEqual(saved["agent"]["env_adds"], sorted(manifest.AGENT_ENV))
+            self.assertEqual(saved["agent"]["env_allowlist"], list(manifest.ENV_ALLOWLIST))
+            self.assertEqual(saved["status_scoring"], manifest.STATUS_SCORING)
+            self.assertEqual(len(saved["prompts_sha256"]), 50)
+            self.assertTrue(all(len(v) == 64 for v in saved["prompts_sha256"].values()))
             self.assertEqual(saved["agent"]["max_correction_turns"], 5)
             self.assertIn("--strict-mcp-config", saved["agent"]["argv_first_turn"])
             self.assertIn("inputs/impeccable/SKILL.md", saved["inputs_sha256"])

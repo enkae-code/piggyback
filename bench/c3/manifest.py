@@ -1,23 +1,26 @@
 """Register a C3 run before any generation: a dated manifest and its frozen inputs, locked once.
 
-The manifest refuses a dirty Piggyback worktree, an existing manifest or a non-empty run folder,
-and a missing or blank DESIGN.md for any starter. It records the commit, the sha256 of the harness,
-the starters and every frozen input, the Chromium and axe-core versions, the Impeccable skill and
-commit, the model, the exact agent invocation and the rater seed. Each starter's screenshot and
-brief come from Piggyback's own measure of its local index.html. Nothing here starts a model.
-It is written once (never replaced).
+The manifest refuses a dirty Piggyback or Impeccable worktree, an existing manifest or a non-empty
+run folder, and a missing or blank DESIGN.md for any starter. It records the commit, the sha256 of
+the harness, the starters, the prompts and every frozen input, the checker and capture Chromium
+versions, the axe-core version, the Impeccable skill and commit, the model, the claude CLI version,
+the context window and settings, the exact agent invocation and env, the status scoring and the
+rater seed. Each starter's screenshot and brief come from Piggyback's own measure of its local
+index.html. Nothing here starts a model. It is written once (never replaced).
 
 Usage: python -m bench.c3.manifest --store STORE --run RUN_ID --design-md DIR --seed N
 """
 
 import argparse
 import json
+import os
 import shutil
 import struct
 import subprocess
 import sys
 import tempfile
 import threading
+import uuid
 from datetime import datetime, timezone
 from functools import partial
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
@@ -27,7 +30,8 @@ from bench.c1.manifest import bundled_chromium, clean_commit, run_folder, sha256
 from bench.c3 import checklist, prompts
 from piggyback import brief as brief_mod
 from piggyback import fingerprint as fingerprints
-from piggyback.measure import publish_json, write_measure
+from piggyback.browser import ARGS
+from piggyback.measure import write_measure
 
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[1]
@@ -57,6 +61,31 @@ AGENT_ENV = {
     "CLAUDE_CODE_DISABLE_CLAUDE_MDS": "1",
     "CLAUDE_CODE_DISABLE_AUTO_MEMORY": "1",
     "CLAUDE_CODE_DISABLE_BUNDLED_SKILLS": "1",
+}
+# The only host variables the agent gets. No ANTHROPIC_*, no other CLAUDE_CODE_*.
+ENV_ALLOWLIST = (
+    "PATH",
+    "HOME",
+    "LANG",
+    "LC_ALL",
+    "TERM",
+    "USER",
+    "XDG_RUNTIME_DIR",
+    "XDG_CONFIG_HOME",
+)
+# Scoring, preregistered before any generation. turn_score is the number used for the turn total.
+STATUS_SCORING = {
+    "pass": {
+        "turn_score": "actual correction count",
+        "rated": True,
+        "loss": False,
+        "flagged": False,
+    },
+    "failed_after_5": {"turn_score": 6, "rated": True, "loss": False, "flagged": False},
+    "agent_error": {"turn_score": 6, "rated": True, "loss": False, "flagged": False},
+    "no_output": {"turn_score": 6, "rated": False, "loss": True, "flagged": False},
+    "runner_crash": {"turn_score": 6, "rated": False, "loss": True, "flagged": False},
+    "checker_fault": {"turn_score": 6, "rated": True, "loss": False, "flagged": True},
 }
 
 
@@ -146,6 +175,18 @@ def claude_version():
     return out.stdout.strip()
 
 
+def checker_chromium():
+    """(version, executable) of the Chromium the frozen checklist launches: bundled, no channel."""
+    from playwright.sync_api import sync_playwright
+
+    with sync_playwright() as p:
+        browser = p.chromium.launch(chromium_sandbox=True, args=ARGS)
+        try:
+            return browser.version, p.chromium.executable_path
+        finally:
+            browser.close()
+
+
 def impeccable_commit():
     return subprocess.run(
         ["git", "-C", str(IMPECCABLE), "rev-parse", "HEAD"],
@@ -153,6 +194,18 @@ def impeccable_commit():
         text=True,
         check=True,
     ).stdout.strip()
+
+
+def impeccable_clean():
+    """Refuse when the Impeccable checkout has any uncommitted change."""
+    status = subprocess.run(
+        ["git", "-C", str(IMPECCABLE), "status", "--porcelain"],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
+    if status.strip():
+        raise SystemExit(f"refusing: impeccable checkout {IMPECCABLE} is dirty")
 
 
 def agent_record():
@@ -167,7 +220,8 @@ def agent_record():
             "<session_id>",
             *AGENT_FLAGS,
         ],  # fmt: skip
-        "env_adds": AGENT_ENV,
+        "env_allowlist": list(ENV_ALLOWLIST),
+        "env_adds": sorted(AGENT_ENV),
         "cwd": "pages/<task>/<arm>/project",
         "turn_timeout_s": TURN_TIMEOUT_S,
         "max_correction_turns": MAX_CORRECTIONS,
@@ -190,6 +244,29 @@ def write_inputs(run, designs):
             path.write_text(prompts.expand(task, arm) + "\n", encoding="utf-8")
 
 
+def prompt_hashes(run):
+    return {
+        f"{task['id']}/{arm}": sha256_file(run / "prompts" / task["id"] / f"{arm}.txt")
+        for task in prompts.load_tasks()
+        for arm in prompts.ARM_BLOCKS
+    }
+
+
+def publish_once(path, data):
+    """Create path with the JSON text. An existing path, file or link, is refused, never replaced.
+    The text goes to a temp file beside it, hard-linked into place, so no partial file shows."""
+    tmp = path.with_name(f".{path.name}.{uuid.uuid4().hex}.tmp")
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            handle.write(json.dumps(data, indent=2, ensure_ascii=False) + "\n")
+        os.link(tmp, path)
+    except FileExistsError:
+        raise SystemExit(f"manifest already locked: {path}") from None
+    finally:
+        os.unlink(tmp)
+
+
 def build(store, run_id, design_dir, seed):
     run = run_folder(store, run_id)
     path = run / "manifest.json"
@@ -198,8 +275,10 @@ def build(store, run_id, design_dir, seed):
     if run.exists() and any(run.iterdir()):
         raise SystemExit(f"refusing: run folder {run} is not empty; a run ID is used once")
     commit = clean_commit()
+    impeccable_clean()
     designs = design_files(design_dir)
     chromium, label = bundled_chromium()
+    checker_version, checker_exe = checker_chromium()
     cli_version = claude_version()
     run.mkdir(mode=0o700, parents=True, exist_ok=True)
     write_inputs(run, designs)
@@ -209,8 +288,12 @@ def build(store, run_id, design_dir, seed):
         "harness_sha256": harness_hashes(),
         "starter_ids": starter_ids(),
         "starters_sha256": starter_hashes(),
-        "chromium_version": chromium,
-        "browser": label,
+        "checker_browser": {
+            "browser": "bundled chromium, no channel (launched by the frozen checklist)",
+            "chromium_version": checker_version,
+            "executable": checker_exe,
+        },
+        "capture_browser": {"browser": label, "chromium_version": chromium},
         "axe_core": {"version": checklist.AXE_VERSION, "sha256": sha256_file(checklist.AXE_PATH)},
         "impeccable": {
             "skill_path": str(SKILL_PATH),
@@ -221,14 +304,19 @@ def build(store, run_id, design_dir, seed):
             "provider": "anthropic via Claude Code (Claude Max)",
             "model": MODEL,
             "claude_cli_version": cli_version,
-            "settings": "defaults",
+            "context_window": f"CLI default for {MODEL} at {cli_version}",
+            "settings": (
+                "CLI defaults: no model, effort, thinking or temperature flags; "
+                "--setting-sources project; the env allowlist in agent.env_allowlist"
+            ),
         },
         "agent": agent_record(),
+        "status_scoring": STATUS_SCORING,
         "rater_seed": seed,
+        "prompts_sha256": prompt_hashes(run),
         "inputs_sha256": frozen_hashes(run),
     }
-    publish_json(path, manifest)
-    path.chmod(0o600)
+    publish_once(path, manifest)
     return path, manifest
 
 

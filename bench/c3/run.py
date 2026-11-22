@@ -2,8 +2,9 @@
 
 The page folder is claimed once; an existing one is a first attempt that stands. The project
 folder holds only that arm's allowed inputs, the agent writes index.html there, and the frozen
-checklist runs after each turn. A failed checklist sends one correction turn, up to five. Records
-(run.json and the raw agent output of each round) sit beside the project, outside its folder.
+checklist runs after every turn. A failed checklist sends one correction turn, up to five. Records
+(run.json, the raw agent output and the sent message of each round, and the session transcript)
+sit beside the project, outside its folder.
 
 Usage: python -m bench.c3.run --store STORE --run RUN_ID TASK ARM
 """
@@ -16,6 +17,7 @@ import subprocess
 import sys
 import time
 import uuid
+from pathlib import Path
 
 from bench.c1.manifest import clean_commit, run_folder, sha256_file
 from bench.c3 import checklist, prompts
@@ -23,9 +25,11 @@ from bench.c3.manifest import (
     AGENT_ENV,
     AGENT_FLAGS,
     DEFAULT_STORE,
+    ENV_ALLOWLIST,
     MAX_CORRECTIONS,
     MODEL,
     TURN_TIMEOUT_S,
+    claude_version,
     harness_hashes,
     starter_hashes,
 )
@@ -38,12 +42,13 @@ ARM_FILES = {
     "skill-alone": ("SKILL.md", "screenshot.png"),
     "skill-plus-piggyback": ("SKILL.md", "screenshot.png", "BRIEF.md"),
 }
-NO_OUTPUT, PASS, FAILED_AFTER, CHECKER_FAULT, AGENT_ERROR = (
-    "no_output",
+PASS, FAILED_AFTER, NO_OUTPUT, CHECKER_FAULT, AGENT_ERROR, RUNNER_CRASH = (
     "pass",
     "failed_after_5",
+    "no_output",
     "checker_fault",
-    "agent_error_after_page",
+    "agent_error",
+    "runner_crash",
 )
 RUNNABLE = (checklist.PASS, checklist.FAIL)
 
@@ -69,11 +74,26 @@ def check_registered(run, manifest):
             raise SystemExit(f"refusing: frozen input {rel} changed since the manifest was locked")
 
 
+def check_cli_version(manifest):
+    """Refuse when the claude CLI differs from the version recorded at the lock."""
+    recorded = manifest["model"]["claude_cli_version"]
+    now = claude_version()
+    if now != recorded:
+        raise SystemExit(f"refusing: claude CLI is {now!r}; the manifest recorded {recorded!r}")
+
+
 def task_row(task_id):
     rows = [t for t in prompts.load_tasks() if t["id"] == task_id]
     if len(rows) != 1:
         raise SystemExit(f"refusing: unknown task {task_id!r}")
     return rows[0]
+
+
+def refuse_links(run, task_id, arm):
+    """Refuse a symbolic link anywhere from the run folder down to the page folder."""
+    for part in (run, run / "pages", run / "pages" / task_id, run / "pages" / task_id / arm):
+        if part.is_symlink():
+            raise SystemExit(f"refusing: {part} is a symbolic link")
 
 
 def claim(run, task_id, arm):
@@ -94,12 +114,19 @@ def copy_inputs(run, starter, arm, project):
         shutil.copyfile(run / "inputs" / folder / name, project / name)
 
 
+def agent_env():
+    """The allowlisted host variables that are set, plus the frozen additions. Nothing else, so
+    an ANTHROPIC_* key in the host environment never reaches the agent."""
+    host = {k: os.environ[k] for k in ENV_ALLOWLIST if k in os.environ}
+    return {**host, **AGENT_ENV}
+
+
 def agent_turn(argv, cwd):
-    """The only place a model runs: argv list, no shell, frozen env additions, a bounded wait."""
+    """The only place a model runs: argv list, no shell, the allowlisted env, a bounded wait."""
     return subprocess.run(
         argv,
         cwd=cwd,
-        env={**os.environ, **AGENT_ENV},
+        env=agent_env(),
         capture_output=True,
         text=True,
         encoding="utf-8",
@@ -111,31 +138,43 @@ def agent_turn(argv, cwd):
 
 
 def call_turn(argv, project):
-    """One agent turn: (record, raw stdout). A timeout, a non-zero exit, an error result or
-    output that is not a JSON object is an agent error."""
+    """One agent turn: (record, raw stdout). A timeout keeps its partial output. A non-zero exit,
+    an is_error result, output that is not a JSON object or a non-object modelUsage is an agent
+    error. A missing executable raises; run_page records that as runner_crash."""
     started = time.monotonic()
     try:
         proc = agent_turn(argv, project)
-    except subprocess.TimeoutExpired:
-        return {"error": f"turn timed out after {TURN_TIMEOUT_S} s", "models": []}, ""
+    except subprocess.TimeoutExpired as exc:
+        raw = exc.stdout or ""
+        raw = raw.decode("utf-8", "replace") if isinstance(raw, bytes) else raw
+        error = f"turn timed out after {TURN_TIMEOUT_S} s"
+        return turn_record(error, started, models=[], model_usage_present=False), raw
     try:
         data = json.loads(proc.stdout)
     except ValueError:
         data = None
     if not isinstance(data, dict):
         data = None
+    usage = data.get("modelUsage") if data else None
     error = None
-    if proc.returncode != 0 or data is None or data.get("is_error"):
+    if data is None or proc.returncode != 0 or data.get("is_error"):
         error = f"exit {proc.returncode}: {proc.stderr.strip()[-500:] or 'no JSON result'}"
-    record = {
-        "error": error,
-        "returncode": proc.returncode,
-        "session_id": data.get("session_id") if data else None,
-        "models": sorted((data or {}).get("modelUsage") or {}),
-        "duration_ms": (data or {}).get("duration_ms"),
-        "wall_s": round(time.monotonic() - started, 1),
-    }
+    elif usage is not None and not isinstance(usage, dict):
+        error = "modelUsage is not an object"
+    record = turn_record(
+        error,
+        started,
+        returncode=proc.returncode,
+        session_id=data.get("session_id") if data else None,
+        models=sorted(usage) if isinstance(usage, dict) else [],
+        model_usage_present=isinstance(usage, dict) and bool(usage),
+        duration_ms=data.get("duration_ms") if data else None,
+    )
     return record, proc.stdout
+
+
+def turn_record(error, started, **fields):
+    return {"error": error, "wall_s": round(time.monotonic() - started, 1), **fields}
 
 
 def check_page(project, task_id):
@@ -146,60 +185,100 @@ def check_page(project, task_id):
     return checklist.run_bounded(str(page), task_id)
 
 
-def generate(out, project, task_id, prompt):
-    session = str(uuid.uuid4())
+def generate(out, project, task_id, session, prompt, rounds):
+    """Run turns, appending to rounds in place so a crash keeps them. Returns the status.
+
+    The checklist runs after every turn, errors included. Its result decides the page: a
+    runnable passing page is pass whatever the agent did; an agent error ends the loop only when
+    the page is runnable and does not pass.
+    """
+    (out / "rounds").mkdir(exist_ok=True)
+    message = prompt
     argv = ["claude", "-p", prompt, *AGENT_FLAGS, "--session-id", session]
-    rounds, corrections = [], 0
     while True:
+        n = len(rounds)
+        (out / "rounds" / f"sent-{n}.txt").write_text(message, encoding="utf-8")
         record, raw = call_turn(argv, project)
-        (out / "rounds").mkdir(exist_ok=True)
-        (out / "rounds" / f"agent-{len(rounds)}.json").write_text(raw, encoding="utf-8")
-        # An agent error ends the loop, but only a page with no earlier runnable round is no_output.
-        had_page = any(r["checklist"] and r["checklist"]["outcome"] in RUNNABLE for r in rounds)
-        report = check_page(project, task_id) if not record["error"] or had_page else None
-        rounds.append({"round": len(rounds), "agent": record, "checklist": report})
+        (out / "rounds" / f"agent-{n}.json").write_text(raw, encoding="utf-8")
+        report = check_page(project, task_id)
+        rounds.append({"round": n, "agent": record, "checklist": report})
         if report is None or report["outcome"] == checklist.NO_RUNNABLE:
-            return session, rounds, NO_OUTPUT, corrections
+            return NO_OUTPUT
         if report["outcome"] == checklist.FAULT:
-            return session, rounds, CHECKER_FAULT, corrections
-        if record["error"]:
-            return session, rounds, AGENT_ERROR, corrections
+            return CHECKER_FAULT
         if report["pass"]:
-            return session, rounds, PASS, corrections
-        if corrections == MAX_CORRECTIONS:
-            return session, rounds, FAILED_AFTER, corrections
-        corrections += 1
+            return PASS
+        if record["error"]:
+            return AGENT_ERROR
+        if n == MAX_CORRECTIONS:
+            return FAILED_AFTER
         message = checklist.correction_message(report["failed"])
         argv = ["claude", "-p", message, "--resume", session, *AGENT_FLAGS]
+
+
+def transcript_path(project, session):
+    """The Claude Code session file for this project and session under the current HOME."""
+    slug = str(project.resolve()).replace("/", "-").replace(".", "-")
+    return Path.home() / ".claude" / "projects" / slug / f"{session}.jsonl"
+
+
+def keep_transcript(out, project, session):
+    src = transcript_path(project, session)
+    if not src.is_file() or src.is_symlink():
+        return "missing"
+    shutil.copyfile(src, out / "rounds" / "transcript.jsonl")
+    return "kept"
+
+
+def publish(out, task_id, arm, session, rounds, started, status, error=None):
+    """Write run.json. Used for a finished loop and for a crash, with the rounds made so far."""
+    (out / "rounds").mkdir(exist_ok=True)
+    models = sorted({m for r in rounds for m in r["agent"]["models"]})
+    runnable = [
+        r["round"] for r in rounds if r["checklist"] and r["checklist"]["outcome"] in RUNNABLE
+    ]
+    evidence = bool(rounds) and all(r["agent"]["model_usage_present"] for r in rounds)
+    result = {
+        "task": task_id,
+        "arm": arm,
+        "session_id": session,
+        "status": status,
+        "error": error,
+        "turns": max(len(rounds) - 1, 0),
+        "last_runnable_round": runnable[-1] if runnable else None,
+        "model_ids": models,
+        "model_flag": [m for m in models if m != MODEL],
+        "model_evidence": "confirmed" if evidence else "missing",
+        "transcript": keep_transcript(out, out / "project", session),
+        "total_wall_s": round(time.monotonic() - started, 1),
+        "rounds": rounds,
+    }
+    publish_json(out / "run.json", result)
+    return result
 
 
 def run_page(store, run_id, task_id, arm):
     run = run_folder(store, run_id)
     manifest = load_manifest(run)
     check_registered(run, manifest)
+    check_cli_version(manifest)
     task = task_row(task_id)
     if arm not in ARM_FILES:
         raise SystemExit(f"refusing: unknown arm {arm!r}")
+    refuse_links(run, task_id, arm)
     prompt = (run / "prompts" / task_id / f"{arm}.txt").read_text(encoding="utf-8")
     out = claim(run, task_id, arm)
-    project = out / "project"
-    copy_inputs(run, task["starter_id"], arm, project)
+    session = str(uuid.uuid4())
+    rounds = []
     started = time.monotonic()
-    session, rounds, status, corrections = generate(out, project, task_id, prompt)
-    models = sorted({m for r in rounds for m in r["agent"]["models"]})
-    result = {
-        "task": task_id,
-        "arm": arm,
-        "session_id": session,
-        "turns": corrections,
-        "status": status,
-        "model_ids": models,
-        "model_flag": [m for m in models if m != MODEL],
-        "total_wall_s": round(time.monotonic() - started, 1),
-        "rounds": rounds,
-    }
-    publish_json(out / "run.json", result)
-    return result
+    try:
+        copy_inputs(run, task["starter_id"], arm, out / "project")
+        status = generate(out, out / "project", task_id, session, prompt, rounds)
+    except BaseException as exc:
+        error = {"type": type(exc).__name__, "message": str(exc)}
+        publish(out, task_id, arm, session, rounds, started, RUNNER_CRASH, error)
+        raise
+    return publish(out, task_id, arm, session, rounds, started, status)
 
 
 def main(argv=None):

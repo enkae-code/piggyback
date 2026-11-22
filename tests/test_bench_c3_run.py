@@ -3,6 +3,7 @@
 import contextlib
 import hashlib
 import json
+import os
 import subprocess
 import tempfile
 import unittest
@@ -14,6 +15,7 @@ from bench.c3 import run as runner
 
 COMMIT = "b" * 40
 MODEL = "claude-opus-5-5"
+CLI = "2.1.325 (Claude Code)"
 ARM_FILES = runner.ARM_FILES
 
 
@@ -45,6 +47,7 @@ def make_run(tmp, run_id="r1"):
         "piggyback_commit": COMMIT,
         "harness_sha256": {"run.py": "h"},
         "starters_sha256": {"s": "x"},
+        "model": {"model": MODEL, "claude_cli_version": CLI},
         "inputs_sha256": inputs_sha,
     }
     (run / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
@@ -53,13 +56,14 @@ def make_run(tmp, run_id="r1"):
 
 @contextlib.contextmanager
 def registered():
-    """Real HEAD/tree checks replaced by fixed values that match make_run's manifest."""
+    """Real HEAD, tree, CLI and hash checks replaced by fixed values that match make_run."""
     with contextlib.ExitStack() as stack:
         stack.enter_context(mock.patch.object(runner, "clean_commit", return_value=COMMIT))
         stack.enter_context(
             mock.patch.object(runner, "harness_hashes", return_value={"run.py": "h"})
         )
         stack.enter_context(mock.patch.object(runner, "starter_hashes", return_value={"s": "x"}))
+        stack.enter_context(mock.patch.object(runner, "claude_version", return_value=CLI))
         yield
 
 
@@ -74,8 +78,8 @@ def agent_json(models=(MODEL,), session="sess-1", is_error=False):
     )
 
 
-def completed(stdout, returncode=0):
-    return subprocess.CompletedProcess(["claude"], returncode, stdout=stdout, stderr="")
+def completed(stdout, returncode=0, stderr=""):
+    return subprocess.CompletedProcess(["claude"], returncode, stdout=stdout, stderr=stderr)
 
 
 def report(outcome, failed=()):
@@ -88,17 +92,33 @@ def report(outcome, failed=()):
 
 
 class FakeAgent:
-    """Stands in for the one agent-call function: writes index.html each turn, returns JSON."""
+    """Stands in for the one agent-call function. Each turn writes index.html (unless write is
+    False) and returns the JSON, or the stdout given. A transcript is written under a fake HOME."""
 
-    def __init__(self, stdout=None, models=(MODEL,)):
+    def __init__(self, stdout=None, models=(MODEL,), write=True, returncode=0, home=None):
         self.calls = []
         self.stdout = stdout
         self.models = models
+        self.write = write
+        self.returncode = returncode
+        self.home = home
 
     def __call__(self, argv, cwd):
         self.calls.append((list(argv), Path(cwd)))
-        (Path(cwd) / "index.html").write_text("<html></html>", encoding="utf-8")
-        return completed(self.stdout or agent_json(self.models))
+        if self.write:
+            (Path(cwd) / "index.html").write_text("<html></html>", encoding="utf-8")
+        if self.home is not None:
+            session = (
+                argv[argv.index("--session-id") + 1]
+                if "--session-id" in argv
+                else argv[argv.index("--resume") + 1]
+            )
+            slug = str(Path(cwd).resolve()).replace("/", "-").replace(".", "-")
+            folder = Path(self.home) / ".claude" / "projects" / slug
+            folder.mkdir(parents=True, exist_ok=True)
+            (folder / f"{session}.jsonl").write_text("{}\n", encoding="utf-8")
+        body = self.stdout if self.stdout is not None else agent_json(self.models)
+        return completed(body, self.returncode)
 
 
 class ErrorOnCorrection(FakeAgent):
@@ -163,6 +183,7 @@ class CorrectionLoop(unittest.TestCase):
             result, out = run_with(tmp, agent, lambda *a, **k: next(reports))
             self.assertEqual(result["status"], "pass")
             self.assertEqual(result["turns"], 1)
+            self.assertEqual(result["last_runnable_round"], 1)
             self.assertEqual(len(agent.calls), 2)
             self.assertEqual((out / "run.json").exists(), True)
 
@@ -202,13 +223,73 @@ class CorrectionLoop(unittest.TestCase):
                 pair = argv[argv.index("--permission-mode") : argv.index("--permission-mode") + 2]
                 self.assertEqual(pair, ["--permission-mode", "acceptEdits"])
 
-    def test_agent_error_on_correction_after_a_page_keeps_the_page(self):
+    def test_sent_messages_are_kept_per_round(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            failed = ["x (text)"]
+            reports = iter([report("fail", failed), report("pass")])
+            _, out = run_with(tmp, FakeAgent(), lambda *a, **k: next(reports))
+            prompt = (out.parent.parent.parent / "prompts" / "T01" / "screenshot.txt").read_text(
+                encoding="utf-8"
+            )
+            rounds = out / "rounds"
+            self.assertEqual((rounds / "sent-0.txt").read_text(encoding="utf-8"), prompt)
+            self.assertEqual(
+                (rounds / "sent-1.txt").read_text(encoding="utf-8"),
+                checklist.correction_message(failed),
+            )
+
+
+class StatusScoring(unittest.TestCase):
+    def test_round_zero_error_with_a_passing_page_is_pass(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            agent = FakeAgent(stdout="not json")
+            result, _ = run_with(tmp, agent, lambda *a, **k: report("pass"))
+            self.assertEqual(result["status"], "pass")
+            self.assertEqual(result["turns"], 0)
+            self.assertIsNotNone(result["rounds"][0]["agent"]["error"])
+            self.assertEqual(len(agent.calls), 1)
+
+    def test_round_zero_error_with_a_failing_runnable_page_is_agent_error(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            agent = FakeAgent(stdout="not json")
+            result, _ = run_with(tmp, agent, lambda *a, **k: report("fail", ["x (text)"]))
+            self.assertEqual(result["status"], "agent_error")
+            self.assertEqual(result["last_runnable_round"], 0)
+            self.assertEqual(len(agent.calls), 1)
+
+    def test_round_zero_error_with_no_page_is_no_output(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            agent = FakeAgent(stdout="not json", write=False)
+
+            def never_checked(*a, **k):
+                raise AssertionError("the checklist must not run without a page")
+
+            result, _ = run_with(tmp, agent, never_checked)
+            self.assertEqual(result["status"], "no_output")
+            self.assertIsNone(result["last_runnable_round"])
+
+    def test_nonzero_exit_is_an_agent_error(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            agent = FakeAgent(returncode=1, stdout=agent_json())
+            result, _ = run_with(tmp, agent, lambda *a, **k: report("fail", ["x (text)"]))
+            self.assertEqual(result["status"], "agent_error")
+            self.assertIn("exit 1", result["rounds"][0]["agent"]["error"])
+
+    def test_is_error_result_is_an_agent_error(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            agent = FakeAgent(stdout=agent_json(is_error=True))
+            result, _ = run_with(tmp, agent, lambda *a, **k: report("fail", ["x (text)"]))
+            self.assertEqual(result["status"], "agent_error")
+            self.assertIsNotNone(result["rounds"][0]["agent"]["error"])
+
+    def test_agent_error_on_correction_after_a_page_is_agent_error(self):
         # Negative check for the page rule: an error after a runnable round is not no_output.
         with tempfile.TemporaryDirectory() as tmp:
             agent = ErrorOnCorrection()
             reports = iter([report("fail", ["x (text)"]), report("fail", ["x (text)"])])
             result, out = run_with(tmp, agent, lambda *a, **k: next(reports))
-            self.assertEqual(result["status"], "agent_error_after_page")
+            self.assertEqual(result["status"], "agent_error")
+            self.assertEqual(result["last_runnable_round"], 1)
             self.assertEqual(len(agent.calls), 2)
             self.assertIsNotNone(result["rounds"][1]["agent"]["error"])
             self.assertTrue((out / "project" / "index.html").is_file())
@@ -235,20 +316,40 @@ class CorrectionLoop(unittest.TestCase):
             self.assertEqual(result["status"], "no_output")
             self.assertEqual(turn.call_count, 1)
 
-    def test_unparseable_agent_output_is_no_output(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            agent = FakeAgent(stdout="not json")
-            result, _ = run_with(tmp, agent, lambda *a, **k: report("pass"))
-            self.assertEqual(result["status"], "no_output")
-            self.assertEqual(len(agent.calls), 1)
-            self.assertIsNotNone(result["rounds"][0]["agent"]["error"])
-
     def test_no_runnable_checklist_is_no_output(self):
         with tempfile.TemporaryDirectory() as tmp:
             agent = FakeAgent()
             result, _ = run_with(tmp, agent, lambda *a, **k: report("no_runnable_output"))
             self.assertEqual(result["status"], "no_output")
             self.assertEqual(len(agent.calls), 1)
+
+    def test_checker_fault_is_its_own_status(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            result, _ = run_with(tmp, FakeAgent(), lambda *a, **k: report("checker_fault"))
+            self.assertEqual(result["status"], "checker_fault")
+
+
+class AgentOutput(unittest.TestCase):
+    def test_timeout_keeps_the_partial_stdout(self):
+        with tempfile.TemporaryDirectory() as tmp:
+
+            def slow(argv, cwd):
+                raise subprocess.TimeoutExpired(argv, 1800, output=b"partial text")
+
+            store, run_id = make_run(tmp)
+            with registered(), mock.patch.object(runner, "agent_turn", side_effect=slow):
+                result = runner.run_page(str(store), run_id, "T01", "screenshot")
+            out = store / run_id / "pages" / "T01" / "screenshot"
+            self.assertIn("timed out", result["rounds"][0]["agent"]["error"])
+            self.assertEqual((out / "rounds" / "agent-0.json").read_text(), "partial text")
+            self.assertEqual(result["status"], "no_output")
+
+    def test_non_object_model_usage_is_an_agent_error(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            agent = FakeAgent(stdout=json.dumps({"modelUsage": ["x"], "is_error": False}))
+            result, _ = run_with(tmp, agent, lambda *a, **k: report("pass"))
+            self.assertIn("modelUsage", result["rounds"][0]["agent"]["error"])
+            self.assertEqual(result["model_evidence"], "missing")
 
 
 class ModelFlag(unittest.TestCase):
@@ -259,6 +360,7 @@ class ModelFlag(unittest.TestCase):
             result, out = run_with(tmp, agent, lambda *a, **k: report("pass"))
             self.assertEqual(result["model_ids"], sorted([MODEL, "claude-haiku-5-5"]))
             self.assertEqual(result["model_flag"], ["claude-haiku-5-5"])
+            self.assertEqual(result["model_evidence"], "confirmed")
             saved = json.loads((out / "run.json").read_text(encoding="utf-8"))
             self.assertEqual(saved["model_flag"], ["claude-haiku-5-5"])
 
@@ -266,16 +368,168 @@ class ModelFlag(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             result, _ = run_with(tmp, FakeAgent(), lambda *a, **k: report("pass"))
             self.assertEqual(result["model_flag"], [])
+            self.assertEqual(result["model_evidence"], "confirmed")
+
+    def test_missing_model_usage_is_recorded_as_missing_evidence(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            agent = FakeAgent(stdout=json.dumps({"session_id": "s", "is_error": False}))
+            result, _ = run_with(tmp, agent, lambda *a, **k: report("pass"))
+            self.assertEqual(result["model_evidence"], "missing")
+            self.assertEqual(result["model_ids"], [])
+            self.assertEqual(result["model_flag"], [])
 
 
-def no_agent(argv, cwd):
-    raise AssertionError("the agent must not run when registration is refused")
+class CliVersionPin(unittest.TestCase):
+    def test_a_different_cli_is_refused_before_any_agent_call(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            store, run_id = make_run(tmp)
+            agent = FakeAgent()
+            with registered(), mock.patch.object(runner, "claude_version", return_value="9.9.9"), \
+                    mock.patch.object(runner, "agent_turn", side_effect=agent):  # fmt: skip
+                with self.assertRaises(SystemExit) as caught:
+                    runner.run_page(str(store), run_id, "T01", "screenshot")
+            self.assertIn("9.9.9", str(caught.exception))
+            self.assertIn(CLI, str(caught.exception))
+            self.assertEqual(agent.calls, [])
+            self.assertFalse((store / run_id / "pages").exists())
+
+
+class AgentEnvironment(unittest.TestCase):
+    def test_anthropic_key_in_the_host_env_does_not_reach_the_agent(self):
+        host = {
+            "PATH": "/usr/bin",
+            "HOME": "/home/x",
+            "ANTHROPIC_API_KEY": "sk-secret",
+            "ANTHROPIC_BASE_URL": "http://elsewhere",
+            "MAX_THINKING_TOKENS": "1",
+            "CLAUDE_CODE_OAUTH_TOKEN": "tok",
+        }
+        with mock.patch.dict(os.environ, host, clear=True), \
+                mock.patch.object(runner.subprocess, "run") as run:  # fmt: skip
+            run.return_value = completed("{}")
+            runner.agent_turn(["claude"], Path("/tmp"))
+        env = run.call_args.kwargs["env"]
+        self.assertNotIn("ANTHROPIC_API_KEY", env)
+        self.assertNotIn("ANTHROPIC_BASE_URL", env)
+        self.assertNotIn("MAX_THINKING_TOKENS", env)
+        self.assertNotIn("CLAUDE_CODE_OAUTH_TOKEN", env)
+        self.assertEqual(env["PATH"], "/usr/bin")
+        self.assertEqual(env["HOME"], "/home/x")
+        self.assertEqual(set(env) - set(runner.ENV_ALLOWLIST), set(runner.AGENT_ENV))
+
+
+class CrashReceipt(unittest.TestCase):
+    def test_missing_executable_leaves_a_runner_crash_receipt_and_reraises(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            store, run_id = make_run(tmp)
+            empty = Path(tmp) / "empty-bin"
+            empty.mkdir()
+            with registered(), mock.patch.dict(os.environ, {"PATH": str(empty)}):
+                with self.assertRaises(FileNotFoundError):
+                    runner.run_page(str(store), run_id, "T01", "screenshot")
+            saved = json.loads(
+                (store / run_id / "pages" / "T01" / "screenshot" / "run.json").read_text()
+            )
+            self.assertEqual(saved["status"], "runner_crash")
+            self.assertEqual(saved["error"]["type"], "FileNotFoundError")
+            self.assertEqual(saved["rounds"], [])
+
+    def test_crash_after_a_round_keeps_the_rounds_made(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            store, run_id = make_run(tmp)
+            calls = iter([completed(agent_json())])
+
+            def once(argv, cwd):
+                (Path(cwd) / "index.html").write_text("<html></html>", encoding="utf-8")
+                try:
+                    return next(calls)
+                except StopIteration:
+                    raise OSError("disk gone") from None
+
+            fail = report("fail", ["x"])
+            with registered(), mock.patch.object(runner, "agent_turn", side_effect=once), \
+                    mock.patch.object(checklist, "run_bounded", return_value=fail):  # fmt: skip
+                with self.assertRaises(OSError):
+                    runner.run_page(str(store), run_id, "T01", "screenshot")
+            saved = json.loads(
+                (store / run_id / "pages" / "T01" / "screenshot" / "run.json").read_text()
+            )
+            self.assertEqual(saved["status"], "runner_crash")
+            self.assertEqual(len(saved["rounds"]), 1)
+
+
+class Transcript(unittest.TestCase):
+    def test_session_file_is_copied_under_a_fake_home(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp) / "home"
+            agent = FakeAgent(home=home)
+            with mock.patch.dict(os.environ, {"HOME": str(home)}):
+                result, out = run_with(tmp, agent, lambda *a, **k: report("pass"))
+            self.assertEqual(result["transcript"], "kept")
+            self.assertEqual(
+                (out / "rounds" / "transcript.jsonl").read_text(encoding="utf-8"), "{}\n"
+            )
+
+    def test_missing_session_file_is_recorded(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp) / "home"
+            home.mkdir()
+            with mock.patch.dict(os.environ, {"HOME": str(home)}):
+                result, out = run_with(tmp, FakeAgent(), lambda *a, **k: report("pass"))
+            self.assertEqual(result["transcript"], "missing")
+            self.assertFalse((out / "rounds" / "transcript.jsonl").exists())
+
+    def test_slug_matches_the_claude_project_folder(self):
+        project = Path("/home/brodey/.hermes/cache/scratch/c3probe2")
+        slug = runner.transcript_path(project, "s").parent.name
+        self.assertEqual(slug, "-home-brodey--hermes-cache-scratch-c3probe2")
+
+
+class PathRefusals(unittest.TestCase):
+    def test_symlinked_task_dir_is_refused_before_any_agent_call(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            store, run_id = make_run(tmp)
+            elsewhere = Path(tmp) / "elsewhere"
+            elsewhere.mkdir()
+            (store / run_id / "pages").mkdir()
+            (store / run_id / "pages" / "T01").symlink_to(elsewhere, target_is_directory=True)
+            agent = FakeAgent()
+            with registered(), mock.patch.object(runner, "agent_turn", side_effect=agent):
+                with self.assertRaises(SystemExit) as caught:
+                    runner.run_page(str(store), run_id, "T01", "screenshot")
+            self.assertIn("symbolic link", str(caught.exception))
+            self.assertEqual(agent.calls, [])
+            self.assertEqual(list(elsewhere.iterdir()), [])
+
+
+class Refusals(unittest.TestCase):
+    def test_unknown_task_is_refused_before_any_agent_call(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            store, run_id = make_run(tmp)
+            agent = FakeAgent()
+            with registered(), mock.patch.object(runner, "agent_turn", side_effect=agent):
+                with self.assertRaises(SystemExit) as caught:
+                    runner.run_page(str(store), run_id, "T99", "screenshot")
+            self.assertIn("unknown task", str(caught.exception))
+            self.assertEqual(agent.calls, [])
+
+    def test_unknown_arm_is_refused_before_any_agent_call(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            store, run_id = make_run(tmp)
+            agent = FakeAgent()
+            with registered(), mock.patch.object(runner, "agent_turn", side_effect=agent):
+                with self.assertRaises(SystemExit) as caught:
+                    runner.run_page(str(store), run_id, "T01", "bogus-arm")
+            self.assertIn("unknown arm", str(caught.exception))
+            self.assertEqual(agent.calls, [])
 
 
 class RegistrationGuards(unittest.TestCase):
     def setUp(self):
         # A removed guard must fail the test, not reach a real claude call.
-        patcher = mock.patch.object(runner, "agent_turn", side_effect=no_agent)
+        patcher = mock.patch.object(
+            runner, "agent_turn", side_effect=AssertionError("the agent must not run")
+        )
         self.agent = patcher.start()
         self.addCleanup(patcher.stop)
 

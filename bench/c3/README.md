@@ -87,16 +87,27 @@ Run from the repository root, in order. Evidence goes to a store outside the rep
    each starter's `index.html` with the bundled Chromium (1440x900 screenshot and `BRIEF.md`), copies
    the DESIGN.md files, the Impeccable `SKILL.md`, and writes the 50 prompts. It locks the commit,
    harness, starter and frozen-input hashes, Chromium and axe-core versions, the Impeccable commit,
-   the model, the exact agent invocation and the rater seed. It is written once.
+   the model, the claude CLI version, the context window and settings, the agent env allowlist (names
+   only), the prompt hashes, the checker and capture Chromium, a clean Impeccable checkout, and the
+   rater seed. It is written once.
    `python -m bench.c3.manifest --store STORE --run RUN --design-md DIR --seed N`
 2. **Generate.** One task and one arm per call. Refused without the manifest, when HEAD, the harness,
-   the starters or a frozen input changed since the lock, or when `pages/TASK/ARM` already exists
-   (the first attempt stands). The project folder holds only that arm's allowed inputs. The
-   checklist runs after each turn; up to five correction turns follow a failure. The record is
-   `pages/TASK/ARM/run.json`, and each round's raw agent output is in `rounds/`. A run that used any
-   model other than `claude-opus-5-5` lists it in `model_flag`.
+   the starters, a frozen input or the claude CLI version changed since the lock, when the task or
+   arm is unknown, when a folder on the way to `pages/TASK/ARM` is a symlink, or when that page
+   folder already exists (the first attempt stands). The project folder holds only that arm's
+   allowed inputs. The checklist runs after every turn, errors included; up to five correction turns
+   follow a runnable failing page. The record is `pages/TASK/ARM/run.json`. `rounds/` holds each
+   sent message (`sent-N.txt`), each raw agent output (`agent-N.json`) and `transcript.jsonl` when
+   the session file exists. A run that used any model other than `claude-opus-5-5` lists it in
+   `model_flag`; `model_evidence` is `missing` when the CLI reported no `modelUsage`.
    `python -m bench.c3.run --store STORE --run RUN TASK ARM`
    Run it for each of the 10 tasks and 5 arms (50 pages). Rating comes in a later step.
+
+**Status scoring** (preregistered in the manifest as `status_scoring`, before any generation).
+`pass` scores its actual correction count and is rated. `failed_after_5` and `agent_error` score 6
+and are rated as they stand. `checker_fault` scores 6, is rated and flagged. `no_output` and
+`runner_crash` score 6 and are a loss, not rated. A turn that errors but leaves a passing page is
+`pass`. `runner_crash` writes `run.json` with the rounds made so far, then re-raises.
 
 Tests: `PYTHONPATH=. python -m unittest tests.test_bench_c3_manifest tests.test_bench_c3_run` (no
 browser, no model; the agent call and the checklist are stubbed).
