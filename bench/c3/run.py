@@ -12,7 +12,10 @@ Usage: python -m bench.c3.run --store STORE --run RUN_ID TASK ARM
 """
 
 import argparse
+import contextlib
+import fcntl
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -165,18 +168,15 @@ def copy_inputs(run, starter, arm, project):
 
 
 def call_turn(argv, project):
-    """One agent turn: (record, raw stdout). A timeout keeps its partial output. A non-zero exit,
-    an is_error result, output that is not a JSON object or a non-object modelUsage is an agent
-    error. A missing executable raises; run_page records that as runner_crash."""
-    started = time.monotonic()
+    """One agent turn, unparsed: (raw stdout, returncode, stderr, timeout error). A timeout keeps
+    its partial output. A missing executable raises; run_page records that as runner_crash."""
     try:
         proc = agent_turn(argv, project)
     except subprocess.TimeoutExpired as exc:
         raw = exc.stdout or ""
         raw = raw.decode("utf-8", "replace") if isinstance(raw, bytes) else raw
-        error = f"turn timed out after {TURN_TIMEOUT_S} s"
-        return turn_record(error, started), raw
-    return turn_from_output(proc.stdout, started, proc.returncode, proc.stderr), proc.stdout
+        return raw, None, "", f"turn timed out after {TURN_TIMEOUT_S} s"
+    return proc.stdout, proc.returncode, proc.stderr, None
 
 
 def turn_from_output(raw, started, returncode, stderr):
@@ -303,6 +303,7 @@ def check_page(project, task_id):
 def generate(out, project, task_id, session, prompt, rounds, exe, model):
     """Run turns, appending to rounds in place so a crash keeps them. Returns the status.
 
+    The raw output is written before it is parsed, and the round is kept even if that write fails.
     Each turn's round is recorded before the checklist runs, so a crash in the checker keeps it.
     The checklist runs after every turn, errors included. A turn on another model or context
     window or output cap returns model_mismatch at once, with no further agent call. Otherwise the
@@ -310,18 +311,27 @@ def generate(out, project, task_id, session, prompt, rounds, exe, model):
     agent error ends the loop only when the page is runnable and does not pass.
     """
     (out / "rounds").mkdir(exist_ok=True)
+    (out / "rounds" / "session.txt").write_text(session, encoding="utf-8")
     message = prompt
     argv = [exe, "-p", prompt, *AGENT_FLAGS, "--session-id", session]
     while True:
         n = len(rounds)
         (out / "rounds" / f"sent-{n}.txt").write_text(message, encoding="utf-8")
-        record, raw = call_turn(argv, project)
-        (out / "rounds" / f"agent-{n}.json").write_text(raw, encoding="utf-8")
-        entry = {"round": n, "agent": record, "checklist": None}
-        rounds.append(entry)
+        started = time.monotonic()
+        raw, returncode, stderr, timeout = call_turn(argv, project)
+        entry = {"round": n, "agent": None, "checklist": None}
+        try:
+            (out / "rounds" / f"agent-{n}.json").write_text(raw, encoding="utf-8")
+        finally:
+            entry["agent"] = (
+                turn_record(timeout, started)
+                if timeout
+                else turn_from_output(raw, started, returncode, stderr)
+            )
+            rounds.append(entry)
         report = check_page(project, task_id)
         entry["checklist"] = report
-        if not round_conforms(record, model):
+        if not round_conforms(entry["agent"], model):
             return MODEL_MISMATCH
         if report is None or report["outcome"] == checklist.NO_RUNNABLE:
             return NO_OUTPUT
@@ -329,7 +339,7 @@ def generate(out, project, task_id, session, prompt, rounds, exe, model):
             return CHECKER_FAULT
         if report["pass"]:
             return PASS
-        if record["error"]:
+        if entry["agent"]["error"]:
             return AGENT_ERROR
         if n == MAX_CORRECTIONS:
             return FAILED_AFTER
@@ -411,15 +421,30 @@ def publish(
 
 
 def locked_run(store, run_id):
-    """The run folder and manifest, once the store, HEAD, harness, starters, inputs, CLI and
-    checker all match the lock."""
+    """The run folder and manifest, once the store, HEAD, harness, starters and inputs match the
+    lock."""
     refuse_store_links(store)
     run = run_folder(store, run_id)
     manifest = load_manifest(run)
     check_registered(run, manifest)
-    check_cli(manifest)
-    check_checker(manifest)
     return run, manifest
+
+
+@contextlib.contextmanager
+def run_lock(run):
+    """One exclusive lock per run, held from admission to publication. The kernel drops it when the
+    process dies, so an interrupted run leaves no stale lock."""
+    fd = os.open(run / ".runner.lock", os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW, 0o600)
+    try:
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            raise SystemExit(
+                f"refusing: run {run.name} is active in another process; wait for it to finish"
+            ) from None
+        yield
+    finally:
+        os.close(fd)
 
 
 def check_page_id(run, task_id, arm):
@@ -433,61 +458,69 @@ def check_page_id(run, task_id, arm):
 
 def run_page(store, run_id, task_id, arm):
     run, manifest = locked_run(store, run_id)
-    check_conformance(run)
-    task = check_page_id(run, task_id, arm)
-    project = run / "pages" / task_id / arm / "project"
-    if len(slug_of(project)) > SLUG_LIMIT:
-        raise SystemExit(
-            f"refusing: the transcript folder name for {project} is {len(slug_of(project))} "
-            f"characters; the limit is {SLUG_LIMIT}"
-        )
-    prompt = (run / "prompts" / task_id / f"{arm}.txt").read_text(encoding="utf-8")
-    out = claim(run, task_id, arm)
-    session = str(uuid.uuid4())
-    rounds = []
-    started = time.monotonic()
-    model = manifest["model"]
-    exe = manifest["claude_executable"]["path"]
-    try:
-        (out / "project").mkdir()
-        copy_inputs(run, task["starter_id"], arm, out / "project")
-        status = generate(out, out / "project", task_id, session, prompt, rounds, exe, model)
-    except BaseException as exc:
-        error = {"type": type(exc).__name__, "message": str(exc)}
-        status = crash_status(rounds, model)
-        publish(out, task_id, arm, session, rounds, started, status, model, error)
-        raise
-    return publish(out, task_id, arm, session, rounds, started, status, model)
+    check_cli(manifest)
+    check_checker(manifest)
+    with run_lock(run):
+        check_conformance(run)
+        task = check_page_id(run, task_id, arm)
+        project = run / "pages" / task_id / arm / "project"
+        if len(slug_of(project)) > SLUG_LIMIT:
+            raise SystemExit(
+                f"refusing: the transcript folder name for {project} is {len(slug_of(project))} "
+                f"characters; the limit is {SLUG_LIMIT}"
+            )
+        prompt = (run / "prompts" / task_id / f"{arm}.txt").read_text(encoding="utf-8")
+        out = claim(run, task_id, arm)
+        session = str(uuid.uuid4())
+        rounds = []
+        started = time.monotonic()
+        model = manifest["model"]
+        exe = manifest["claude_executable"]["path"]
+        try:
+            (out / "project").mkdir()
+            copy_inputs(run, task["starter_id"], arm, out / "project")
+            status = generate(out, out / "project", task_id, session, prompt, rounds, exe, model)
+        except BaseException as exc:
+            error = {"type": type(exc).__name__, "message": str(exc)}
+            status = crash_status(rounds, model)
+            publish(out, task_id, arm, session, rounds, started, status, model, error)
+            raise
+        return publish(out, task_id, arm, session, rounds, started, status, model)
 
 
 def reconcile(store, run_id, task_id, arm):
     """Record an interrupted page from the rounds it kept. Re-runs no turn and never touches
     project/: each agent-N.json is read as the turn it holds, then the page is published."""
     run, manifest = locked_run(store, run_id)
-    check_page_id(run, task_id, arm)
-    out = run / "pages" / task_id / arm
-    if not out.is_dir():
-        raise SystemExit(f"refusing: {out} does not exist; there is nothing to reconcile")
-    if (out / "run.json").exists():
-        raise SystemExit(f"refusing: {out} already has run.json; nothing was interrupted")
-    started = time.monotonic()
-    rounds = []
-    while (out / "rounds" / f"agent-{len(rounds)}.json").is_file():
-        n = len(rounds)
-        raw = (out / "rounds" / f"agent-{n}.json").read_text(encoding="utf-8")
-        agent = turn_from_output(raw, started, None, "")
-        agent["error"] = "interrupted before publish"
-        rounds.append({"round": n, "agent": agent, "checklist": None})
-    session = next((r["agent"]["session_id"] for r in rounds if r["agent"]["session_id"]), None)
-    error = {
-        "type": "Interrupted",
-        "message": "runner stopped before publishing; reconciled from rounds/",
-    }
-    model = manifest["model"]
-    status = crash_status(rounds, model)
-    return publish(
-        out, task_id, arm, session, rounds, started, status, model, error, reconciled=True
-    )
+    with run_lock(run):
+        check_page_id(run, task_id, arm)
+        out = run / "pages" / task_id / arm
+        if not out.is_dir():
+            raise SystemExit(f"refusing: {out} does not exist; there is nothing to reconcile")
+        if (out / "run.json").exists():
+            raise SystemExit(f"refusing: {out} already has run.json; nothing was interrupted")
+        started = time.monotonic()
+        rounds = []
+        while (out / "rounds" / f"agent-{len(rounds)}.json").is_file():
+            n = len(rounds)
+            raw = (out / "rounds" / f"agent-{n}.json").read_text(encoding="utf-8")
+            agent = turn_from_output(raw, started, None, "")
+            agent["error"] = "interrupted before publish"
+            rounds.append({"round": n, "agent": agent, "checklist": None})
+        persisted = out / "rounds" / "session.txt"
+        session = persisted.read_text(encoding="utf-8") if persisted.is_file() else None
+        session = session or next(
+            (r["agent"]["session_id"] for r in rounds if r["agent"]["session_id"]), None
+        )
+        error = {
+            "type": "Interrupted",
+            "message": "runner stopped before publishing; reconciled from rounds/",
+        }
+        model = manifest["model"]
+        status = crash_status(rounds, model)
+        return publish(
+            out, task_id, arm, session, rounds, started, status, model, error, reconciled=True
+        )
 
 
 def main(argv=None):

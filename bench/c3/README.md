@@ -129,7 +129,9 @@ the next page of the run is refused until it is recorded. Run
 `python -m bench.c3.run --run RUN --reconcile TASK ARM`: it rebuilds the rounds from
 `rounds/agent-N.json` (no turn runs, `project/` is untouched) and publishes `run.json` with
 `reconciled: true`, status `model_mismatch` or `runner_crash`. Reconcile refuses an arm that already
-has `run.json` or does not exist.
+has `run.json` or does not exist. It needs no pinned CLI or checker Chromium. The session id is in
+`rounds/session.txt`, written before the first turn. A run holds `<run>/.runner.lock` from admission
+to publication; a page or reconcile against a run that another process holds is refused.
 
 Tests: `PYTHONPATH=. python -m unittest tests.test_bench_c3_manifest tests.test_bench_c3_run` (no
 browser, no model; the agent call and the checklist are stubbed).

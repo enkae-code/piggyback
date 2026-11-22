@@ -813,6 +813,119 @@ class Interrupted(unittest.TestCase):
                 self.assertEqual(runner.main(argv), 3)
 
 
+class EvidenceBeforeParse(unittest.TestCase):
+    def test_raw_output_is_on_disk_before_the_parser_is_entered(self):
+        real_parse = runner.turn_from_output
+        out = Path("unused")
+        seen = []
+
+        def check_then_parse(raw, *a, **k):
+            seen.append((out / "rounds" / "agent-0.json").is_file())
+            return real_parse(raw, *a, **k)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp) / "store" / "r1" / "pages" / "T01" / "screenshot"
+            parse = mock.patch.object(runner, "turn_from_output", side_effect=check_then_parse)
+            with parse:
+                result, _ = run_with(tmp, FakeAgent(), lambda *a, **k: report("pass"))
+            self.assertEqual(seen, [True])
+            self.assertEqual(result["status"], "pass")
+
+    def test_write_failure_after_wrong_model_turn_is_model_mismatch_and_halts_next_page(self):
+        class BlockedRaw(FakeAgent):
+            def __call__(self, argv, cwd):
+                result = super().__call__(argv, cwd)
+                (Path(cwd).parent / "rounds" / "agent-0.json").mkdir()
+                return result
+
+        with tempfile.TemporaryDirectory() as tmp:
+            store, run_id = make_run(tmp)
+            agent = BlockedRaw(models=("claude-haiku-5-5",))
+            turn = mock.patch.object(runner, "agent_turn", side_effect=agent)
+            with (
+                registered(),
+                turn,
+                mock.patch.object(checklist, "run_bounded", return_value=report("fail", ["x"])),
+            ):
+                with self.assertRaises(OSError):
+                    runner.run_page(str(store), run_id, "T01", "screenshot")
+            saved = json.loads(
+                (store / run_id / "pages" / "T01" / "screenshot" / "run.json").read_text()
+            )
+            self.assertEqual(saved["status"], "model_mismatch")
+            self.assertEqual(len(saved["rounds"]), 1)
+            self.assertFalse(saved["model_conforms"])
+            with registered(), mock.patch.object(runner, "agent_turn", side_effect=FakeAgent()):
+                with self.assertRaises(SystemExit) as caught:
+                    runner.run_page(str(store), run_id, "T01", "hand-design-md")
+            self.assertIn("T01/screenshot is not model-conforming", str(caught.exception))
+
+
+class RunLock(unittest.TestCase):
+    def test_held_lock_refuses_run_page_and_reconcile_with_no_agent_call(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            store, run_id = make_run(tmp)
+            interrupted_arm(store, run_id, "T01", "screenshot", agent_json())
+            agent = FakeAgent()
+            turn = mock.patch.object(runner, "agent_turn", side_effect=agent)
+            with registered(), turn, runner.run_lock(store / run_id):
+                for call in (
+                    lambda: runner.run_page(str(store), run_id, "T01", "hand-design-md"),
+                    lambda: runner.reconcile(str(store), run_id, "T01", "screenshot"),
+                ):
+                    with self.assertRaises(SystemExit) as caught:
+                        call()
+                    self.assertIn("is active in another process", str(caught.exception))
+                    self.assertNotIn("reconcile", str(caught.exception))
+            self.assertEqual(agent.calls, [])
+
+    def test_lock_is_released_after_a_page_so_the_next_page_runs(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            store, run_id = make_run(tmp)
+            passing = mock.patch.object(checklist, "run_bounded", return_value=report("pass"))
+            turn = mock.patch.object(runner, "agent_turn", side_effect=FakeAgent())
+            with registered(), turn, passing:
+                first = runner.run_page(str(store), run_id, "T01", "screenshot")
+                second = runner.run_page(str(store), run_id, "T01", "hand-design-md")
+            self.assertEqual((first["status"], second["status"]), ("pass", "pass"))
+
+
+class SessionPersistence(unittest.TestCase):
+    def test_reconcile_of_an_arm_killed_before_agent0_uses_the_persisted_session(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp) / "home"
+            store, run_id = make_run(tmp)
+            out = store / run_id / "pages" / "T01" / "screenshot"
+            (out / "rounds").mkdir(parents=True)
+            (out / "project").mkdir()
+            (out / "rounds" / "session.txt").write_text("persisted-sess", encoding="utf-8")
+            with mock.patch.dict(os.environ, {"HOME": str(home)}):
+                transcript = runner.transcript_path(out / "project", "persisted-sess")
+                transcript.parent.mkdir(parents=True)
+                transcript.write_text("{}\n", encoding="utf-8")
+                with registered():
+                    saved = runner.reconcile(str(store), run_id, "T01", "screenshot")
+            self.assertEqual(saved["status"], "runner_crash")
+            self.assertEqual(saved["transcript"], "kept")
+            self.assertEqual(saved["session_id"], "persisted-sess")
+
+
+class ReconcileNeedsNoCli(unittest.TestCase):
+    def test_reconcile_works_when_the_pinned_executable_is_missing(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            store, run_id = make_run(tmp)
+            interrupted_arm(store, run_id, "T01", "screenshot", agent_json())
+            (Path(tmp) / "claude-2.1.325").unlink()
+            no_cli = mock.patch.object(runner, "claude_version", side_effect=AssertionError("cli"))
+            no_chrome = mock.patch.object(
+                runner, "checker_chromium", side_effect=AssertionError("chromium")
+            )
+            with registered(), no_cli, no_chrome:
+                saved = runner.reconcile(str(store), run_id, "T01", "screenshot")
+            self.assertEqual(saved["status"], "runner_crash")
+            self.assertTrue(saved["model_conforms"])
+
+
 def read_url(url):
     try:
         with urllib.request.urlopen(url, timeout=10) as resp:
