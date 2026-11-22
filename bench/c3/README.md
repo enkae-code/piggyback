@@ -77,6 +77,30 @@ item line carries its rule in parentheses.
 - `vendor/axe-core/LICENSE` (MPL-2.0) sha256: `af175b9d96ee93c21a036152e1b905b0b95304d4ae8c2c921c7609100ba8df7e`
 - `vendor/axe-core/LICENSE-3RD-PARTY.txt` sha256: `4f8563870d0fca38bbc3e00b6f670cb7fa9f380ba9f26a7f7d1184a6b18b1653`
 
+## Generation: manifest, then one page at a time
+
+Run from the repository root, in order. Evidence goes to a store outside the repo (default
+`/home/brodey/projects/piggyback-evidence/c3/<run-id>/`).
+
+1. **Commit, then register.** `manifest` refuses a dirty worktree, an existing or non-empty run
+   folder, and a missing or blank `DIR/<starter_id>.md` for any starter in `tasks.json`. It measures
+   each starter's `index.html` with the bundled Chromium (1440x900 screenshot and `BRIEF.md`), copies
+   the DESIGN.md files, the Impeccable `SKILL.md`, and writes the 50 prompts. It locks the commit,
+   harness, starter and frozen-input hashes, Chromium and axe-core versions, the Impeccable commit,
+   the model, the exact agent invocation and the rater seed. It is written once.
+   `python -m bench.c3.manifest --store STORE --run RUN --design-md DIR --seed N`
+2. **Generate.** One task and one arm per call. Refused without the manifest, when HEAD, the harness,
+   the starters or a frozen input changed since the lock, or when `pages/TASK/ARM` already exists
+   (the first attempt stands). The project folder holds only that arm's allowed inputs. The
+   checklist runs after each turn; up to five correction turns follow a failure. The record is
+   `pages/TASK/ARM/run.json`, and each round's raw agent output is in `rounds/`. A run that used any
+   model other than `claude-opus-5-5` lists it in `model_flag`.
+   `python -m bench.c3.run --store STORE --run RUN TASK ARM`
+   Run it for each of the 10 tasks and 5 arms (50 pages). Rating comes in a later step.
+
+Tests: `PYTHONPATH=. python -m unittest tests.test_bench_c3_manifest tests.test_bench_c3_run` (no
+browser, no model; the agent call and the checklist are stubbed).
+
 ## Limits
 
 Axe findings are automated checks. They do not certify accessibility. The content predicates
