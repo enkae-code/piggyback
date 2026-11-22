@@ -1,0 +1,42 @@
+name: C3 DESIGN.md
+description: Submit a hand-written DESIGN.md for one C3 starter page
+title: "[C3 DESIGN.md] "
+labels: ["c3-design-md"]
+body:
+  - type: markdown
+    attributes:
+      value: "Read the [volunteer guide](https://github.com/enkae-code/piggyback/blob/main/bench/c3/VOLUNTEER.md) first. One writer per starter: the first complete submission is used."
+  - type: dropdown
+    id: starter
+    attributes:
+      label: Starter page
+      options:
+        - northline-ops
+        - mina-okafor
+        - field-journal
+        - ink-and-rule
+        - little-plot
+        - good-day-assembly
+    validations:
+      required: true
+  - type: textarea
+    id: design-md
+    attributes:
+      label: DESIGN.md
+      description: Describe the page's look so another designer could rebuild the feel. Any length.
+      render: markdown
+    validations:
+      required: true
+  - type: checkboxes
+    id: confirmations
+    attributes:
+      label: Confirmations
+      options:
+        - label: I wrote this DESIGN.md myself, without AI tools.
+          required: true
+        - label: I did not run Piggyback or read a Piggyback brief for this starter.
+          required: true
+        - label: I will not rate C3 pages.
+          required: true
+        - label: I dedicate this text to the public domain under CC0 1.0.
+          required: true
