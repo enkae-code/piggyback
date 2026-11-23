@@ -135,6 +135,37 @@ Piggyback's wording was edited with [no-ai-slop](https://github.com/petergyang/n
 
 Use the brief together with a screenshot of the reference, not instead of one. The brief carries the exact type, colour and spacing; it does not describe layout, and a screenshot does. In the C3 test the brief alone lost to a screenshot, while adding it to a screenshot and a design skill improved the match on 7 of 10 tasks: [C3 results](bench/c3/RESULTS.md).
 
+## Works with REA and Craft Anything
+
+Piggyback measures how a page looks. Two open-source tools cover what it can't see, such as scroll effects and how motion is built:
+
+- [REA](https://github.com/morluto/rea) (MIT) reads how a page's motion and interactions are made: scroll effects, timelines, easing and durations.
+- [Craft Anything](https://github.com/storytold/craft-anything) (MIT or Apache-2.0) keeps an investigation record, so every value you build from has its evidence.
+
+Install them yourself; Piggyback does not bundle or call them. Add all three to the same MCP config as in [Use with your agent](#use-with-your-agent). Craft Anything's command is its installed `craft-anything-cli`:
+
+```json
+{
+  "mcpServers": {
+    "piggyback": {
+      "command": "uvx",
+      "args": ["piggyback-design[measure]", "mcp", "--ref", "https://example.com/", "--build", "http://localhost:3000/"]
+    },
+    "rea": { "command": "npx", "args": ["-y", "rea-agents", "mcp"] },
+    "craft-anything": { "command": "craft-anything-cli", "args": ["mcp"] }
+  }
+}
+```
+
+Then:
+
+1. **Piggyback:** give your agent the brief and the reference screenshot.
+2. **REA:** read how the reference's motion works and note its values.
+3. **Craft Anything:** record each value with where it came from.
+4. **Build fresh**, then run Piggyback's `check` against the reference.
+
+Study how a page works, then write your own code and assets. The tools' licences cover the tools, not the sites you study: don't copy a site's code, images or text. This combination is not part of Piggyback's benchmarks.
+
 ## Principles
 
 - **No taste score.** Piggyback reports measurements and differences. You decide what is good.
