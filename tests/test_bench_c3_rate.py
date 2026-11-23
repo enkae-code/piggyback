@@ -28,7 +28,9 @@ def make_store(store):
             project = run / "pages" / tid / arm / "project"
             project.mkdir(parents=True)
             (project / "index.html").write_text(
-                f"<!-- secret {tid} {arm} --><h1>{tid} {arm}</h1>", encoding="utf-8"
+                f"<!-- secret {tid} {arm} --><style>/* secret css */ h1{{color:red}}</style>"
+                f"<h1>{tid} {arm}</h1>",
+                encoding="utf-8",
             )
             for name in ("BRIEF.md", "SKILL.md", "screenshot.png"):
                 (project / name).write_text("input", encoding="utf-8")
@@ -60,6 +62,7 @@ class RateTest(unittest.TestCase):
         for page in pages:
             self.assertNotIn("<!--", page.read_text(encoding="utf-8"))
             self.assertNotIn("secret", page.read_text(encoding="utf-8"))
+            self.assertIn("h1{color:red}", page.read_text(encoding="utf-8"))
         for name in ("BRIEF.md", "SKILL.md"):
             self.assertEqual(list(self.site.rglob(name)), [])
         self.assertEqual(

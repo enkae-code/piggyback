@@ -1,0 +1,424 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The river under Market Street · The Lowfield Record</title>
+<meta name="description" content="A local history of the Lowfield mill race, culverted beneath Market Street in 1838 and still running.">
+<style>
+  :root {
+    --paper: #e1e6e9;
+    --ink: #131a21;
+    --ink-soft: #343e46;
+    --rule: #131a21;
+    --accent: #9b2c1f;
+    --serif: "EB Garamond", "EBGaramond", "Garamond", "Adobe Garamond Pro", "Cormorant Garamond", "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+    --s-1: 4px; --s-2: 10px; --s-3: 14px; --s-4: 20px; --s-5: 22px; --s-6: 39px;
+    --container: 1180px;
+  }
+  *, *::before, *::after { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--serif);
+    font-size: 19px;
+    line-height: 1.5;
+    font-kerning: normal;
+    font-variant-numeric: oldstyle-nums proportional-nums;
+    text-rendering: optimizeLegibility;
+  }
+  a { color: inherit; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+  .skip {
+    position: absolute; left: var(--s-3); top: -60px;
+    background: var(--ink); color: var(--paper); padding: var(--s-2) var(--s-3);
+    z-index: 10;
+  }
+  .skip:focus { top: var(--s-3); }
+  .wrap { width: min(var(--container), 100% - 2 * var(--s-5)); margin-inline: auto; }
+
+  
+  .masthead {
+    display: flex; align-items: baseline; justify-content: space-between; gap: var(--s-4);
+    padding: var(--s-5) 0 var(--s-3);
+    border-bottom: 1px solid var(--rule);
+    flex-wrap: wrap;
+  }
+  .brand { display: flex; align-items: baseline; gap: var(--s-5); flex-wrap: wrap; }
+  .brand a { font-size: 32px; font-weight: 700; letter-spacing: -0.01em; text-decoration: none; line-height: 1; }
+  .brand span { font-size: 18px; color: var(--ink-soft); }
+  .site-nav ul { list-style: none; margin: 0; padding: 0; display: flex; gap: var(--s-5); flex-wrap: wrap; }
+  .site-nav a { font-size: 18px; text-decoration: none; padding-block: var(--s-1); }
+  .site-nav a:hover, .site-nav a[aria-current="page"] { text-decoration: underline; text-underline-offset: 4px; text-decoration-thickness: 1px; }
+
+  
+  .story-head { padding-top: var(--s-5); }
+  .kicker { margin: 0 0 var(--s-1); font-size: 15.2px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-soft); }
+  h1 {
+    margin: 0;
+    font-size: clamp(48px, 7.2vw, 103.7px);
+    line-height: 1;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    text-wrap: balance;
+  }
+  .head-foot {
+    display: flex; justify-content: space-between; align-items: baseline;
+    gap: var(--s-4) var(--s-6); flex-wrap: wrap;
+    margin-top: var(--s-3);
+  }
+  .deck { margin: 0; font-size: 28px; line-height: 1.25; color: var(--ink-soft); max-width: 30ch; }
+  .byline { margin: 0; display: flex; gap: var(--s-1) var(--s-5); flex-wrap: wrap; font-size: 18px; color: var(--ink-soft); }
+  .byline a { text-decoration: none; }
+  .byline a:hover { text-decoration: underline; }
+
+  
+  .plate { margin: var(--s-5) 0 0; }
+  .plate svg { display: block; width: 100%; height: auto; }
+  .plate figcaption { margin-top: var(--s-2); font-size: 15.2px; color: var(--ink-soft); max-width: 92ch; }
+
+  
+  .story-body {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 372px;
+    gap: var(--s-6);
+    margin-top: var(--s-5);
+    padding-bottom: var(--s-6);
+  }
+  .text { grid-column: 1 / 3; columns: 2; column-gap: var(--s-6); }
+  .text p { margin: 0; hyphens: auto; }
+  .text p + p { text-indent: 1.5em; }
+  .text p:first-child::first-line { font-variant-caps: small-caps; letter-spacing: 0.03em; }
+  .text .continue { display: block; margin-top: var(--s-3); text-indent: 0; font-size: 18px; }
+  sup a { color: var(--accent); font-weight: 700; text-decoration: none; font-size: 0.72em; padding-inline: 1px; }
+
+  aside.margin { display: flex; flex-direction: column; gap: var(--s-6); }
+  .key h2, .cta-box h2 { margin: 0 0 var(--s-1); font-size: 19px; font-weight: 700; letter-spacing: 0.01em; }
+  .key ol { margin: 0; padding: 0; list-style: none; counter-reset: k; }
+  .key li { counter-increment: k; display: grid; grid-template-columns: 25px 1fr; font-size: 18px; line-height: 1.55; }
+  .key li::before { content: counter(k) "."; color: var(--accent); font-weight: 700; }
+  .key li:target { background: rgba(155, 44, 31, 0.08); }
+
+  .cta-box { border: 1px solid var(--rule); border-top-width: 3px; padding: var(--s-4) var(--s-4) var(--s-5); }
+  .cta-box p { margin: 0 0 var(--s-2); font-size: 15.2px; color: var(--ink-soft); }
+  .cta {
+    display: inline-block;
+    font-size: 28px; font-weight: 700; line-height: 1.15;
+    text-decoration: underline; text-decoration-color: var(--accent);
+    text-decoration-thickness: 3px; text-underline-offset: 6px;
+  }
+  .cta:hover { color: var(--accent); }
+
+  
+  .section-head {
+    display: flex; justify-content: space-between; align-items: baseline; gap: var(--s-4);
+    border-top: 1px solid var(--rule); padding-top: var(--s-3); margin-bottom: var(--s-5);
+  }
+  .section-head h2 { margin: 0; font-size: 32px; line-height: 1.1; }
+  .section-head a { font-size: 18px; }
+  .cards { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--s-6); }
+  .card { position: relative; display: flex; flex-direction: column; gap: var(--s-2); }
+  .card svg { width: 100%; height: auto; display: block; border-bottom: 1px solid var(--rule); }
+  .card .meta { margin: 0; font-size: 15.2px; color: var(--ink-soft); letter-spacing: 0.04em; }
+  .card h3 { margin: 0; font-size: 28px; line-height: 1.15; font-weight: 600; }
+  .card h3 a { text-decoration: none; }
+  .card h3 a::after { content: ""; position: absolute; inset: 0; }
+  .card:hover h3 a { text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 4px; }
+  .card p.sum { margin: 0; font-size: 18px; color: var(--ink-soft); }
+
+  
+  .membership {
+    margin-top: var(--s-6) ;
+    border-top: 3px solid var(--rule);
+    padding: var(--s-5) 0 var(--s-6);
+    display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: var(--s-6);
+  }
+  .membership h2 { margin: 0 0 var(--s-3); font-size: clamp(36px, 4.4vw, 56px); line-height: 1.02; letter-spacing: -0.015em; }
+  .membership > div > p { margin: 0 0 var(--s-5); max-width: 46ch; }
+  .benefits { margin: 0; padding: 0; list-style: none; border-top: 1px solid var(--rule); }
+  .benefits li { display: grid; grid-template-columns: 1fr auto; gap: var(--s-4); padding: var(--s-2) 0; border-bottom: 1px solid var(--rule); font-size: 18px; }
+  .benefits li span:last-child { color: var(--ink-soft); }
+  .join {
+    display: inline-block; margin-top: var(--s-5);
+    background: var(--ink); color: var(--paper);
+    font-size: 19px; font-weight: 600; text-decoration: none;
+    padding: var(--s-3) var(--s-5);
+    border: 1px solid var(--ink);
+  }
+  .join:hover { background: var(--accent); border-color: var(--accent); }
+  .fine { font-size: 15.2px; color: var(--ink-soft); margin-top: var(--s-2); }
+
+  footer {
+    border-top: 1px solid var(--rule);
+    padding: var(--s-4) 0 var(--s-6);
+    display: flex; justify-content: space-between; gap: var(--s-4); flex-wrap: wrap;
+    font-size: 15.2px; color: var(--ink-soft);
+  }
+  footer p { margin: 0; }
+
+  @media (max-width: 1100px) {
+    .story-body { grid-template-columns: minmax(0, 1fr) 320px; }
+    .text { grid-column: 1; columns: 1; }
+  }
+  @media (max-width: 820px) {
+    body { font-size: 18px; }
+    .story-body { grid-template-columns: 1fr; gap: var(--s-6); }
+    aside.margin { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s-5); }
+    .cards { grid-template-columns: 1fr 1fr; gap: var(--s-5); }
+    .membership { grid-template-columns: 1fr; }
+    .deck { font-size: 24px; }
+  }
+  @media (max-width: 560px) {
+    .site-nav ul { gap: var(--s-3); }
+    .brand a { font-size: 28px; }
+    aside.margin, .cards { grid-template-columns: 1fr; }
+    .plate .labels { display: none; }
+    .section-head { flex-direction: column; gap: var(--s-1); }
+    .section-head h2 { font-size: 28px; }
+    .cta { font-size: 24px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    * { scroll-behavior: auto !important; transition: none !important; }
+  }
+  html { scroll-behavior: smooth; }
+</style>
+</head>
+<body>
+<a class="skip" href="#story">Skip to the story</a>
+
+<div class="wrap">
+  <header class="masthead">
+    <div class="brand">
+      <a href="#top" id="top">The Lowfield Record</a>
+      <span>No. 41, autumn 2026</span>
+    </div>
+    <nav class="site-nav" aria-label="Primary">
+      <ul>
+        <li><a href="#story" aria-current="page">This issue</a></li>
+        <li><a href="#related">Archive</a></li>
+        <li><a href="#related">Walks</a></li>
+        <li><a href="#membership">Membership</a></li>
+      </ul>
+    </nav>
+  </header>
+
+  <main id="story">
+    <article>
+      <header class="story-head">
+        <p class="kicker">Streets &amp; waterways</p>
+        <h1>The river under Market Street</h1>
+        <div class="head-foot">
+          <p class="deck">The mill race was bricked over in 1838. Nobody told the water.</p>
+          <p class="byline">
+            <span>Words by <a href="#about-author">Maren Holt</a></span>
+            <span>Drawing by Tobias Wren</span>
+            <span><time datetime="2026-11-22">22 November 2026</time></span>
+            <span>Nine minutes to read</span>
+          </p>
+        </div>
+      </header>
+
+      <figure class="plate">
+        <svg viewBox="0 0 1180 280" role="img" aria-labelledby="plate-title plate-desc">
+          <title id="plate-title">Cross-section of Market Street</title>
+          <desc id="plate-desc">A section drawing looking north along Market Street. Shopfronts stand on both sides of the road. Beneath the road surface a brick-arched culvert carries the old mill race. A manhole shaft drops from the road into the culvert crown, a gas lamp stands on the west pavement, and a reused millstone is set into the east kerb. The culvert spans nine feet.</desc>
+          <defs>
+            <pattern id="soil" width="10" height="10" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+              <line x1="0" y1="0" x2="0" y2="10" stroke="#131a21" stroke-width="0.8" opacity="0.55"/>
+            </pattern>
+            <pattern id="brick" width="16" height="8" patternUnits="userSpaceOnUse">
+              <rect width="16" height="8" fill="none" stroke="#131a21" stroke-width="0.6"/>
+            </pattern>
+          </defs>
+          <g fill="none" stroke="#131a21" stroke-linejoin="round">
+            
+            <path d="M2 120 V36 L60 12 L118 36 V120" stroke-width="1.4"/>
+            <path d="M118 120 V30 H236 V120" stroke-width="1.4"/>
+            <rect x="24" y="52" width="26" height="34" stroke-width="1"/>
+            <rect x="70" y="52" width="26" height="34" stroke-width="1"/>
+            <path d="M24 120 V96 H96 V120" stroke-width="1"/>
+            <rect x="138" y="46" width="30" height="30" stroke-width="1"/>
+            <rect x="188" y="46" width="30" height="30" stroke-width="1"/>
+            <path d="M132 120 V88 H222 V120 M177 88 V120" stroke-width="1"/>
+            
+            <path d="M944 120 V24 H1062 V120" stroke-width="1.4"/>
+            <path d="M1062 120 V40 L1120 16 L1178 40 V120" stroke-width="1.4"/>
+            <rect x="964" y="40" width="30" height="34" stroke-width="1"/>
+            <rect x="1012" y="40" width="30" height="34" stroke-width="1"/>
+            <path d="M958 120 V90 H1048 V120" stroke-width="1"/>
+            <rect x="1090" y="56" width="22" height="28" stroke-width="1"/>
+            <rect x="1128" y="56" width="22" height="28" stroke-width="1"/>
+            <path d="M1100 120 V96 H1140 V120" stroke-width="1"/>
+
+            
+            <path d="M262 120 V52" stroke-width="1.6"/>
+            <path d="M254 52 H270 L266 36 H258 Z" stroke-width="1.2"/>
+            <path d="M262 36 V30" stroke-width="1.2"/>
+            <path d="M256 120 V114 H268 V120" stroke-width="1"/>
+
+            
+            <path d="M884 120 V100 H924 V120" stroke-width="1.2"/>
+            <path d="M904 100 V120" stroke-width="0.8" stroke-dasharray="3 3"/>
+
+            
+            <path d="M0 120 H290 V126 H880 V120 H1180" stroke-width="3"/>
+            <rect x="0" y="126" width="1180" height="132" fill="url(#soil)" stroke="none"/>
+            
+            <path d="M290 136 H880" stroke-width="0.9" stroke-dasharray="6 4"/>
+            <path d="M290 148 H880" stroke-width="0.9" stroke-dasharray="2 4"/>
+
+            
+            
+            <path d="M456 258 V216 A134 56 0 0 1 724 216 V258 Z" fill="#e1e6e9" stroke="none"/>
+            <path d="M456 258 V216 A134 56 0 0 1 724 216 V258 H710 V216 A120 42 0 0 0 470 216 V258 Z" fill="url(#brick)" stroke-width="2.4"/>
+            
+            <path d="M470 228 H710" stroke-width="1.2"/>
+            <path d="M486 238 H530 M560 238 H640 M660 238 H700" stroke-width="0.8"/>
+            <path d="M500 248 H580 M610 248 H690" stroke-width="0.8"/>
+            
+            <path d="M440 258 H740" stroke-width="3"/>
+
+            
+            <rect x="642" y="126" width="22" height="44" fill="#e1e6e9" stroke="none"/>
+            <path d="M640 126 V170 M666 126 V166" stroke-width="2"/>
+            <path d="M646 134 H660 M646 144 H660 M646 154 H660" stroke-width="0.8"/>
+            <path d="M636 125 H670" stroke-width="3"/>
+          </g>
+
+          
+          <g fill="none" stroke="#9b2c1f" stroke-width="1.2">
+            <path d="M560 168 L560 134 L552 98"/>
+            <circle cx="560" cy="168" r="2.5" fill="#9b2c1f"/>
+            <circle cx="550" cy="84" r="14" fill="#e1e6e9"/>
+            <path d="M653 126 L720 72"/>
+            <circle cx="653" cy="126" r="2.5" fill="#9b2c1f"/>
+            <circle cx="732" cy="62" r="14" fill="#e1e6e9"/>
+            <path d="M270 44 L330 44"/>
+            <circle cx="268" cy="44" r="2.5" fill="#9b2c1f"/>
+            <circle cx="344" cy="44" r="14" fill="#e1e6e9"/>
+            <path d="M904 104 L850 70"/>
+            <circle cx="904" cy="106" r="2.5" fill="#9b2c1f"/>
+            <circle cx="840" cy="60" r="14" fill="#e1e6e9"/>
+            
+            <path d="M456 272 H724 M456 266 V278 M724 266 V278"/>
+          </g>
+          <g class="labels" fill="#9b2c1f" font-family="EB Garamond, Garamond, Georgia, serif" font-size="18" font-weight="700" text-anchor="middle">
+            <text x="550" y="90">1</text>
+            <text x="732" y="68">2</text>
+            <text x="344" y="50">3</text>
+            <text x="840" y="66">4</text>
+          </g>
+          <g fill="#9b2c1f" font-family="EB Garamond, Garamond, Georgia, serif" font-size="17" text-anchor="middle">
+            <rect x="560" y="262" width="60" height="18" fill="#e1e6e9"/>
+            <text x="590" y="276">9 feet</text>
+          </g>
+        </svg>
+        <figcaption>Section through Market Street at the corner of Tanner’s Row, looking north. What is cut is drawn heavy, what stands beyond is drawn fine, the road’s make-up is dashed.</figcaption>
+      </figure>
+
+      <div class="story-body">
+        <div class="text">
+          <p>For most of the nineteenth century, the people of Lowfield walked to market over a river and never knew it. The mill race that once turned the Corn Exchange wheel was cut in 1702, ran open along what is now Market Street for a hundred and thirty years, and was then roofed in brick by a town council tired of the smell and the drownings. The minutes record the cost to the penny and the length to the foot. They do not record anyone asking where the water would go instead.</p>
+          <p>It went exactly where it had always gone. The arch the council paid for<sup><a href="#k1" aria-label="Key note 1">1</a></sup> is nine feet across and still dry above the waterline, laid by a Lowfield firm whose bricks carry a thumbprint-sized stamp. Three drains feed it. One manhole<sup><a href="#k2" aria-label="Key note 2">2</a></sup> outside number 14 opens onto it, and on a wet night you can hear it through the iron.</p>
+          <p>The clues on the surface are small. The gas lamp<sup><a href="#k3" aria-label="Key note 3">3</a></sup> on the west pavement stands a foot further from the kerb than its neighbours, because it was set against the old parapet wall. The east kerb has a millstone<sup><a href="#k4" aria-label="Key note 4">4</a></sup> in it, quietly reused. Once you have seen them, the whole street reads as a bank.</p>
+          <p>Ruth Askew, who ran the ironmonger’s at the corner from 1951 until 1989, remembers the cellar flooding every March. “My father called it the spring tide,” she says. “He kept the stock on bricks. We all did. Nobody thought of it as a river, it was just the cellar being the cellar.”</p>
+          <a class="continue" href="#membership">Continue reading in the print edition →</a>
+        </div>
+
+        <aside class="margin" aria-label="Notes and membership">
+          <section class="key" aria-labelledby="key-h">
+            <h2 id="key-h">Key to the section</h2>
+            <ol>
+              <li id="k1">Brick culvert, 1838, nine-foot span.</li>
+              <li id="k2">Inspection shaft outside No. 14.</li>
+              <li id="k3">Gas lamp standard, set to the old parapet.</li>
+              <li id="k4">Millstone reused as a kerb block.</li>
+            </ol>
+          </section>
+          <section class="cta-box" aria-labelledby="print-h">
+            <h2 id="print-h">Read the whole story</h2>
+            <p>Members get the full issue in print, four times a year, plus the walking map of the buried race.</p>
+            <a class="cta" href="#membership">Become a member, $38</a>
+          </section>
+        </aside>
+      </div>
+    </article>
+
+    <section id="related" aria-labelledby="related-h">
+      <div class="section-head">
+        <h2 id="related-h">More from beneath the town</h2>
+        <a href="#related">All 212 stories in the archive</a>
+      </div>
+      <ul class="cards">
+        <li class="card">
+          <svg viewBox="0 0 360 150" aria-hidden="true" focusable="false">
+            <g fill="none" stroke="#131a21" stroke-width="1.4">
+              <path d="M20 140 V60 L180 20 L340 60 V140" />
+              <path d="M60 140 V80 H120 V140 M240 140 V80 H300 V140"/>
+              <path d="M150 140 V96 A30 30 0 0 1 210 96 V140"/>
+              <path d="M0 140 H360" stroke-width="3"/>
+            </g>
+            <circle cx="180" cy="62" r="12" fill="none" stroke="#9b2c1f" stroke-width="1.2"/>
+          </svg>
+          <p class="meta">Buildings · <time datetime="2026-09-14">14 Sept 2026</time></p>
+          <h3><a href="#related">Twelve owners of the Corn Exchange</a></h3>
+          <p class="sum">From grain hall to roller rink to registry office: one building’s ledger, read in order.</p>
+        </li>
+        <li class="card">
+          <svg viewBox="0 0 360 150" aria-hidden="true" focusable="false">
+            <g fill="none" stroke="#131a21" stroke-width="1.4">
+              <path d="M10 120 C80 100 120 60 180 70 S290 120 350 40" stroke-dasharray="6 5"/>
+              <path d="M10 140 H350" stroke-width="3"/>
+              <circle cx="70" cy="104" r="4"/>
+              <circle cx="180" cy="70" r="4"/>
+              <circle cx="300" cy="86" r="4"/>
+            </g>
+            <circle cx="180" cy="70" r="12" fill="none" stroke="#9b2c1f" stroke-width="1.2"/>
+          </svg>
+          <p class="meta">Walks · <time datetime="2026-06-02">2 June 2026</time></p>
+          <h3><a href="#related">Following the old turnpike on foot</a></h3>
+          <p class="sum">Six miles, three milestones and a toll house now selling ice cream. A route for a dry Sunday.</p>
+        </li>
+        <li class="card">
+          <svg viewBox="0 0 360 150" aria-hidden="true" focusable="false">
+            <g fill="none" stroke="#131a21" stroke-width="1.4">
+              <rect x="40" y="30" width="120" height="100"/>
+              <rect x="200" y="30" width="120" height="100"/>
+              <path d="M56 54 H144 M56 70 H144 M56 86 H120 M216 54 H304 M216 70 H290 M216 86 H304 M216 102 H260"/>
+              <path d="M0 140 H360" stroke-width="3"/>
+            </g>
+            <circle cx="290" cy="70" r="12" fill="none" stroke="#9b2c1f" stroke-width="1.2"/>
+          </svg>
+          <p class="meta">Archives · <time datetime="2026-03-21">21 Mar 2026</time></p>
+          <h3><a href="#related">What the 1851 census left out</a></h3>
+          <p class="sum">Lodgers, barge families and the women entered as “nil”. Reading the gaps in a famous record.</p>
+        </li>
+      </ul>
+    </section>
+
+    <section id="membership" class="membership" aria-labelledby="mem-h">
+      <div>
+        <h2 id="mem-h">Keep Lowfield’s history in print.</h2>
+        <p>The Record is written, drawn and posted by eleven volunteers and paid for entirely by members. Your subscription funds the next issue, the archive scanning and the free walks every spring.</p>
+        <a class="join" href="mailto:members@lowfieldrecord.example?subject=Membership">Join the Record for $38 a year</a>
+        <p class="fine">Cancel any time. Concession rate of $20 for students and over-65s.</p>
+      </div>
+      <ul class="benefits" aria-label="What membership includes">
+        <li><span>Four printed issues, sewn, on uncoated stock</span><span>Quarterly</span></li>
+        <li><span>Fold-out maps with every feature walk</span><span>Included</span></li>
+        <li><span>Full digital archive back to 1974</span><span>Included</span></li>
+        <li><span>Members’ evening at the Corn Exchange</span><span>Each March</span></li>
+        <li><span>A vote at the annual meeting</span><span>One per member</span></li>
+      </ul>
+    </section>
+  </main>
+
+  <footer>
+    <p id="about-author">Maren Holt writes on Lowfield’s streets and waterways. Tobias Wren draws for the Record.</p>
+    <p>© 2026 The Lowfield Record Society</p>
+  </footer>
+</div>
+</body>
+</html>

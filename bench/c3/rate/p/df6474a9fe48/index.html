@@ -1,0 +1,319 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Subscribe — Ink &amp; Rule, an independent print quarterly</title>
+<meta name="description" content="Subscription options for Ink & Rule, an independent print magazine. Three plans, one subscribe button.">
+<style>
+  @font-face {
+    font-family: "JetBrains Mono";
+    src: local("JetBrains Mono"), local("JetBrainsMono-Regular");
+    font-weight: 400;
+  }
+  @font-face {
+    font-family: "JetBrains Mono";
+    src: local("JetBrains Mono Bold"), local("JetBrainsMono-Bold");
+    font-weight: 700;
+  }
+  :root {
+    --ink: #121212;
+    --sun: #f4b223;
+    --mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, "Liberation Mono", monospace;
+    --s1: 14px; --s2: 18px; --s3: 22px; --s4: 37px; --s5: 44px;
+    --rule: 2px solid var(--ink);
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    background: var(--sun);
+    color: var(--ink);
+    font: 400 15px/1.6 var(--mono);
+    overflow-wrap: break-word;
+  }
+  a { color: inherit; }
+  :focus-visible { outline: 3px solid var(--ink); outline-offset: 3px; }
+  .skip {
+    position: absolute; left: var(--s1); top: -80px;
+    background: var(--ink); color: var(--sun); padding: var(--s1); z-index: 10;
+  }
+  .skip:focus { top: var(--s1); }
+  .wrap { max-width: 1320px; margin: 0 auto; padding: 0 var(--s5); }
+
+  
+  header { border-bottom: var(--rule); }
+  .bar {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: var(--s3); padding-block: var(--s2); flex-wrap: wrap;
+  }
+  .mark { font-size: 20px; font-weight: 700; text-decoration: none; letter-spacing: -0.02em; }
+  nav ul { list-style: none; margin: 0; padding: 0; display: flex; gap: var(--s3); flex-wrap: wrap; }
+  nav a { text-decoration: none; font-size: 15px; text-transform: uppercase; letter-spacing: 0.06em; padding-block: 4px; border-bottom: 2px solid transparent; }
+  nav a:hover, nav a[aria-current="page"] { border-bottom-color: var(--ink); }
+
+  
+  .hero { padding-block: var(--s5) var(--s4); border-bottom: var(--rule); }
+  .kicker { font-size: 15px; text-transform: uppercase; letter-spacing: 0.08em; margin: 0 0 var(--s2); }
+  h1 {
+    font-size: clamp(56px, 12.4vw, 178.6px);
+    line-height: 0.88; letter-spacing: -0.06em; font-weight: 700;
+    margin: 0 0 var(--s4);
+  }
+  .lede { font-size: clamp(18px, 1.6vw, 22px); max-width: 44ch; margin: 0; line-height: 1.5; }
+
+  
+  .plans { padding-block: var(--s5); }
+  .plans-head { display: flex; justify-content: space-between; align-items: baseline; gap: var(--s3); flex-wrap: wrap; margin-bottom: var(--s4); }
+  h2 { font-size: clamp(30px, 4vw, 44px); line-height: 1.05; letter-spacing: -0.03em; margin: 0; }
+  .plans-head p { margin: 0; max-width: 40ch; }
+  fieldset { border: 0; margin: 0; padding: 0; min-width: 0; }
+  legend { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border: var(--rule); }
+  .card { position: relative; display: flex; flex-direction: column; min-width: 0; padding: var(--s4) var(--s3); cursor: pointer; border-right: var(--rule); transition: background .15s, color .15s; }
+  .card:last-child { border-right: 0; }
+  .card input { position: absolute; opacity: 0; inset: 0; width: 100%; height: 100%; margin: 0; cursor: pointer; }
+  .card label { cursor: pointer; }
+  .card:has(input:checked) { background: var(--ink); color: var(--sun); }
+  .card:has(input:focus-visible) { outline: 3px solid var(--ink); outline-offset: 4px; }
+  .card-top { display: flex; justify-content: space-between; align-items: center; gap: var(--s1); margin-bottom: var(--s3); }
+  .card h3 { font-size: 22px; margin: 0; letter-spacing: -0.01em; }
+  .tick { width: 22px; height: 22px; border: 2px solid currentColor; flex: none; display: grid; place-items: center; }
+  .card:has(input:checked) .tick::after { content: ""; width: 10px; height: 10px; background: currentColor; }
+  .flag { font-size: 13px; text-transform: uppercase; letter-spacing: 0.08em; border: 2px solid currentColor; padding: 2px 8px; align-self: flex-start; margin-bottom: var(--s2); }
+  .price { font-size: 72px; font-weight: 700; line-height: 1; letter-spacing: -0.05em; margin: 0; }
+  .price small { font-size: 15px; letter-spacing: 0; font-weight: 400; }
+  .per { margin: var(--s1) 0 var(--s3); }
+  .card ul { list-style: none; margin: 0; padding: 0; border-top: 2px solid currentColor; }
+  .card li { padding: 10px 0; border-bottom: 1px solid currentColor; display: flex; gap: 10px; }
+  .card li::before { content: "+"; font-weight: 700; flex: none; }
+  .card li.no { text-decoration: line-through; text-decoration-thickness: 1px; }
+  .card li.no::before { content: "–"; }
+
+  
+  .compare { padding-block: var(--s5); border-top: var(--rule); }
+  .table-wrap { margin-top: var(--s4); max-width: 100%; overflow: hidden; }
+  table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+  caption { text-align: left; caption-side: top; padding-bottom: var(--s1); }
+  th, td { text-align: left; padding: var(--s1) var(--s2) var(--s1) 0; border-bottom: 1px solid var(--ink); vertical-align: top; }
+  thead th { border-bottom: var(--rule); text-transform: uppercase; letter-spacing: 0.06em; font-size: 13px; }
+  tbody th { font-weight: 400; }
+  th:first-child { width: 40%; }
+
+  
+  .subscribe { background: var(--ink); color: var(--sun); padding-block: var(--s5); }
+  .sub-grid { display: grid; grid-template-columns: 1.3fr 1fr; gap: var(--s5); align-items: end; }
+  .summary { font-size: 20px; margin: var(--s2) 0 0; }
+  .summary strong { border-bottom: 2px solid var(--sun); }
+  .cta {
+    display: block; width: 100%; font: 700 22px/1 var(--mono); letter-spacing: 0.02em;
+    background: var(--sun); color: var(--ink); border: 2px solid var(--sun);
+    padding: var(--s3) var(--s4); cursor: pointer; text-transform: uppercase;
+  }
+  .cta:hover { background: var(--ink); color: var(--sun); }
+  .cta:focus-visible { outline-color: var(--sun); }
+  .fine { font-size: 13px; margin: var(--s1) 0 0; }
+  .status { min-height: 1.6em; margin: var(--s2) 0 0; font-size: 15px; }
+
+  
+  .faq { padding-block: var(--s5); }
+  .faq dl { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--s4); margin: var(--s4) 0 0; }
+  .faq dt { font-weight: 700; font-size: 20px; margin-bottom: var(--s1); line-height: 1.3; }
+  .faq dd { margin: 0; }
+
+  footer { border-top: var(--rule); padding-block: var(--s3); font-size: 13px; }
+  footer .wrap { display: flex; justify-content: space-between; gap: var(--s2); flex-wrap: wrap; }
+
+  @media (max-width: 960px) {
+    .grid { grid-template-columns: minmax(0, 1fr); }
+    .card { border-right: 0; border-bottom: var(--rule); }
+    .card:last-child { border-bottom: 0; }
+    .sub-grid, .faq dl { grid-template-columns: minmax(0, 1fr); }
+  }
+  @media (max-width: 560px) {
+    .wrap { padding: 0 var(--s2); }
+    .price { font-size: 56px; }
+    nav ul { gap: var(--s1); }
+    nav a { font-size: 13px; letter-spacing: 0.04em; }
+    th, td { padding-right: 8px; font-size: 13px; }
+    thead th { font-size: 11px; letter-spacing: 0.02em; }
+    th:first-child { width: 34%; }
+    .cta { padding: var(--s3) var(--s2); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    * { transition: none !important; animation: none !important; }
+  }
+</style>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<header>
+  <div class="wrap bar">
+    <a class="mark" href="#top">Ink&nbsp;&amp;&nbsp;Rule</a>
+    <nav aria-label="Primary">
+      <ul>
+        <li><a href="#plans" aria-current="page">Plans</a></li>
+        <li><a href="#compare">Compare</a></li>
+        <li><a href="#subscribe">Subscribe</a></li>
+        <li><a href="#faq">FAQ</a></li>
+      </ul>
+    </nav>
+  </div>
+</header>
+
+<main id="main">
+  <section class="hero" id="top" aria-labelledby="title">
+    <div class="wrap">
+      <p class="kicker">Independent print quarterly · Issue 23 ships March</p>
+      <h1 id="title">Paper,<br>posted.</h1>
+      <p class="lede">Four issues a year of long reads, essays and photography, printed on uncoated stock and sent to your door. Pick a plan below — every one funds writers, not advertisers.</p>
+    </div>
+  </section>
+
+  <form id="sub-form" novalidate>
+    <section class="plans" id="plans" aria-labelledby="plans-title">
+      <div class="wrap">
+        <div class="plans-head">
+          <h2 id="plans-title">Three ways to read</h2>
+          <p>Choose one. Prices include shipping within the country; international adds $12 a year.</p>
+        </div>
+        <fieldset>
+          <legend>Choose a subscription plan</legend>
+          <div class="grid">
+            <div class="card">
+              <input type="radio" id="p-reader" name="plan" value="Reader" data-price="$48 / year" aria-describedby="d-reader">
+              <div class="card-top"><h3><label for="p-reader">Reader</label></h3><span class="tick" aria-hidden="true"></span></div>
+              <p class="price" id="d-reader">$48<small> /yr</small></p>
+              <p class="per">Four print issues. That’s it.</p>
+              <ul>
+                <li>4 print issues a year</li>
+                <li>Free domestic shipping</li>
+                <li class="no"><span>Digital archive <span class="sr">(not included)</span></span></li>
+                <li class="no"><span>Members’ edition extras <span class="sr">(not included)</span></span></li>
+              </ul>
+            </div>
+
+            <div class="card">
+              <input type="radio" id="p-collector" name="plan" value="Collector" data-price="$72 / year" aria-describedby="d-collector" checked>
+              <div class="card-top"><h3><label for="p-collector">Collector</label></h3><span class="tick" aria-hidden="true"></span></div>
+              <span class="flag">Most chosen</span>
+              <p class="price" id="d-collector">$72<small> /yr</small></p>
+              <p class="per">Print plus the full back catalogue.</p>
+              <ul>
+                <li>4 print issues a year</li>
+                <li>Free domestic shipping</li>
+                <li>Digital archive, issues 1–22</li>
+                <li class="no"><span>Members’ edition extras <span class="sr">(not included)</span></span></li>
+              </ul>
+            </div>
+
+            <div class="card">
+              <input type="radio" id="p-patron" name="plan" value="Patron" data-price="$140 / year" aria-describedby="d-patron">
+              <div class="card-top"><h3><label for="p-patron">Patron</label></h3><span class="tick" aria-hidden="true"></span></div>
+              <p class="price" id="d-patron">$140<small> /yr</small></p>
+              <p class="per">Everything, and you keep us printing.</p>
+              <ul>
+                <li>4 print issues a year</li>
+                <li>Free worldwide shipping</li>
+                <li>Digital archive, issues 1–22</li>
+                <li>Numbered members’ edition + annual risograph print</li>
+              </ul>
+            </div>
+          </div>
+        </fieldset>
+      </div>
+    </section>
+
+    <section class="compare" id="compare" aria-labelledby="compare-title">
+      <div class="wrap">
+        <h2 id="compare-title">The differences, plainly</h2>
+        <div class="table-wrap">
+          <table>
+            <caption class="kicker">What each plan includes</caption>
+            <thead>
+              <tr><th scope="col">Feature</th><th scope="col">Reader</th><th scope="col">Collector</th><th scope="col">Patron</th></tr>
+            </thead>
+            <tbody>
+              <tr><th scope="row">Print issues per year</th><td>4</td><td>4</td><td>4</td></tr>
+              <tr><th scope="row">Shipping</th><td>Domestic</td><td>Domestic</td><td>Worldwide</td></tr>
+              <tr><th scope="row">Digital archive</th><td>No</td><td>Yes</td><td>Yes</td></tr>
+              <tr><th scope="row">Numbered members’ edition</th><td>No</td><td>No</td><td>Yes</td></tr>
+              <tr><th scope="row">Annual risograph print</th><td>No</td><td>No</td><td>Yes</td></tr>
+              <tr><th scope="row">Price per issue</th><td>$12</td><td>$18</td><td>$35</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section class="subscribe" id="subscribe" aria-labelledby="sub-title">
+      <div class="wrap sub-grid">
+        <div>
+          <h2 id="sub-title">Start with issue 23</h2>
+          <p class="summary" aria-live="polite">Selected: <strong id="sel-name">Collector</strong> — <span id="sel-price">$72 / year</span></p>
+        </div>
+        <div>
+          <button type="submit" class="cta">Subscribe</button>
+          <p class="fine">Cancel any time before your renewal date. No issue skipped, no fees.</p>
+          <p class="status" id="status" role="status"></p>
+        </div>
+      </div>
+    </section>
+  </form>
+
+  <section class="faq" id="faq" aria-labelledby="faq-title">
+    <div class="wrap">
+      <h2 id="faq-title">Questions</h2>
+      <dl>
+        <div>
+          <dt>When does my first issue arrive?</dt>
+          <dd>Subscriptions started before the 1st of a print month begin with that issue. Otherwise you get the next one.</dd>
+        </div>
+        <div>
+          <dt>Can I switch plans later?</dt>
+          <dd>Yes. Changes take effect at renewal, and we credit any difference to your account.</dd>
+        </div>
+        <div>
+          <dt>Is it a good gift?</dt>
+          <dd>Every plan can be sent to another address. We include a printed card with the first issue.</dd>
+        </div>
+      </dl>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <span>Ink &amp; Rule — printed and bound independently.</span>
+    <a href="#top">Back to top ↑</a>
+  </div>
+</footer>
+
+<style>
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap; }
+</style>
+<script>
+  (function () {
+    var form = document.getElementById('sub-form');
+    var name = document.getElementById('sel-name');
+    var price = document.getElementById('sel-price');
+    var status = document.getElementById('status');
+    form.addEventListener('change', function (e) {
+      if (e.target.name === 'plan') {
+        name.textContent = e.target.value;
+        price.textContent = e.target.dataset.price;
+        status.textContent = '';
+      }
+    });
+    form.addEventListener('submit', function (e) {
+      e.preventDefault();
+      var chosen = form.querySelector('input[name="plan"]:checked');
+      status.textContent = chosen
+        ? 'Thanks — the ' + chosen.value + ' plan is reserved. Checkout opens with issue 23.'
+        : 'Please choose a plan first.';
+    });
+  })();
+</script>
+</body>
+</html>

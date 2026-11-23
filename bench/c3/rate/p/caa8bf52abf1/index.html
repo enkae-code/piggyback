@@ -1,0 +1,248 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mina Okafor — Independent Accessibility Researcher</title>
+<meta name="description" content="Mina Okafor is an independent accessibility researcher. Usability studies with disabled participants, audits, and research-led remediation for product teams.">
+<style>
+  :root {
+    --bg: #121110;
+    --band: #273f2b;
+    --ink: #ece6da;
+    --ink-band: #e6eecb;
+    --muted: #a8a193;
+    --rule: #3a3733;
+    --serif: "EB Garamond", Garamond, "Apple Garamond", "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+    --mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, "Liberation Mono", monospace;
+    --s1: 18px; --s2: 22px; --s3: 38px; --s4: 44px; --s5: 63px; --s6: 115px;
+    --container: 1320px;
+  }
+  *, *::before, *::after { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font-family: var(--serif); font-size: 21px; line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+  }
+  a { color: inherit; }
+  :focus-visible { outline: 2px solid var(--ink-band); outline-offset: 4px; }
+  .wrap { width: 100%; max-width: var(--container); margin: 0 auto; padding: 0 var(--s2); }
+  .mono { font-family: var(--mono); font-size: 14px; letter-spacing: .08em; text-transform: uppercase; }
+  .skip { position: absolute; left: -9999px; top: 0; background: var(--ink); color: var(--bg); padding: 10px 16px; z-index: 10; }
+  .skip:focus { left: var(--s1); top: var(--s1); }
+
+  
+  header.site { border-bottom: 1px solid var(--rule); }
+  header.site .wrap { display: flex; align-items: center; justify-content: space-between; gap: var(--s2); padding-top: var(--s2); padding-bottom: var(--s2); flex-wrap: wrap; }
+  .brand { font-size: 24px; text-decoration: none; letter-spacing: .01em; }
+  nav ul { list-style: none; margin: 0; padding: 0; display: flex; gap: var(--s3); flex-wrap: wrap; }
+  nav a { text-decoration: none; color: var(--muted); }
+  nav a:hover, nav a:focus-visible { color: var(--ink); text-decoration: underline; text-underline-offset: 6px; }
+
+  
+  .hero { padding: var(--s5) 0 var(--s6); }
+  .hero .eyebrow { color: var(--muted); margin: 0 0 var(--s3); }
+  .hero h1 {
+    font-weight: 400; font-size: clamp(64px, 19vw, 274.8px); line-height: .86; letter-spacing: -.035em;
+    margin: 0 0 var(--s4);
+  }
+  .hero h1 span { display: block; }
+  .hero h1 em { font-style: italic; color: var(--ink-band); }
+  .hero-grid { display: grid; grid-template-columns: 1fr; gap: var(--s4); align-items: end; }
+  @media (min-width: 900px) { .hero-grid { grid-template-columns: 7fr 5fr; gap: var(--s5); } }
+  .lede { font-size: clamp(24px, 2.6vw, 50px); line-height: 1.2; margin: 0; max-width: 22ch; }
+  .hero-side p { margin: 0 0 var(--s3); color: var(--muted); max-width: 46ch; }
+
+  .btn {
+    display: inline-flex; align-items: center; gap: 12px;
+    font-family: var(--mono); font-size: 15px; letter-spacing: .06em; text-transform: uppercase;
+    background: var(--ink); color: var(--bg); text-decoration: none;
+    padding: var(--s1) var(--s3); border: 1px solid var(--ink);
+    transition: background .2s, color .2s;
+  }
+  .btn:hover { background: transparent; color: var(--ink); }
+  .btn.alt { background: var(--ink-band); color: var(--band); border-color: var(--ink-band); }
+  .btn.alt:hover { background: transparent; color: var(--ink-band); }
+  @media (prefers-reduced-motion: reduce) { .btn { transition: none; } }
+
+  
+  section { scroll-margin-top: var(--s2); }
+  .intro { border-top: 1px solid var(--rule); padding: var(--s6) 0; }
+  .section-head { display: grid; gap: var(--s2); margin-bottom: var(--s5); }
+  @media (min-width: 900px) { .section-head { grid-template-columns: 4fr 8fr; gap: var(--s5); } }
+  .section-head .mono { color: var(--muted); margin: 0; padding-top: 14px; }
+  h2 { font-weight: 400; font-size: clamp(44px, 5.6vw, 80.6px); line-height: 1; letter-spacing: -.02em; margin: 0; }
+  .intro-body { display: grid; gap: var(--s4); }
+  @media (min-width: 900px) { .intro-body { grid-template-columns: 4fr 4fr 4fr; gap: var(--s5); } .intro-body > :first-child { grid-column: 2; } }
+  .intro-body p { margin: 0; max-width: 40ch; }
+  .facts { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--rule); }
+  .facts li { display: flex; justify-content: space-between; gap: var(--s2); padding: 12px 0; border-bottom: 1px solid var(--rule); }
+  .facts .mono { color: var(--muted); font-size: 13px; }
+
+  
+  .work { padding: var(--s6) 0; border-top: 1px solid var(--rule); }
+  .cases { list-style: none; margin: 0; padding: 0; display: grid; gap: 0; }
+  .case { border-top: 1px solid var(--rule); padding: var(--s4) 0; display: grid; gap: var(--s2); }
+  .case:last-child { border-bottom: 1px solid var(--rule); }
+  @media (min-width: 900px) { .case { grid-template-columns: 1fr 3fr 8fr; gap: var(--s5); padding: var(--s5) 0; } }
+  .case .num { font-size: clamp(50px, 5.4vw, 77.8px); line-height: .9; color: var(--muted); font-style: italic; }
+  .case h3 { font-weight: 400; font-size: clamp(28px, 2.6vw, 50px); line-height: 1.05; margin: 0 0 var(--s1); letter-spacing: -.01em; }
+  .case .meta { color: var(--muted); margin: 0; }
+  .case p { margin: 0 0 var(--s2); max-width: 58ch; }
+  .case dl { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: var(--s2); margin: var(--s3) 0 0; }
+  .case dt { font-family: var(--mono); font-size: 13px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+  .case dd { margin: 6px 0 0; font-size: 24px; }
+
+  
+  .inquiry { background: var(--band); color: var(--ink-band); padding: var(--s6) 0; }
+  .inquiry h2 { font-size: clamp(56px, 9vw, 160px); line-height: .9; margin-bottom: var(--s4); }
+  .inquiry .mono { color: var(--ink-band); opacity: .85; }
+  .inquiry-grid { display: grid; gap: var(--s4); }
+  @media (min-width: 900px) { .inquiry-grid { grid-template-columns: 7fr 5fr; gap: var(--s5); align-items: end; } }
+  .inquiry p { margin: 0 0 var(--s3); max-width: 44ch; }
+  .inquiry ul { margin: 0 0 var(--s3); padding-left: 1.1em; }
+
+  footer { padding: var(--s4) 0; color: var(--muted); }
+  footer .wrap { display: flex; justify-content: space-between; gap: var(--s2); flex-wrap: wrap; }
+  footer p { margin: 0; }
+</style>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="site">
+  <div class="wrap">
+    <a class="brand" href="#top" aria-label="Mina Okafor, home">Mina Okafor</a>
+    <nav aria-label="Primary">
+      <ul>
+        <li><a href="#about">About</a></li>
+        <li><a href="#work">Case studies</a></li>
+        <li><a href="#inquire">Inquire</a></li>
+      </ul>
+    </nav>
+  </div>
+</header>
+
+<main id="main">
+  <section class="hero" id="top" aria-labelledby="hero-title">
+    <div class="wrap">
+      <p class="eyebrow mono">Independent accessibility research · Est. 2016</p>
+      <h1 id="hero-title"><span>Mina</span><span><em>Okafor</em></span></h1>
+      <div class="hero-grid">
+        <p class="lede">I find out where your product shuts people out — by watching disabled people use it.</p>
+        <div class="hero-side">
+          <p>Moderated studies, expert audits and remediation roadmaps for product teams who want evidence, not checklists.</p>
+          <a class="btn" href="#inquire">Start an inquiry <span aria-hidden="true">→</span></a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="intro" id="about" aria-labelledby="about-title">
+    <div class="wrap">
+      <div class="section-head">
+        <p class="mono">01 — Introduction</p>
+        <h2 id="about-title">Research with people, not about them.</h2>
+      </div>
+      <div class="intro-body">
+        <p>For ten years I have run usability research with blind, low-vision, Deaf, motor-impaired and neurodivergent participants. I pay them properly, recruit outside the usual panels, and let their sessions set the priorities.</p>
+        <div>
+          <p style="margin-bottom: var(--s3)">My clients get findings that hold up in a design review: clips, severity ratings tied to real tasks, and a remediation plan sized for the team that will do the work.</p>
+          <ul class="facts" aria-label="At a glance">
+            <li><span class="mono">Based in</span><span>London · remote</span></li>
+            <li><span class="mono">Standards</span><span>WCAG 2.2, EN 301 549</span></li>
+            <li><span class="mono">Sessions run</span><span>1,400+</span></li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="work" id="work" aria-labelledby="work-title">
+    <div class="wrap">
+      <div class="section-head">
+        <p class="mono">02 — Selected case studies</p>
+        <h2 id="work-title">Three engagements, three kinds of evidence.</h2>
+      </div>
+      <ol class="cases">
+        <li class="case">
+          <span class="num" aria-hidden="true">i.</span>
+          <div>
+            <h3>Rebuilding a benefits claim form</h3>
+            <p class="meta mono">Public sector · 14 weeks</p>
+          </div>
+          <div>
+            <p>A national benefits service saw screen-reader users abandon its claim form at twice the average rate. I ran 24 moderated sessions across assistive technologies and traced most failures to three patterns: unannounced errors, timed sessions and a custom date picker.</p>
+            <p>The team replaced the picker with plain inputs, added error summaries and removed the timeout for saved drafts.</p>
+            <dl>
+              <div><dt>Completion, AT users</dt><dd>41% → 88%</dd></div>
+              <div><dt>Participants</dt><dd>24</dd></div>
+            </dl>
+          </div>
+        </li>
+        <li class="case">
+          <span class="num" aria-hidden="true">ii.</span>
+          <div>
+            <h3>Captions people actually trust</h3>
+            <p class="meta mono">Streaming media · 9 weeks</p>
+          </div>
+          <div>
+            <p>A video platform wanted to know why Deaf and hard-of-hearing subscribers rated its captions poorly despite passing compliance checks. Diary studies with 18 participants showed that timing drift and missing speaker labels mattered far more than accuracy scores.</p>
+            <p>I wrote a caption quality rubric the vendor team now uses for acceptance testing.</p>
+            <dl>
+              <div><dt>Caption complaints</dt><dd>−63%</dd></div>
+              <div><dt>Diary entries</dt><dd>540</dd></div>
+            </dl>
+          </div>
+        </li>
+        <li class="case">
+          <span class="num" aria-hidden="true">iii.</span>
+          <div>
+            <h3>A design system that leads with access</h3>
+            <p class="meta mono">Fintech · 6 months, part-time</p>
+          </div>
+          <div>
+            <p>A growing banking app needed its component library to stop shipping inaccessible patterns into every new feature. I audited 62 components, tested the riskiest with keyboard and switch users, and paired with engineers on fixes.</p>
+            <p>Each component now ships with documented accessible behaviour and a test that runs in CI.</p>
+            <dl>
+              <div><dt>Components fixed</dt><dd>47 of 62</dd></div>
+              <div><dt>New AT defects</dt><dd>Down 70%</dd></div>
+            </dl>
+          </div>
+        </li>
+      </ol>
+    </div>
+  </section>
+
+  <section class="inquiry" id="inquire" aria-labelledby="inquire-title">
+    <div class="wrap">
+      <p class="mono" style="margin: 0 0 var(--s3)">03 — Inquiry</p>
+      <h2 id="inquire-title">Let’s find out what’s in the way.</h2>
+      <div class="inquiry-grid">
+        <div>
+          <p>I take on four to five engagements a year. Tell me about your product, your users and your timeline, and I will reply within three working days with an honest view of whether I can help.</p>
+          <ul>
+            <li>Moderated research with disabled participants</li>
+            <li>Expert audits against WCAG 2.2</li>
+            <li>Remediation planning and team coaching</li>
+          </ul>
+        </div>
+        <div>
+          <a class="btn alt" href="mailto:hello@minaokafor.example?subject=Research%20inquiry">Email an inquiry <span aria-hidden="true">→</span></a>
+          <p class="mono" style="margin: var(--s2) 0 0; font-size: 13px;">Next availability: February 2027</p>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <p>© 2026 Mina Okafor. Independent accessibility research.</p>
+    <p><a href="#top">Back to top</a></p>
+  </div>
+</footer>
+</body>
+</html>

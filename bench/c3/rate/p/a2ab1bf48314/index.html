@@ -1,0 +1,299 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Little Plot — Urban farm in the city</title>
+<meta name="description" content="Little Plot is a small urban farm growing seasonal produce by hand. Find us at the Saturday market or order a weekly box.">
+<style>
+  :root {
+    --bg: #dce7d3;
+    --ink: #1c3023;
+    --paper: #eef4e4;
+    --line: rgba(28, 48, 35, .22);
+    --radius: 8px;
+    --container: 1160px;
+    --s1: 14px; --s2: 22px; --s3: 26px; --s4: 44px;
+    --serif: "EB Garamond", Garamond, "Garamond Premier Pro", "Cormorant Garamond", "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+  }
+  *, *::before, *::after { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--serif);
+    font-size: 21px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+  a { color: inherit; }
+  img, svg { display: block; max-width: 100%; }
+  .container { width: min(var(--container), 100% - 2 * var(--s2)); margin-inline: auto; }
+  .skip { position: absolute; left: -9999px; }
+  .skip:focus { left: var(--s1); top: var(--s1); background: var(--ink); color: var(--paper); padding: 8px 14px; border-radius: var(--radius); z-index: 10; }
+  :focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; }
+
+  
+  .site-header { border-bottom: 1px solid var(--line); }
+  .site-header .container { display: flex; align-items: center; justify-content: space-between; gap: var(--s2); padding-block: var(--s2); flex-wrap: wrap; }
+  .brand { font-size: 30px; font-weight: 600; text-decoration: none; letter-spacing: -.01em; display: flex; align-items: center; gap: 10px; }
+  .brand svg { width: 30px; height: 30px; }
+  nav ul { list-style: none; margin: 0; padding: 0; display: flex; gap: var(--s3); flex-wrap: wrap; }
+  nav a { font-size: 19px; text-decoration: none; padding-block: 4px; border-bottom: 1px solid transparent; }
+  nav a:hover { border-bottom-color: currentColor; }
+
+  
+  .btn {
+    display: inline-block; font: inherit; font-size: 21px; text-decoration: none;
+    padding: var(--s1) var(--s3); border-radius: var(--radius);
+    border: 1px solid var(--ink); transition: background-color .15s, color .15s;
+  }
+  .btn-primary { background: var(--ink); color: var(--paper); }
+  .btn-primary:hover { background: #2b4534; }
+  .btn-ghost { background: transparent; color: var(--ink); }
+  .btn-ghost:hover { background: rgba(28,48,35,.08); }
+  .on-dark .btn-primary { background: var(--paper); color: var(--ink); border-color: var(--paper); }
+  .on-dark .btn-primary:hover { background: #fff; }
+  .on-dark .btn-ghost { color: var(--paper); border-color: var(--paper); }
+  .on-dark .btn-ghost:hover { background: rgba(238,244,228,.1); }
+  @media (prefers-reduced-motion: reduce) { .btn { transition: none; } }
+
+  
+  .hero { padding-block: var(--s4) calc(var(--s4) * 1.5); }
+  .eyebrow { font-size: 19px; letter-spacing: .12em; text-transform: uppercase; margin: 0 0 var(--s1); }
+  h1 {
+    font-size: clamp(64px, 10.4vw, 150px); line-height: .92; font-weight: 500;
+    letter-spacing: -.03em; margin: 0 0 var(--s3); max-width: 10ch;
+  }
+  h1 em { font-style: italic; font-weight: 400; }
+  .hero-grid { display: grid; grid-template-columns: 1.4fr 1fr; gap: var(--s4); align-items: end; }
+  .lede { font-size: 23px; margin: 0 0 var(--s3); max-width: 34ch; }
+  .actions { display: flex; gap: var(--s1); flex-wrap: wrap; }
+  .hero-note { border-top: 1px solid var(--ink); padding-top: var(--s1); font-size: 19px; }
+  .hero-note dl { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 6px var(--s2); }
+  .hero-note dt { font-style: italic; }
+  .hero-note dd { margin: 0; }
+
+  
+  section { padding-block: calc(var(--s4) * 1.5); }
+  .section-head { display: flex; justify-content: space-between; align-items: end; gap: var(--s2); margin-bottom: var(--s4); flex-wrap: wrap; border-top: 1px solid var(--line); padding-top: var(--s3); }
+  h2 { font-size: clamp(40px, 5vw, 62px); line-height: 1; font-weight: 500; letter-spacing: -.02em; margin: 0; }
+  h3 { font-size: 30px; line-height: 1.1; font-weight: 500; margin: 0 0 8px; }
+  .section-head p { margin: 0; max-width: 40ch; }
+
+  
+  .cards { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--s2); }
+  .card { background: var(--paper); border: 1px solid var(--line); border-radius: var(--radius); padding: var(--s2); display: flex; flex-direction: column; }
+  .card .art { aspect-ratio: 4 / 3; border-radius: calc(var(--radius) - 2px); background: var(--bg); display: grid; place-items: center; margin-bottom: var(--s2); }
+  .card .art svg { width: 56%; height: auto; }
+  .card p { margin: 0 0 var(--s1); font-size: 19px; }
+  .tag { margin-top: auto; font-size: 19px; font-style: italic; border-top: 1px solid var(--line); padding-top: 10px; }
+
+  
+  .approach-list { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--s4); counter-reset: step; }
+  .approach-list li { counter-increment: step; border-top: 1px solid var(--ink); padding-top: var(--s2); }
+  .approach-list li::before { content: "0" counter(step); display: block; font-size: 19px; font-style: italic; margin-bottom: var(--s1); }
+  .approach-list p { margin: 0; }
+
+  
+  .market { background: var(--ink); color: var(--paper); }
+  .market .section-head { border-top-color: rgba(238,244,228,.25); }
+  .market-grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s4); }
+  .market dl { margin: 0; }
+  .market dl div { display: grid; grid-template-columns: 9ch 1fr; gap: var(--s2); padding-block: var(--s1); border-bottom: 1px solid rgba(238,244,228,.25); }
+  .market dt { font-style: italic; }
+  .market dd { margin: 0; }
+  .market address { font-style: normal; }
+
+  
+  .cta-panel { background: var(--paper); border: 1px solid var(--line); border-radius: var(--radius); padding: var(--s4); display: grid; grid-template-columns: 1.3fr 1fr; gap: var(--s4); align-items: center; }
+  .cta-panel h2 { margin-bottom: var(--s1); }
+  .cta-panel p { margin: 0; }
+  .options { display: grid; gap: var(--s1); }
+  .option { border: 1px solid var(--line); border-radius: var(--radius); padding: var(--s1) var(--s2); background: var(--bg); }
+  .option strong { font-weight: 600; font-size: 23px; display: block; }
+  .option span { font-size: 19px; }
+
+  footer { border-top: 1px solid var(--line); padding-block: var(--s3); font-size: 19px; }
+  footer .container { display: flex; justify-content: space-between; gap: var(--s2); flex-wrap: wrap; }
+  footer p { margin: 0; }
+
+  @media (max-width: 1000px) {
+    .cards { grid-template-columns: repeat(2, 1fr); }
+    .hero-grid, .market-grid, .cta-panel { grid-template-columns: 1fr; }
+    .approach-list { grid-template-columns: 1fr; gap: var(--s3); }
+  }
+  @media (max-width: 560px) {
+    body { font-size: 19px; }
+    .cards { grid-template-columns: 1fr; }
+    .cta-panel { padding: var(--s3); }
+    nav ul { gap: var(--s1); }
+    .site-header .container { flex-direction: column; align-items: flex-start; }
+  }
+</style>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="site-header">
+  <div class="container">
+    <a class="brand" href="#top" aria-label="Little Plot home">
+      <svg viewBox="0 0 32 32" aria-hidden="true"><path d="M16 29V14" stroke="currentColor" stroke-width="2" fill="none"/><path d="M16 15c0-6 4-10 11-10 0 7-4 11-11 10Z M16 19c0-5-3-8-10-8 0 6 4 9 10 8Z" fill="currentColor"/></svg>
+      Little Plot
+    </a>
+    <nav aria-label="Primary">
+      <ul>
+        <li><a href="#produce">Produce</a></li>
+        <li><a href="#approach">How we grow</a></li>
+        <li><a href="#market">Market</a></li>
+        <li><a href="#visit">Visit &amp; order</a></li>
+      </ul>
+    </nav>
+  </div>
+</header>
+
+<main id="main">
+  <section class="hero" id="top" aria-labelledby="hero-title">
+    <div class="container">
+      <p class="eyebrow">Urban farm · Half an acre · Est. 2019</p>
+      <h1 id="hero-title">Grown <em>on the block</em></h1>
+      <div class="hero-grid">
+        <div>
+          <p class="lede">Little Plot is a half-acre farm tucked between rowhouses, growing vegetables, herbs and flowers by hand for the neighbourhood — picked the morning you buy them.</p>
+          <div class="actions">
+            <a class="btn btn-primary" href="#visit">Order a weekly box</a>
+            <a class="btn btn-ghost" href="#market">Find us at market</a>
+          </div>
+        </div>
+        <aside class="hero-note" aria-label="This week at a glance">
+          <dl>
+            <dt>Market</dt><dd>Saturdays, 8am–1pm</dd>
+            <dt>Farm stand</dt><dd>Wednesdays, 4–7pm</dd>
+            <dt>Now picking</dt><dd>Kale, leeks, squash, radicchio</dd>
+          </dl>
+        </aside>
+      </div>
+    </div>
+  </section>
+
+  <section id="produce" aria-labelledby="produce-title">
+    <div class="container">
+      <div class="section-head">
+        <h2 id="produce-title">In season now</h2>
+        <p>Late autumn on the plot: hardy greens, storage roots and the last of the squash. The list changes week to week.</p>
+      </div>
+      <ul class="cards">
+        <li class="card">
+          <div class="art" aria-hidden="true">
+            <svg viewBox="0 0 64 64"><path d="M32 58V30" stroke="#1c3023" stroke-width="3" fill="none"/><path d="M32 34C18 30 12 18 16 6c10 4 16 14 16 28Zm0 0c14-4 20-16 16-28-10 4-16 14-16 28Z" fill="#1c3023"/></svg>
+          </div>
+          <h3>Lacinato kale</h3>
+          <p>Sweeter after the first frost. Good raw in salads or slow-braised.</p>
+          <span class="tag">$4 / bunch</span>
+        </li>
+        <li class="card">
+          <div class="art" aria-hidden="true">
+            <svg viewBox="0 0 64 64"><ellipse cx="32" cy="38" rx="22" ry="18" fill="#1c3023"/><path d="M32 20V8m0 0c4 0 8 2 8 6" stroke="#1c3023" stroke-width="3" fill="none"/><path d="M22 24v28M42 24v28" stroke="#dce7d3" stroke-width="2"/></svg>
+          </div>
+          <h3>Delicata squash</h3>
+          <p>Thin, edible skin. Halve, scoop and roast — no peeling required.</p>
+          <span class="tag">$3 each</span>
+        </li>
+        <li class="card">
+          <div class="art" aria-hidden="true">
+            <svg viewBox="0 0 64 64"><rect x="26" y="26" width="12" height="32" rx="4" fill="#1c3023"/><path d="M30 28C26 16 18 10 12 8m22 20c2-12 10-20 18-22M32 28V6" stroke="#1c3023" stroke-width="3" fill="none"/></svg>
+          </div>
+          <h3>Winter leeks</h3>
+          <p>Hilled for long white stems. Mild, buttery and perfect for soup.</p>
+          <span class="tag">$5 / bundle of 3</span>
+        </li>
+        <li class="card">
+          <div class="art" aria-hidden="true">
+            <svg viewBox="0 0 64 64"><circle cx="32" cy="34" r="20" fill="#1c3023"/><path d="M32 14v40M14 34h36M19 21l26 26M45 21 19 47" stroke="#dce7d3" stroke-width="1.5"/></svg>
+          </div>
+          <h3>Radicchio</h3>
+          <p>Bitter, crisp and beautiful. Grill it or toss with citrus and honey.</p>
+          <span class="tag">$4 / head</span>
+        </li>
+      </ul>
+    </div>
+  </section>
+
+  <section id="approach" aria-labelledby="approach-title">
+    <div class="container">
+      <div class="section-head">
+        <h2 id="approach-title">How we grow</h2>
+        <p>Small beds, careful hands, and soil we’ve built from scratch on a former parking lot.</p>
+      </div>
+      <ol class="approach-list">
+        <li>
+          <h3>Soil first</h3>
+          <p>We compost the neighbourhood’s food scraps and leaf litter into our beds. No synthetic fertilisers, no pesticides — ever.</p>
+        </li>
+        <li>
+          <h3>No-till beds</h3>
+          <p>Permanent raised beds keep the soil life intact, hold water through dry summers and lock carbon in the ground.</p>
+        </li>
+        <li>
+          <h3>Picked to order</h3>
+          <p>We harvest the morning of each market and box day, so food travels a few blocks — not a few hundred miles.</p>
+        </li>
+      </ol>
+    </div>
+  </section>
+
+  <section class="market on-dark" id="market" aria-labelledby="market-title">
+    <div class="container">
+      <div class="section-head">
+        <h2 id="market-title">Weekly market</h2>
+        <p>Rain or shine, all year round. Bring a bag — we’re a plastic-free stall.</p>
+      </div>
+      <div class="market-grid">
+        <dl>
+          <div><dt>When</dt><dd>Every Saturday, 8am–1pm</dd></div>
+          <div><dt>Where</dt><dd><address>Elm Street Square, north corner<br>by the clock tower</address></dd></div>
+          <div><dt>Farm stand</dt><dd>Wednesdays 4–7pm at the farm gate, 112 Mercer Lane</dd></div>
+          <div><dt>Payment</dt><dd>Card, cash and SNAP/EBT accepted</dd></div>
+        </dl>
+        <div>
+          <h3>Pre-order for pickup</h3>
+          <p>Reserve your bunches by Thursday night and we’ll have them bagged with your name on it, so the good stuff doesn’t sell out before you arrive.</p>
+          <div class="actions">
+            <a class="btn btn-primary" href="#visit">Reserve for Saturday</a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="visit" aria-labelledby="visit-title">
+    <div class="container">
+      <div class="cta-panel">
+        <div>
+          <h2 id="visit-title">Visit the plot, or let it come to you</h2>
+          <p>Join our weekly box for a share of whatever’s best that week, or come walk the beds on an open farm Sunday.</p>
+          <div class="actions" style="margin-top: var(--s3)">
+            <a class="btn btn-primary" href="mailto:hello@littleplot.farm?subject=Weekly%20box">Order a weekly box</a>
+            <a class="btn btn-ghost" href="mailto:hello@littleplot.farm?subject=Farm%20visit">Book a visit</a>
+          </div>
+        </div>
+        <div class="options">
+          <div class="option"><strong>Weekly box — $28</strong><span>6–8 items, pickup Wednesday or Saturday</span></div>
+          <div class="option"><strong>Half box — $16</strong><span>3–4 items, ideal for one or two</span></div>
+          <div class="option"><strong>Open farm Sundays</strong><span>First Sunday of the month, 10am–noon, free</span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="container">
+    <p>© 2026 Little Plot Urban Farm · 112 Mercer Lane</p>
+    <p><a href="mailto:hello@littleplot.farm">hello@littleplot.farm</a></p>
+  </div>
+</footer>
+</body>
+</html>

@@ -1,0 +1,210 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Iris Calder — Independent Book Designer</title>
+<meta name="description" content="Iris Calder designs covers, interiors and type for independent publishers and authors.">
+<style>
+  :root{
+    --bg:#141210;
+    --ink:#ece5d8;
+    --muted:#a69d8e;
+    --rule:#3a3631;
+    --serif:"EB Garamond","Cormorant Garamond",Garamond,"Adobe Garamond Pro","Iowan Old Style","Palatino Linotype",Palatino,"Book Antiqua",Georgia,serif;
+    --mono:"JetBrains Mono","IBM Plex Mono","SFMono-Regular",Menlo,Consolas,"DejaVu Sans Mono","Liberation Mono",monospace;
+    --pad:clamp(20px,4.2vw,60px);
+  }
+  *{box-sizing:border-box}
+  html{-webkit-text-size-adjust:100%}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--serif);line-height:1.4;-webkit-font-smoothing:antialiased}
+  a{color:inherit}
+  .skip{position:absolute;left:-9999px;top:0;background:var(--ink);color:var(--bg);padding:10px 14px;font-family:var(--mono);font-size:13px;z-index:10}
+  .skip:focus{left:var(--pad)}
+  :focus-visible{outline:2px solid var(--ink);outline-offset:4px}
+  .wrap{padding:0 var(--pad);max-width:1600px;margin:0 auto}
+  .mono{font-family:var(--mono);font-size:13px;letter-spacing:.01em}
+
+  
+  .site-header{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;padding-top:26px;gap:16px}
+  .brand{font-size:24px;color:var(--muted);text-decoration:none;letter-spacing:-.01em}
+  .brand:hover{color:var(--ink)}
+  .nav ul{display:flex;gap:30px;list-style:none;margin:0;padding:0}
+  .nav a{text-decoration:none;font-family:var(--mono);font-size:14px;font-weight:600}
+  .nav a:hover{text-decoration:underline;text-underline-offset:4px}
+  .tag{justify-self:end;color:var(--muted);margin:0}
+
+  
+  .hero h1{font-weight:400;font-size:clamp(64px,16.3vw,240px);line-height:.92;letter-spacing:-.035em;margin:clamp(40px,5vw,64px) 0 0;white-space:nowrap}
+  .intro{display:flex;justify-content:space-between;align-items:flex-end;gap:40px;margin-top:clamp(36px,5vw,62px);padding-bottom:clamp(40px,4.5vw,64px);border-bottom:1px solid var(--rule)}
+  .intro p{margin:0;max-width:820px;font-size:clamp(28px,3.4vw,49px);line-height:1.12;letter-spacing:-.015em}
+  .intro p span{color:var(--muted)}
+  .btn{display:inline-block;flex:none;background:var(--ink);color:var(--bg);text-decoration:none;font-family:var(--mono);font-size:13px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;padding:16px 24px;border:1px solid var(--ink);transition:background .2s,color .2s}
+  .btn:hover{background:transparent;color:var(--ink)}
+
+  
+  .work-head{display:flex;justify-content:space-between;color:var(--muted);padding:24px 0 0;margin:0}
+  .work-head h2{font:inherit;margin:0}
+  .projects{list-style:none;margin:0;padding:0}
+  .project{display:grid;grid-template-columns:112px minmax(0,1fr) minmax(0,530px);gap:0 clamp(24px,4vw,56px);padding:clamp(40px,3.5vw,48px) 0 clamp(56px,6vw,88px);border-bottom:1px solid var(--rule)}
+  .project:last-child{border-bottom:0}
+  .num{color:var(--muted);padding-top:14px}
+  .project h3{font-weight:400;font-size:clamp(44px,5vw,72px);line-height:1.04;letter-spacing:-.025em;margin:0 0 30px}
+  .project p{font-size:clamp(18px,1.5vw,21px);line-height:1.5;margin:0 0 24px;max-width:34em}
+  .meta{display:grid;grid-template-columns:auto 1fr;gap:8px 24px;margin:32px 0 0;color:var(--muted)}
+  .meta dt{color:var(--muted)}
+  .meta dd{margin:0;color:var(--ink)}
+
+  
+  .cover{margin:0;aspect-ratio:530/640;padding:clamp(20px,2vw,28px);display:flex;flex-direction:column;justify-content:space-between;position:relative;overflow:hidden}
+  .cover .mono{font-size:14px}
+  .cover .big{font-family:var(--serif);font-weight:600;font-size:clamp(52px,5.6vw,80px);line-height:.88;letter-spacing:-.035em;margin:0}
+  .cover figcaption{position:absolute;left:-9999px}
+  .c1{background:#253a2a;color:#dfe8c9}
+  .c1 .big{margin-top:44px}
+  .c1 .rings{position:absolute;right:-60px;bottom:-60px;width:320px;height:320px;border-radius:50%;border:1px solid rgba(223,232,201,.35);box-shadow:0 0 0 30px #253a2a,0 0 0 31px rgba(223,232,201,.3),0 0 0 60px #253a2a,0 0 0 61px rgba(223,232,201,.22)}
+  .c2{background:#d9cdb7;color:#2a1d14}
+  .c2 .big{font-style:italic;font-weight:400;font-size:clamp(60px,6.8vw,98px);align-self:flex-end;text-align:right}
+  .c2 .bar{height:10px;background:#8b2e1c;width:44%}
+  .c3{background:#1f2b45;color:#e9dcc0}
+  .c3 .big{font-weight:400;text-transform:uppercase;letter-spacing:.06em;font-size:clamp(38px,4vw,58px);line-height:1}
+  .c3 .grid{flex:1;margin:28px 0;background-image:linear-gradient(rgba(233,220,192,.18) 1px,transparent 1px),linear-gradient(90deg,rgba(233,220,192,.18) 1px,transparent 1px);background-size:28px 28px}
+  .cover-row{display:flex;justify-content:space-between;gap:12px}
+
+  
+  .contact{border-top:1px solid var(--rule);padding:clamp(64px,8vw,120px) 0;display:grid;grid-template-columns:112px 1fr;gap:0 clamp(24px,4vw,56px)}
+  .contact h2{font-weight:400;font-size:clamp(44px,7vw,104px);line-height:1;letter-spacing:-.03em;margin:0 0 28px}
+  .contact p{font-size:clamp(20px,1.8vw,26px);max-width:32em;margin:0 0 36px;color:var(--muted)}
+  .contact .actions{display:flex;flex-wrap:wrap;align-items:center;gap:20px 32px}
+  .contact .email{font-family:var(--mono);font-size:15px;text-underline-offset:5px}
+  .site-footer{display:flex;justify-content:space-between;flex-wrap:wrap;gap:12px;color:var(--muted);padding:24px 0 36px;border-top:1px solid var(--rule)}
+
+  @media (max-width:960px){
+    .project{grid-template-columns:56px minmax(0,1fr)}
+    .project .cover{grid-column:2;margin-top:36px;max-width:530px;width:100%}
+    .contact{grid-template-columns:56px 1fr}
+  }
+  @media (max-width:720px){
+    .site-header{grid-template-columns:1fr auto;row-gap:14px}
+    .tag{display:none}
+    .nav ul{gap:20px}
+    .hero h1{white-space:normal;font-size:clamp(64px,22vw,140px)}
+    .intro{flex-direction:column;align-items:flex-start}
+    .project,.contact{grid-template-columns:1fr}
+    .project .cover{grid-column:1}
+    .num{padding:0 0 14px}
+  }
+  @media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<div class="wrap">
+  <header class="site-header">
+    <a class="brand" href="#top" aria-label="Iris Calder, home">Iris Calder</a>
+    <nav class="nav" aria-label="Primary">
+      <ul>
+        <li><a href="#work">Work</a></li>
+        <li><a href="#about">About</a></li>
+        <li><a href="#contact">Contact</a></li>
+      </ul>
+    </nav>
+    <p class="tag mono">Independent book designer, Glasgow</p>
+  </header>
+
+  <main id="main">
+    <section class="hero" id="top" aria-labelledby="hero-title">
+      <h1 id="hero-title">Iris Calder</h1>
+      <div class="intro" id="about">
+        <p>Designs covers, interiors and type for small presses and the authors they believe in. <span>Independent since 2019, now booking spring lists.</span></p>
+        <a class="btn" href="#contact">Start a book</a>
+      </div>
+    </section>
+
+    <section id="work" aria-labelledby="work-title">
+      <div class="work-head mono">
+        <h2 id="work-title">Selected books, 2023 to 2025</h2>
+        <span>3 of 64</span>
+      </div>
+
+      <ol class="projects">
+        <li class="project">
+          <span class="num mono" aria-hidden="true">01</span>
+          <div>
+            <h3>The Patient<br>Coastline</h3>
+            <p>Cover and full interior for a collection of essays on tidal ecology. Wide margins carry field notes and tide tables, so the book reads like a walk at low water.</p>
+            <dl class="meta mono">
+              <dt>Publisher</dt><dd>Saltmarsh Editions</dd>
+              <dt>Scope</dt><dd>Cover, interior, 312 pp.</dd>
+              <dt>Year</dt><dd>2025</dd>
+            </dl>
+          </div>
+          <figure class="cover c1" aria-label="Cover study for The Patient Coastline">
+            <span class="mono">Saltmarsh · Essays</span>
+            <p class="big" aria-hidden="true">The<br>patient<br>coast&shy;line.</p>
+            <span class="rings" aria-hidden="true"></span>
+            <figcaption>Deep green cover with cream title and concentric tide-line rings.</figcaption>
+          </figure>
+        </li>
+
+        <li class="project">
+          <span class="num mono" aria-hidden="true">02</span>
+          <div>
+            <h3>Letters to<br>a Bread Oven</h3>
+            <p>A debut novel told in letters. I set it in a warm oldstyle face with hand-ruled section breaks, and kept the cover to one italic line and a strip of brick red.</p>
+            <dl class="meta mono">
+              <dt>Publisher</dt><dd>Hearth &amp; Quire</dd>
+              <dt>Scope</dt><dd>Cover, typesetting</dd>
+              <dt>Year</dt><dd>2024</dd>
+            </dl>
+          </div>
+          <figure class="cover c2" aria-label="Cover study for Letters to a Bread Oven">
+            <div class="cover-row mono"><span>A novel</span><span>H&amp;Q</span></div>
+            <p class="big" aria-hidden="true">Letters<br>to a bread<br>oven</p>
+            <span class="bar" aria-hidden="true"></span>
+            <figcaption>Parchment cover with large italic title and a brick-red bar.</figcaption>
+          </figure>
+        </li>
+
+        <li class="project">
+          <span class="num mono" aria-hidden="true">03</span>
+          <div>
+            <h3>Small Rooms,<br>Long Winters</h3>
+            <p>A series system for a poetry imprint: one grid, one typeface, and a palette that changes each season. Twelve titles so far, each recognisable from across a shop.</p>
+            <dl class="meta mono">
+              <dt>Publisher</dt><dd>Northlight Poetry</dd>
+              <dt>Scope</dt><dd>Series design, 12 titles</dd>
+              <dt>Year</dt><dd>2023–</dd>
+            </dl>
+          </div>
+          <figure class="cover c3" aria-label="Cover study for Small Rooms, Long Winters">
+            <div class="cover-row mono"><span>Northlight</span><span>No. 07</span></div>
+            <span class="grid" aria-hidden="true"></span>
+            <p class="big" aria-hidden="true">Small rooms<br>long winters</p>
+            <figcaption>Navy cover with a fine cream grid and spaced capitals.</figcaption>
+          </figure>
+        </li>
+      </ol>
+    </section>
+
+    <section class="contact" id="contact" aria-labelledby="contact-title">
+      <span class="num mono" aria-hidden="true">→</span>
+      <div>
+        <h2 id="contact-title">Have a manuscript<br>that needs a body?</h2>
+        <p>Tell me about the book, the press and the date it needs to be on shelves. I reply within two working days.</p>
+        <div class="actions">
+          <a class="btn" href="mailto:studio@iriscalder.example?subject=New%20book%20project">Start a book</a>
+          <a class="email" href="mailto:studio@iriscalder.example">studio@iriscalder.example</a>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer mono">
+    <span>© 2025 Iris Calder</span>
+    <span>Covers · Interiors · Series</span>
+  </footer>
+</div>
+</body>
+</html>

@@ -1,0 +1,484 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Maintenance overview · Northline Field Ops</title>
+<meta name="description" content="Daily maintenance overview for Northline Transit: service status, urgent alerts, route condition and issue reporting.">
+<style>
+  :root {
+    --bg: #111a18;
+    --panel: #16201e;
+    --panel-2: #1a2523;
+    --line: #26332f;
+    --line-2: #2f3d39;
+    --ink: #eef3f0;
+    --ink-2: #b9c6c1;
+    --ink-3: #8a9a95;
+    --mint: #9be3b4;
+    --mint-ink: #0d2016;
+    --teal: #8fd1c2;
+    --amber: #f2b45a;
+    --red: #f07a6e;
+    --mono: ui-monospace, "JetBrains Mono", "IBM Plex Mono", "SFMono-Regular", Menlo, Consolas, "Liberation Mono", monospace;
+    --pad: clamp(16px, 2.2vw, 24px);
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; scroll-padding-top: 64px; }
+  @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink-2);
+    font: 14px/1.7 var(--mono);
+    -webkit-font-smoothing: antialiased;
+  }
+  a { color: inherit; }
+  :focus-visible { outline: 2px solid var(--mint); outline-offset: 2px; }
+  .skip {
+    position: absolute; left: 8px; top: -60px; z-index: 20;
+    background: var(--mint); color: var(--mint-ink); padding: 8px 12px; font-weight: 700;
+  }
+  .skip:focus { top: 8px; }
+
+  
+  .top {
+    position: sticky; top: 0; z-index: 10;
+    display: flex; align-items: stretch; gap: 32px;
+    padding: 0 var(--pad);
+    min-height: 48px;
+    background: rgba(17, 26, 24, .96);
+    border-bottom: 1px solid var(--line);
+  }
+  .brand {
+    display: flex; align-items: center;
+    color: var(--ink); font-weight: 700; letter-spacing: .04em; text-transform: uppercase;
+    font-size: 13px; text-decoration: none; white-space: nowrap;
+  }
+  .top nav ul { display: flex; gap: 4px; margin: 0; padding: 0; list-style: none; height: 100%; }
+  .top nav a {
+    display: flex; align-items: center; height: 100%;
+    padding: 0 12px; color: var(--ink-3); text-decoration: none; font-size: 13px;
+    border-bottom: 2px solid transparent;
+  }
+  .top nav a:hover { color: var(--ink); }
+  .top nav a[aria-current="true"] { color: var(--ink); border-bottom-color: var(--mint); }
+  .sync {
+    margin-left: auto; display: flex; align-items: center;
+    font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); white-space: nowrap;
+  }
+
+  main { padding: 0 var(--pad) 48px; max-width: 1440px; margin: 0 auto; }
+
+  
+  .intro {
+    display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: 24px;
+    padding: 32px 0 28px;
+  }
+  .eyebrow { margin: 0 0 6px; font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); }
+  h1 { margin: 0 0 14px; color: var(--ink); font-size: clamp(28px, 3.2vw, 36px); line-height: 1.15; letter-spacing: -.01em; }
+  .lede { margin: 0; max-width: 68ch; font-size: 14.5px; line-height: 1.75; }
+  .lede strong { color: var(--ink); }
+  .lede .warn { color: var(--amber); }
+  .lede .crit { color: var(--red); }
+
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+    min-height: 44px; padding: 0 18px;
+    background: var(--mint); color: var(--mint-ink);
+    font: 700 13px/1 var(--mono); text-decoration: none; border: 0; cursor: pointer;
+    transition: background-color .15s ease;
+  }
+  .btn:hover { background: #b6efc9; }
+  .btn-ghost { background: transparent; color: var(--ink); border: 1px solid var(--line-2); }
+  .btn-ghost:hover { background: var(--panel-2); }
+
+  
+  .frame { border: 1px solid var(--line); background: var(--panel); }
+  .frame + .frame { border-top: 0; }
+  .row { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); }
+  .row > section + section { border-left: 1px solid var(--line); }
+  .pane { padding: 22px var(--pad) 24px; }
+  .pane-head { display: flex; justify-content: space-between; align-items: baseline; gap: 16px; margin-bottom: 16px; flex-wrap: wrap; }
+  h2 { margin: 0; color: var(--ink); font-size: 15px; letter-spacing: .01em; }
+  .meta { font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); }
+
+  
+  .alert {
+    display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 20px; align-items: center;
+    padding: 18px var(--pad);
+    border: 1px solid #5a2d29; border-left: 4px solid var(--red);
+    background: #23191a;
+    margin-bottom: 24px;
+  }
+  .alert-tag {
+    font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
+    color: var(--red); border: 1px solid #6b3530; padding: 4px 8px; white-space: nowrap;
+  }
+  .alert h2 { font-size: 15px; margin-bottom: 4px; }
+  .alert p { margin: 0; }
+  .alert .when { color: var(--ink-3); font-size: 12px; white-space: nowrap; text-align: right; }
+
+  
+  .status-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); margin: 0; padding: 0; list-style: none; }
+  .card { background: var(--panel); padding: 16px 16px 18px; display: flex; flex-direction: column; gap: 6px; position: relative; }
+  .card::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--state); }
+  .card h3 { margin: 0; color: var(--ink); font-size: 13.5px; }
+  .card .figure { color: var(--ink); font-size: 24px; font-weight: 700; line-height: 1.2; font-variant-numeric: tabular-nums; }
+  .card .figure small { font-size: 13px; color: var(--ink-3); font-weight: 400; }
+  .card p { margin: 0; font-size: 12.5px; line-height: 1.6; color: var(--ink-3); }
+  .state { font-size: 12px; color: var(--state); display: inline-flex; align-items: center; gap: 6px; }
+  .state::before { content: ""; width: 7px; height: 7px; background: var(--state); border-radius: 50%; }
+  .ok { --state: var(--mint); }
+  .watch { --state: var(--amber); }
+  .down { --state: var(--red); }
+
+  
+  .orders { list-style: none; margin: 0; padding: 0; }
+  .orders li {
+    display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 16px;
+    padding: 14px 0 14px 16px; border-top: 1px solid var(--line); border-left: 3px solid var(--state);
+  }
+  .orders li:first-child { border-top: 0; }
+  .orders strong { color: var(--ink); font-size: 13.5px; }
+  .orders span.t { color: var(--teal); font-size: 12.5px; font-variant-numeric: tabular-nums; text-align: right; }
+  .orders p { grid-column: 1 / -1; margin: 0; font-size: 12.5px; color: var(--teal); opacity: .9; }
+
+  
+  .table-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
+  caption { text-align: left; }
+  th { text-align: left; font-weight: 400; font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); padding: 10px 12px 10px 0; border-bottom: 1px solid var(--line-2); white-space: nowrap; }
+  td { padding: 11px 12px 11px 0; border-bottom: 1px solid var(--line); color: var(--teal); vertical-align: top; }
+  td:first-child, th[scope="row"] { color: var(--ink); font-weight: 700; }
+  tbody th { text-align: left; padding: 11px 12px 11px 0; border-bottom: 1px solid var(--line); font-size: 13px; letter-spacing: 0; text-transform: none; }
+  .route-id { display: inline-block; min-width: 3.2em; padding: 1px 6px; margin-right: 8px; border: 1px solid var(--line-2); color: var(--ink); text-align: center; }
+  td.state-cell { color: var(--state); white-space: nowrap; }
+  tr.flag-down th { box-shadow: inset 3px 0 0 var(--red); padding-left: 10px; }
+  .bar { display: inline-block; width: 64px; height: 6px; background: var(--line-2); vertical-align: middle; margin-right: 8px; }
+  .bar i { display: block; height: 100%; background: var(--state); }
+
+  
+  .report { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr); gap: 32px; }
+  .report p { margin: 0 0 12px; max-width: 52ch; }
+  .report .phone { color: var(--ink); font-weight: 700; }
+  form { display: grid; grid-template-columns: 1fr 1fr; gap: 14px 16px; }
+  .field { display: flex; flex-direction: column; gap: 6px; }
+  .field.full { grid-column: 1 / -1; }
+  label { font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); }
+  input, select, textarea {
+    font: 13.5px/1.5 var(--mono); color: var(--ink);
+    background: var(--bg); border: 1px solid var(--line-2); padding: 10px 12px; border-radius: 0; min-height: 44px;
+  }
+  textarea { min-height: 96px; resize: vertical; }
+  input:focus, select:focus, textarea:focus { outline: 2px solid var(--mint); outline-offset: -1px; border-color: transparent; }
+  .actions { grid-column: 1 / -1; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+  .note { font-size: 12px; color: var(--ink-3); }
+  #report-status { color: var(--mint); font-size: 12.5px; }
+
+  footer { max-width: 1440px; margin: 0 auto; padding: 20px var(--pad) 32px; font-size: 11px; color: var(--ink-3); letter-spacing: .04em; display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+
+  
+  @media (max-width: 1024px) {
+    .row { grid-template-columns: 1fr; }
+    .row > section + section { border-left: 0; border-top: 1px solid var(--line); }
+    .report { grid-template-columns: 1fr; gap: 16px; }
+  }
+  @media (max-width: 760px) {
+    .top { flex-wrap: wrap; gap: 0 16px; padding-top: 8px; }
+    .sync { display: none; }
+    .top nav { width: 100%; overflow-x: auto; }
+    .top nav ul { height: 40px; }
+    .top nav a { padding: 0 10px; }
+    .intro { grid-template-columns: 1fr; padding-top: 24px; }
+    .intro .btn { width: 100%; }
+    .alert { grid-template-columns: 1fr; gap: 10px; }
+    .alert .when { text-align: left; }
+    form { grid-template-columns: 1fr; }
+    
+    thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+    table, tbody, tr, th, td { display: block; }
+    tbody tr { padding: 12px 0; border-bottom: 1px solid var(--line-2); }
+    tbody th, td { border: 0; padding: 2px 0; }
+    tr.flag-down th { box-shadow: none; padding-left: 0; }
+    tbody th { margin-bottom: 6px; }
+    td { display: grid; grid-template-columns: 9.5em 1fr; gap: 8px; }
+    td::before { content: attr(data-label); font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); }
+  }
+</style>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="top">
+  <a class="brand" href="#main">North / Line Field Ops</a>
+  <nav aria-label="Sections">
+    <ul>
+      <li><a href="#status" aria-current="true">Status</a></li>
+      <li><a href="#alert">Alert</a></li>
+      <li><a href="#routes">Routes</a></li>
+      <li><a href="#report">Report issue</a></li>
+    </ul>
+  </nav>
+  <p class="sync">Depot snapshot · Last sync <time datetime="2026-11-22T06:42:10">06:42:10</time></p>
+</header>
+
+<main id="main">
+  <section class="intro" aria-labelledby="page-title">
+    <div>
+      <p class="eyebrow">Northline Transit · Harrow depot · Sunday, 06:45</p>
+      <h1 id="page-title">Maintenance overview</h1>
+      <p class="lede">
+        <strong>31 of 34</strong> buses are cleared for service and both tram sets passed their morning checks.
+        <strong>9 of 11</strong> routes are running to timetable. <span class="crit"><strong>1 urgent fault</strong></span> is open on the Riverside tram line,
+        and <span class="warn"><strong>3 work orders</strong></span> need a crew before the 09:00 peak.
+      </p>
+    </div>
+    <a class="btn" href="#report">Report an issue</a>
+  </section>
+
+  <section id="alert" class="alert" role="region" aria-labelledby="alert-title">
+    <span class="alert-tag">Urgent</span>
+    <div>
+      <h2 id="alert-title">Overhead line fault, Riverside tram (T1) between Mill Lane and Quay</h2>
+      <p>Tension loss reported on span 14. Trams are turning back at Mill Lane; replacement buses run every 12 min from stop C. Line crew 2 is on site, estimated restore 08:30.</p>
+    </div>
+    <p class="when">Raised <time datetime="2026-11-22T05:58">05:58</time><br>Owner: R. Osei</p>
+  </section>
+
+  <div class="frame" id="status">
+    <section class="pane" aria-labelledby="status-title">
+      <div class="pane-head">
+        <h2 id="status-title">Service status</h2>
+        <span class="meta">4 normal · 1 watch · 1 disrupted</span>
+      </div>
+      <ul class="status-grid">
+        <li class="card ok">
+          <h3>Bus fleet</h3>
+          <span class="figure">31<small> / 34 ready</small></span>
+          <span class="state">Normal</span>
+          <p>Three in scheduled service; none overdue.</p>
+        </li>
+        <li class="card down">
+          <h3>Tram line T1</h3>
+          <span class="figure">Part<small> · Mill Lane turnback</small></span>
+          <span class="state">Disrupted</span>
+          <p>Overhead fault on span 14. Bus replacement active.</p>
+        </li>
+        <li class="card ok">
+          <h3>Tram sets</h3>
+          <span class="figure">2<small> / 2 ready</small></span>
+          <span class="state">Normal</span>
+          <p>Brake and pantograph checks passed 05:20.</p>
+        </li>
+        <li class="card watch">
+          <h3>Ticket machines</h3>
+          <span class="figure">46<small> / 49 online</small></span>
+          <span class="state">Watch</span>
+          <p>Card readers offline at Quay, Elm St and Market.</p>
+        </li>
+        <li class="card ok">
+          <h3>Station lifts</h3>
+          <span class="figure">8<small> / 8 working</small></span>
+          <span class="state">Normal</span>
+          <p>Monthly inspection due at Central on Tuesday.</p>
+        </li>
+        <li class="card ok">
+          <h3>Depot &amp; fuel</h3>
+          <span class="figure">72<small> % diesel</small></span>
+          <span class="state">Normal</span>
+          <p>Next delivery Monday 07:00. Wash bay open.</p>
+        </li>
+      </ul>
+    </section>
+  </div>
+
+  <div class="frame row">
+    <section class="pane" id="routes" aria-labelledby="routes-title">
+      <div class="pane-head">
+        <h2 id="routes-title">Routes</h2>
+        <span class="meta">11 routes · 9 on time</span>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <caption class="meta" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)">Route condition and maintenance schedule</caption>
+          <thead>
+            <tr>
+              <th scope="col">Route</th>
+              <th scope="col">Vehicles</th>
+              <th scope="col">Last inspection</th>
+              <th scope="col">Next due</th>
+              <th scope="col">Availability</th>
+              <th scope="col">Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr class="flag-down">
+              <th scope="row"><span class="route-id">T1</span>Riverside tram</th>
+              <td data-label="Vehicles">1 of 2</td>
+              <td data-label="Last inspection">21 Nov</td>
+              <td data-label="Next due">Today</td>
+              <td data-label="Availability" class="down"><span class="bar" aria-hidden="true"><i style="width:55%"></i></span>55 %</td>
+              <td data-label="Status" class="state-cell down">Disrupted</td>
+            </tr>
+            <tr>
+              <th scope="row"><span class="route-id">4</span>Harrow – Central</th>
+              <td data-label="Vehicles">6 of 6</td>
+              <td data-label="Last inspection">20 Nov</td>
+              <td data-label="Next due">27 Nov</td>
+              <td data-label="Availability" class="ok"><span class="bar" aria-hidden="true"><i style="width:100%"></i></span>100 %</td>
+              <td data-label="Status" class="state-cell ok">On time</td>
+            </tr>
+            <tr>
+              <th scope="row"><span class="route-id">7</span>Elm St loop</th>
+              <td data-label="Vehicles">4 of 4</td>
+              <td data-label="Last inspection">19 Nov</td>
+              <td data-label="Next due">26 Nov</td>
+              <td data-label="Availability" class="ok"><span class="bar" aria-hidden="true"><i style="width:100%"></i></span>100 %</td>
+              <td data-label="Status" class="state-cell ok">On time</td>
+            </tr>
+            <tr>
+              <th scope="row"><span class="route-id">12</span>Market – Hospital</th>
+              <td data-label="Vehicles">4 of 5</td>
+              <td data-label="Last inspection">18 Nov</td>
+              <td data-label="Next due">Tomorrow</td>
+              <td data-label="Availability" class="watch"><span class="bar" aria-hidden="true"><i style="width:80%"></i></span>80 %</td>
+              <td data-label="Status" class="state-cell watch">Reduced</td>
+            </tr>
+            <tr>
+              <th scope="row"><span class="route-id">15</span>Quay – Airport</th>
+              <td data-label="Vehicles">5 of 5</td>
+              <td data-label="Last inspection">21 Nov</td>
+              <td data-label="Next due">28 Nov</td>
+              <td data-label="Availability" class="ok"><span class="bar" aria-hidden="true"><i style="width:100%"></i></span>100 %</td>
+              <td data-label="Status" class="state-cell ok">On time</td>
+            </tr>
+            <tr>
+              <th scope="row"><span class="route-id">21</span>University link</th>
+              <td data-label="Vehicles">3 of 3</td>
+              <td data-label="Last inspection">17 Nov</td>
+              <td data-label="Next due">24 Nov</td>
+              <td data-label="Availability" class="ok"><span class="bar" aria-hidden="true"><i style="width:100%"></i></span>100 %</td>
+              <td data-label="Status" class="state-cell ok">On time</td>
+            </tr>
+            <tr>
+              <th scope="row"><span class="route-id">33</span>Northfield night</th>
+              <td data-label="Vehicles">2 of 3</td>
+              <td data-label="Last inspection">16 Nov</td>
+              <td data-label="Next due">Overdue</td>
+              <td data-label="Availability" class="watch"><span class="bar" aria-hidden="true"><i style="width:67%"></i></span>67 %</td>
+              <td data-label="Status" class="state-cell watch">Delayed</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="pane" aria-labelledby="orders-title">
+      <div class="pane-head">
+        <h2 id="orders-title">Open work orders</h2>
+        <span class="meta">3 open · 2 closed today</span>
+      </div>
+      <ul class="orders">
+        <li class="down">
+          <strong>T1 overhead span 14 re-tension</strong><span class="t">48 min</span>
+          <p>Line crew 2 on site. Isolation confirmed 06:10.</p>
+        </li>
+        <li class="watch">
+          <strong>Bus 2214 door sensor, route 12</strong><span class="t">1 h</span>
+          <p>Rear door fails to close above 2 °C. Parked bay 6.</p>
+        </li>
+        <li class="watch">
+          <strong>Card reader swap at Quay, Elm St, Market</strong><span class="t">2 h</span>
+          <p>Spares in stores. Cash and app tickets unaffected.</p>
+        </li>
+        <li class="ok">
+          <strong>Route 33 coolant leak repaired</strong><span class="t">Closed</span>
+          <p>Bus 1907 road-tested 05:40. Returns to night roster.</p>
+        </li>
+      </ul>
+    </section>
+  </div>
+
+  <div class="frame" id="report">
+    <section class="pane report" aria-labelledby="report-title">
+      <div>
+        <div class="pane-head"><h2 id="report-title">Report an issue</h2></div>
+        <p>Seen a fault on a vehicle, at a stop or on the line? Log it here and the duty controller picks it up within 15 minutes.</p>
+        <p>For anything unsafe — exposed wiring, a vehicle that won't stop, someone hurt — call the control room first: <a class="phone" href="tel:+440100555014">0100 555 014</a>.</p>
+      </div>
+      <form id="report-form" novalidate>
+        <div class="field">
+          <label for="r-where">Route or location</label>
+          <select id="r-where" name="where" required>
+            <option value="">Choose…</option>
+            <option>T1 Riverside tram</option>
+            <option>4 Harrow – Central</option>
+            <option>7 Elm St loop</option>
+            <option>12 Market – Hospital</option>
+            <option>15 Quay – Airport</option>
+            <option>21 University link</option>
+            <option>33 Northfield night</option>
+            <option>Station or stop</option>
+            <option>Depot</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="r-ref">Vehicle or stop number</label>
+          <input id="r-ref" name="ref" type="text" placeholder="e.g. 2214 or stop C" autocomplete="off">
+        </div>
+        <div class="field full">
+          <label for="r-desc">What's wrong?</label>
+          <textarea id="r-desc" name="desc" required placeholder="What you saw, when, and whether it's still happening."></textarea>
+        </div>
+        <div class="actions">
+          <button class="btn" type="submit">Send report</button>
+          <span class="note">Opens your email app, addressed to the duty controller.</span>
+          <p id="report-status" role="status" aria-live="polite"></p>
+        </div>
+      </form>
+    </section>
+  </div>
+</main>
+
+<footer>
+  <span>Northline Transit · Field operations · Harrow depot</span>
+  <span>Figures are a depot snapshot, refreshed every 5 minutes.</span>
+</footer>
+
+<script>
+  // Nav highlight follows the section in view.
+  (function () {
+    var links = Array.prototype.slice.call(document.querySelectorAll('.top nav a'));
+    var targets = links.map(function (a) { return document.querySelector(a.getAttribute('href')); });
+    if (!('IntersectionObserver' in window)) return;
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (e) {
+        if (!e.isIntersecting) return;
+        links.forEach(function (a) {
+          a.setAttribute('aria-current', a.getAttribute('href') === '#' + e.target.id ? 'true' : 'false');
+        });
+      });
+    }, { rootMargin: '-45% 0px -50% 0px' });
+    targets.forEach(function (t) { if (t) io.observe(t); });
+  })();
+
+  // Report form: validate, then hand off to the user's mail client (no backend).
+  (function () {
+    var form = document.getElementById('report-form');
+    var status = document.getElementById('report-status');
+    form.addEventListener('submit', function (ev) {
+      ev.preventDefault();
+      var where = form.where.value.trim();
+      var desc = form.desc.value.trim();
+      if (!where) { status.textContent = 'Choose a route or location.'; form.where.focus(); return; }
+      if (!desc) { status.textContent = 'Describe the issue in a sentence or two.'; form.desc.focus(); return; }
+      var subject = 'Issue report: ' + where + (form.ref.value.trim() ? ' (' + form.ref.value.trim() + ')' : '');
+      var href = 'mailto:control@northline.example?subject=' + encodeURIComponent(subject) + '&body=' + encodeURIComponent(desc);
+      status.textContent = 'Report drafted. Send it from your email app to finish.';
+      window.location.href = href;
+    });
+  })();
+</script>
+</body>
+</html>

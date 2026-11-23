@@ -1,0 +1,391 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fleet watch · Northline Field Ops</title>
+<meta name="description" content="Fleet-operations dashboard for the North Inlet coastal research team: status summary, active signals and vessel positions.">
+<style>
+  :root {
+    --bg: #152023;
+    --panel: #172427;
+    --line: #26363a;
+    --line-soft: #1f2e31;
+    --text: #dde8e6;
+    --muted: #9db1af;
+    --accent: #a5e6bd;
+    --accent-ink: #0f1c17;
+    --warn: #e9b86c;
+    --alert: #e5806f;
+    --font: "JetBrains Mono", ui-monospace, "SFMono-Regular", "Cascadia Mono", Menlo, Consolas, "Liberation Mono", monospace;
+    --pad: 24px;
+  }
+  *, *::before, *::after { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font);
+    font-size: 14px;
+    line-height: 1.6;
+    font-variant-numeric: tabular-nums;
+  }
+  a { color: inherit; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .skip {
+    position: absolute; left: 8px; top: -48px;
+    background: var(--accent); color: var(--accent-ink);
+    padding: 8px 14px; font-weight: 700; z-index: 10;
+  }
+  .skip:focus { top: 8px; }
+  .sr-only {
+    position: absolute; width: 1px; height: 1px; overflow: hidden;
+    clip: rect(0 0 0 0); white-space: nowrap; margin: -1px; padding: 0; border: 0;
+  }
+  .eyebrow, .meta {
+    font-size: 12px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted);
+  }
+
+  
+  .topbar {
+    display: flex; align-items: stretch; gap: 32px;
+    min-height: 48px; padding: 0 var(--pad);
+    border-bottom: 1px solid var(--line);
+  }
+  .brand {
+    display: flex; align-items: center;
+    font-size: 13px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
+    text-decoration: none; white-space: nowrap;
+  }
+  .topbar nav ul { display: flex; gap: 0; height: 100%; margin: 0; padding: 0; list-style: none; }
+  .topbar nav a {
+    display: flex; align-items: center; height: 100%;
+    padding: 0 16px; font-size: 13px; color: var(--muted); text-decoration: none;
+    border-bottom: 2px solid transparent; margin-bottom: -1px;
+  }
+  .topbar nav a:hover { color: var(--text); }
+  .topbar nav a[aria-current="page"] { color: var(--text); border-bottom-color: var(--accent); }
+  .sync { margin-left: auto; display: flex; align-items: center; white-space: nowrap; }
+
+  main { max-width: 1440px; margin: 0 auto; padding: 0 var(--pad) 57px; }
+
+  
+  .summary {
+    display: flex; align-items: flex-end; justify-content: space-between; gap: 32px;
+    padding: 30px 0 28px;
+  }
+  h1 { margin: 6px 0 14px; font-size: 34px; line-height: 1.15; font-weight: 700; letter-spacing: -.01em; }
+  .lede { margin: 0; max-width: 68ch; font-size: 15px; line-height: 1.6; color: #c9d6d4; }
+  .lede strong { color: var(--text); }
+  .lede .hot { color: var(--warn); }
+  .ack {
+    flex: none;
+    appearance: none; border: 0; cursor: pointer;
+    background: var(--accent); color: var(--accent-ink);
+    font: 700 13px/1 var(--font); letter-spacing: .02em;
+    padding: 14px 18px;
+    transition: background-color .15s ease;
+  }
+  .ack:hover { background: #bdf0cf; }
+  .ack[disabled] { background: transparent; color: var(--accent); box-shadow: inset 0 0 0 1px var(--line); cursor: default; }
+
+  
+  .board {
+    display: grid; grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr);
+    border: 1px solid var(--line); background: var(--panel);
+  }
+  .panel { padding: 18px 22px 22px; min-width: 0; }
+  .panel + .panel { border-left: 1px solid var(--line); }
+  .panel-wide { grid-column: 1 / -1; border-left: 0 !important; border-top: 1px solid var(--line); }
+  .panel-head {
+    display: flex; align-items: baseline; justify-content: space-between; gap: 16px; flex-wrap: wrap;
+    margin-bottom: 8px;
+  }
+  h2 { margin: 0; font-size: 15px; font-weight: 700; }
+
+  
+  .chart { display: block; width: 100%; height: auto; overflow: visible; }
+  .chart text { font-family: var(--font); font-size: 13px; fill: var(--muted); }
+  .chart .grid { stroke: var(--line); stroke-width: 1; }
+  .chart .series { fill: none; stroke: var(--accent); stroke-width: 1.6; stroke-linejoin: round; }
+  .chart .threshold { stroke: var(--warn); stroke-width: 1.6; stroke-dasharray: 6 5; }
+  .chart .thlabel { fill: var(--warn); }
+  .legend { display: flex; flex-wrap: wrap; gap: 8px 28px; margin: 14px 0 0 44px; padding: 0; list-style: none; font-size: 13px; color: var(--muted); }
+  .legend li { display: flex; align-items: center; gap: 10px; }
+  .key { width: 22px; height: 0; border-top: 2px solid var(--accent); }
+  .key.dash { border-top-style: dashed; border-color: var(--warn); }
+
+  
+  .signals { margin: 0; padding: 0; list-style: none; border-top: 1px solid var(--line); }
+  .signal {
+    display: grid; grid-template-columns: 1fr auto; gap: 4px 16px;
+    padding: 16px 0 18px 14px; border-bottom: 1px solid var(--line);
+    border-left: 3px solid var(--line);
+  }
+  .signal:last-child { border-bottom: 0; }
+  .signal[data-level="alert"] { border-left-color: var(--alert); }
+  .signal[data-level="warn"] { border-left-color: var(--warn); }
+  .signal h3 { margin: 0; font-size: 13px; font-weight: 700; }
+  .signal p { margin: 0; grid-column: 1; font-size: 13px; color: var(--muted); }
+  .signal .age { font-size: 13px; color: var(--muted); white-space: nowrap; }
+  .signal .state { grid-column: 1 / -1; font-size: 12px; color: var(--accent); }
+  .signal.is-acked { border-left-color: var(--line); }
+  .signal.is-acked h3 { color: var(--muted); }
+
+  
+  .table-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  caption { text-align: left; }
+  th, td { text-align: left; padding: 12px 16px 12px 0; white-space: nowrap; }
+  thead th { font-size: 12px; font-weight: 400; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); border-bottom: 1px solid var(--line); padding-top: 6px; }
+  tbody tr { border-bottom: 1px solid var(--line-soft); }
+  tbody tr:last-child { border-bottom: 0; }
+  tbody th { font-weight: 700; }
+  .st { display: inline-flex; align-items: center; gap: 8px; }
+  .st::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+  .st-ok { color: var(--accent); }
+  .st-warn { color: var(--warn); }
+  .st-alert { color: var(--alert); }
+  .st-idle { color: var(--muted); }
+
+  footer { margin-top: 18px; display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+
+  @media (max-width: 1080px) {
+    .board { grid-template-columns: 1fr; }
+    .panel + .panel { border-left: 0; border-top: 1px solid var(--line); }
+  }
+  @media (max-width: 760px) {
+    :root { --pad: 16px; }
+    .topbar { flex-wrap: wrap; gap: 0 16px; padding-top: 8px; }
+    .brand { min-height: 36px; }
+    .sync { order: 3; width: 100%; margin: 0; padding-bottom: 8px; white-space: normal; }
+    .topbar nav { order: 2; width: 100%; margin: 0 calc(var(--pad) * -1); }
+    .topbar nav a { height: 44px; }
+    .summary { flex-direction: column; align-items: stretch; padding-top: 24px; }
+    h1 { font-size: 28px; }
+    .lede { font-size: 14px; }
+    .ack { width: 100%; padding: 16px; }
+    .panel { padding: 16px; }
+    .legend { margin-left: 0; }
+
+    
+    thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+    table, tbody, tr, th, td { display: block; }
+    tbody tr { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 16px; padding: 14px 0; border-bottom: 1px solid var(--line); }
+    tbody th { grid-column: 1 / -1; padding: 0; font-size: 14px; }
+    tbody td { padding: 0; white-space: normal; }
+    tbody td::before { content: attr(data-label); display: block; font-size: 12px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    * { transition: none !important; }
+  }
+</style>
+</head>
+<body>
+<a class="skip" href="#main">Skip to dashboard</a>
+
+<header class="topbar">
+  <a class="brand" href="#main" aria-label="Northline Field Ops, home">North / Line Field Ops</a>
+  <nav aria-label="Primary">
+    <ul>
+      <li><a href="#main" aria-current="page">Fleet</a></li>
+      <li><a href="#signals">Signals</a></li>
+      <li><a href="#positions">Positions</a></li>
+    </ul>
+  </nav>
+  <p class="sync meta" style="margin:0">Local snapshot · Last sync <time datetime="14:18:42" style="margin-left:.6ch">14:18:42</time></p>
+</header>
+
+<main id="main">
+  <section class="summary" aria-labelledby="page-title">
+    <div>
+      <p class="eyebrow" style="margin:0">North Inlet research corridor · Sunday, 14:20 UTC</p>
+      <h1 id="page-title">Fleet watch</h1>
+      <p class="lede">
+        <strong>4 of 6</strong> vessels are underway and every position is current.
+        <strong>128</strong> samples are logged, 18 of them since the morning tide.
+        Surface temperature averages <strong>12.8&nbsp;°C</strong>, 0.4° under the weekly mean.
+        <strong class="hot" id="lede-count">2 signals</strong> need a second look before the 16:00 handover.
+      </p>
+    </div>
+    <button class="ack" type="button" id="ack" aria-describedby="signals-meta">Acknowledge 2 signals</button>
+  </section>
+
+  <div class="board">
+    <section class="panel" aria-labelledby="chart-title">
+      <div class="panel-head">
+        <h2 id="chart-title">Surface temperature, north inlet</h2>
+        <span class="meta">°C · 06:00 to 14:00</span>
+      </div>
+      <svg class="chart" viewBox="0 0 840 270" role="img" aria-labelledby="chart-desc">
+        <desc id="chart-desc">Line chart of surface temperature from 06:00 to 14:00. Temperature rose from 11.6 °C to a peak of 13.3 °C near 11:30, then eased to 12.8 °C. It stayed below the 13.5 °C review threshold all day.</desc>
+        <g>
+          <line class="grid" x1="44" x2="820" y1="8" y2="8"/>
+          <line class="grid" x1="44" x2="820" y1="85" y2="85"/>
+          <line class="grid" x1="44" x2="820" y1="163" y2="163"/>
+          <line class="grid" x1="44" x2="820" y1="240" y2="240"/>
+          <text x="0" y="13">14.0</text>
+          <text x="0" y="90">13.0</text>
+          <text x="0" y="168">12.0</text>
+          <text x="0" y="245">11.0</text>
+          <text x="24" y="263">06:00</text>
+          <text x="218" y="263">08:00</text>
+          <text x="412" y="263">10:00</text>
+          <text x="605" y="263">12:00</text>
+          <text x="799" y="263">14:00</text>
+        </g>
+        <line class="threshold" x1="44" x2="820" y1="47" y2="47"/>
+        <text class="thlabel" x="820" y="35" text-anchor="end">13.5° review</text>
+        <polyline class="series" points="44,194 92,186 141,171 189,163 238,140 286,124 335,117 383,93 432,85 480,70 529,78 577,62 626,70 674,85 723,93 771,101 820,101"/>
+      </svg>
+      <ul class="legend">
+        <li><span class="key" aria-hidden="true"></span>Observed temperature</li>
+        <li><span class="key dash" aria-hidden="true"></span>Review threshold, 13.5°</li>
+      </ul>
+    </section>
+
+    <section class="panel" id="signals" aria-labelledby="signals-title">
+      <div class="panel-head">
+        <h2 id="signals-title">Signals</h2>
+        <span class="meta" id="signals-meta">2 active · 1 cleared</span>
+      </div>
+      <ul class="signals">
+        <li class="signal" data-level="alert" data-active>
+          <h3>Station N-04 missed its 14:00 check-in</h3>
+          <span class="age"><span class="sr-only">Raised </span>18 min</span>
+          <p>Beacon last heard 13:42 on the east shelf.</p>
+        </li>
+        <li class="signal" data-level="warn" data-active>
+          <h3>Sample bottle B-219 needs a second reading</h3>
+          <span class="age"><span class="sr-only">Raised </span>41 min</span>
+          <p>Salinity variance exceeds 0.3 PSU.</p>
+        </li>
+        <li class="signal" data-level="ok">
+          <h3>Harbor buoy transmission restored</h3>
+          <span class="age"><span class="sr-only">Raised </span>1 h</span>
+          <p>Signal stable across three checks.</p>
+        </li>
+      </ul>
+    </section>
+
+    <section class="panel panel-wide" id="positions" aria-labelledby="positions-title">
+      <div class="panel-head">
+        <h2 id="positions-title">Vessel positions</h2>
+        <span class="meta">4 reporting · 2 in harbor</span>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <caption class="sr-only">Vessels and assets with assignment, position, speed, last contact and status</caption>
+          <thead>
+            <tr>
+              <th scope="col">Call sign</th>
+              <th scope="col">Assignment</th>
+              <th scope="col">Position</th>
+              <th scope="col">Speed</th>
+              <th scope="col">Last contact</th>
+              <th scope="col">Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <th scope="row">Mallow</th>
+              <td data-label="Assignment">Surface transect 3</td>
+              <td data-label="Position">North inlet · 04</td>
+              <td data-label="Speed">4.2 kn</td>
+              <td data-label="Last contact"><time>14:18:42</time></td>
+              <td data-label="Status"><span class="st st-ok">On station</span></td>
+            </tr>
+            <tr>
+              <th scope="row">Plover</th>
+              <td data-label="Assignment">Water-column cast</td>
+              <td data-label="Position">East shelf · 11</td>
+              <td data-label="Speed">0.8 kn</td>
+              <td data-label="Last contact"><time>14:17:08</time></td>
+              <td data-label="Status"><span class="st st-ok">Sampling</span></td>
+            </tr>
+            <tr>
+              <th scope="row">Juniper</th>
+              <td data-label="Assignment">Beacon inspection</td>
+              <td data-label="Position">West marker · 02</td>
+              <td data-label="Speed">6.1 kn</td>
+              <td data-label="Last contact"><time>14:16:31</time></td>
+              <td data-label="Status"><span class="st st-warn">Returning</span></td>
+            </tr>
+            <tr>
+              <th scope="row">Kittiwake</th>
+              <td data-label="Assignment">Surface transect 1</td>
+              <td data-label="Position">Outer channel · 08</td>
+              <td data-label="Speed">3.6 kn</td>
+              <td data-label="Last contact"><time>14:15:54</time></td>
+              <td data-label="Status"><span class="st st-ok">On station</span></td>
+            </tr>
+            <tr>
+              <th scope="row">Sanderling</th>
+              <td data-label="Assignment">Hull maintenance</td>
+              <td data-label="Position">Harbor · berth 3</td>
+              <td data-label="Speed">0.0 kn</td>
+              <td data-label="Last contact"><time>14:10:02</time></td>
+              <td data-label="Status"><span class="st st-idle">In harbor</span></td>
+            </tr>
+            <tr>
+              <th scope="row">Tern</th>
+              <td data-label="Assignment">Crew change</td>
+              <td data-label="Position">Harbor · berth 1</td>
+              <td data-label="Speed">0.0 kn</td>
+              <td data-label="Last contact"><time>14:08:47</time></td>
+              <td data-label="Status"><span class="st st-idle">In harbor</span></td>
+            </tr>
+            <tr>
+              <th scope="row">Station N-04</th>
+              <td data-label="Assignment">Moored sensor</td>
+              <td data-label="Position">East shelf · 04</td>
+              <td data-label="Speed">—</td>
+              <td data-label="Last contact"><time>13:42:00</time></td>
+              <td data-label="Status"><span class="st st-alert">Missed check-in</span></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </div>
+
+  <footer>
+    <p class="meta" style="margin:0">Positions update every 60 s from the local relay.</p>
+    <p class="meta" style="margin:0">Next handover 16:00 UTC</p>
+  </footer>
+
+  <p class="sr-only" role="status" aria-live="polite" id="live"></p>
+</main>
+
+<script>
+  (function () {
+    var btn = document.getElementById('ack');
+    var meta = document.getElementById('signals-meta');
+    var lede = document.getElementById('lede-count');
+    var live = document.getElementById('live');
+    btn.addEventListener('click', function () {
+      var active = document.querySelectorAll('.signal[data-active]');
+      var n = active.length;
+      var t = new Date();
+      var stamp = String(t.getUTCHours()).padStart(2, '0') + ':' + String(t.getUTCMinutes()).padStart(2, '0');
+      active.forEach(function (el) {
+        el.removeAttribute('data-active');
+        el.classList.add('is-acked');
+        var s = document.createElement('span');
+        s.className = 'state';
+        s.textContent = 'Acknowledged ' + stamp + ' UTC';
+        el.appendChild(s);
+      });
+      meta.textContent = '0 active · ' + (n + 1) + ' acknowledged or cleared';
+      lede.textContent = 'All signals';
+      lede.classList.remove('hot');
+      lede.nextSibling.textContent = ' are acknowledged ahead of the 16:00 handover.';
+      btn.textContent = 'Signals acknowledged';
+      btn.disabled = true;
+      live.textContent = n + ' signals acknowledged at ' + stamp + ' UTC.';
+    });
+  })();
+</script>
+</body>
+</html>
