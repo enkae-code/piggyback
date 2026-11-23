@@ -1,0 +1,210 @@
+{
+ "per_judgement": {
+  "T01/o1": {
+   "gate": "screenshot",
+   "works": "skill-alone",
+   "bg": "Near-black blue-green",
+   "r1": "The compact monospace navigation, dark teal panels, mint CTA, and adjoining chart and signal panels match the original\u2019s dense operations-console style.",
+   "r2": "The right-aligned sync label, darker page background, signal-row spacing, and plain colored table statuses are closer to the original."
+  },
+  "T01/o2": {
+   "gate": "screenshot",
+   "works": "skill-alone",
+   "bg": "Near-black blue-green",
+   "r1": "The compact header, dark teal panels, mint accents, and chart-and-signals layout closely match the original.",
+   "r2": "The darker header and intro, right-aligned sync text, and muted signal details better match the original\u2019s visual hierarchy."
+  },
+  "T02/o1": {
+   "gate": "screenshot",
+   "works": "skill-plus-piggyback",
+   "bg": "warm near-black",
+   "r1": "The cream upright headline, centered mono navigation, broad serif intro, and single right-aligned CTA follow the original's layout and quiet editorial mood.",
+   "r2": "The near-full-width upright headline, warm cream and taupe palette, broad intro, and ruled project section echo the original's proportions and rhythm."
+  },
+  "T02/o2": {
+   "gate": "screenshot",
+   "works": "skill-plus-piggyback",
+   "bg": "warm near-black",
+   "r1": "The centered monospace navigation, upright cream headline, and large serif intro paired with a right-aligned CTA echo the original\u2019s editorial layout.",
+   "r2": "The near-full-width single-line serif headline, cream-to-muted intro, and ruled transition into selected work closely match the original\u2019s hierarchy and rhythm."
+  },
+  "T03/o1": {
+   "gate": "screenshot",
+   "works": "skill-plus-piggyback",
+   "bg": "pale blue-gray",
+   "r1": "It matches the original\u2019s bold single-line headline, compact spacing, and full-width architectural drawing with rust-red callouts.",
+   "r2": "Its tighter spacing, earlier placement of the section drawing, and three-column article opening more closely match the original\u2019s print-journal layout."
+  },
+  "T03/o2": {
+   "gate": "screenshot",
+   "works": "skill-plus-piggyback",
+   "bg": "pale blue-gray",
+   "r1": "The bold single-line serif headline, compact masthead, inline credits, and rust-red drawing annotations closely match the original.",
+   "r2": "The tighter vertical spacing and heavier section drawing give it the original\u2019s compact, technical editorial feel."
+  },
+  "T04/o1": {
+   "gate": "screenshot",
+   "works": "skill-plus-piggyback",
+   "bg": "warm golden yellow",
+   "r1": "The three-line headline with a reversed middle line, ruled spec sidebar, and black lower callout match the original\u2019s print-shop layout and mood.",
+   "r2": "The headline scale, roughly 75/25 split, and stacked yellow spec sheet over a black callout closely echo the original\u2019s proportions and visual rhythm."
+  },
+  "T04/o2": {
+   "gate": "screenshot",
+   "works": "skill-plus-piggyback",
+   "bg": "warm golden yellow",
+   "r1": "The three-line headline with its reversed middle line, ruled sidebar, and black callout echo the original\u2019s print-shop layout.",
+   "r2": "The headline scale, three-quarter hero split, and black callout beneath the spec sheet closely match the original\u2019s proportions and contrast."
+  },
+  "T05/o1": {
+   "gate": "screenshot",
+   "works": "skill-plus-piggyback",
+   "bg": "pale sage green",
+   "r1": "The oversized serif headline, right-hand copy and button, and seedlings rising from a dark soil band carry over the original\u2019s layout and mood.",
+   "r2": "The two-line serif headline, single right-hand button, and low illustrated soil band give it the original\u2019s spacious rhythm."
+  },
+  "T05/o2": {
+   "gate": "screenshot",
+   "works": "skill-plus-piggyback",
+   "bg": "Pale sage green",
+   "r1": "The oversized upright serif, split hero, and full-width dark soil band with ascending sprouts closely echo the original.",
+   "r2": "The two-line serif headline, right-hand copy with a single dark button, and illustrated soil band align closely with the original\u2019s spacing and mood."
+  },
+  "T06/o1": {
+   "gate": "screenshot",
+   "works": "skill-plus-piggyback",
+   "bg": "vivid cobalt blue",
+   "r1": "It preserves the two-line yellow serif headline, borderless header, and low split layout with white copy on the left and a coral-and-yellow card on the right.",
+   "r2": "Its headline closely matches the original\u2019s scale and line spacing, and the wide lower-right date card and late transition to yellow preserve the poster-like composition."
+  },
+  "T06/o2": {
+   "gate": "screenshot",
+   "works": "skill-plus-piggyback",
+   "bg": "Vivid cobalt blue",
+   "r1": "The two-line yellow serif headline, cobalt field, and coral-and-yellow date card echo the original\u2019s playful poster layout.",
+   "r2": "The headline\u2019s scale and two-line spacing, the date card\u2019s width and right alignment, and the depth of the blue hero are closer to the original."
+  },
+  "T07/o1": {
+   "gate": "screenshot",
+   "works": "skill-plus-piggyback",
+   "bg": "near-black blue-green charcoal",
+   "r1": "The left-aligned tabs, compact summary, and bordered split panel with a chart beside stacked alerts closely echo the original.",
+   "r2": "The cool teal-charcoal palette, header rhythm, and wide status panel beside a narrower alert column preserve the original\u2019s field-operations feel."
+  },
+  "T07/o2": {
+   "gate": "screenshot",
+   "works": "skill-plus-piggyback",
+   "bg": "near-black blue-green",
+   "r1": "The left-aligned tabs, compact intro, mint CTA, and bordered two-column chart and alert panel closely match the original\u2019s layout and rhythm.",
+   "r2": "The blue-green palette, amber summary emphasis, and shared panel with a wide left section and narrow alert rail echo the original\u2019s visual hierarchy."
+  },
+  "T08/o1": {
+   "gate": "screenshot",
+   "works": "skill-alone",
+   "bg": "warm near-black",
+   "r1": "The single-line serif name, centered monospace navigation, warm cream palette, and right-aligned CTA echo the original\u2019s editorial layout.",
+   "r2": "The broad single-line serif name, compact introduction, and right-aligned CTA preserve the original\u2019s horizontal rhythm and warm, restrained mood."
+  },
+  "T08/o2": {
+   "gate": "screenshot",
+   "works": "skill-alone",
+   "bg": "warm near-black",
+   "r1": "The single-line cream serif name, centered monospaced navigation, and right-aligned CTA follow the original\u2019s restrained editorial layout.",
+   "r2": "The single-line serif masthead, two-tone introduction, and right-aligned cream CTA preserve the original\u2019s horizontal rhythm and warm, muted palette."
+  },
+  "T09/o1": {
+   "gate": "screenshot",
+   "works": "skill-plus-piggyback",
+   "bg": "pale blue-gray",
+   "r1": "The heavy serif headline, slim masthead rule, inline credits, and red-annotated architectural section carry over the original\u2019s editorial style.",
+   "r2": "The deck and credits share a row above a full-width section drawing, with the same restrained red callouts and two text columns beside a key."
+  },
+  "T09/o2": {
+   "gate": "screenshot",
+   "works": "skill-plus-piggyback",
+   "bg": "Pale blue-gray",
+   "r1": "The bold serif headline, slim masthead rule, inline credits, and rust-red drawing callouts closely echo the original.",
+   "r2": "The deck and credits share a row, leading into a full-width annotated section and a three-column opening with the key at right."
+  },
+  "T10/o1": {
+   "gate": "screenshot",
+   "works": "skill-plus-piggyback",
+   "bg": "Pale sage green",
+   "r1": "The sage header blends into a split hero with an oversized serif headline, a dark CTA on the right, and a row of plant illustrations below.",
+   "r2": "The headline and right-hand CTA align more closely with the original, and the plant illustrations spread across the page with a similar airy rhythm."
+  },
+  "T10/o2": {
+   "gate": "screenshot",
+   "works": "skill-alone",
+   "bg": "pale sage green",
+   "r1": "Its sage header, oversized serif headline, right-hand copy and CTA, and ascending plant illustrations echo the original.",
+   "r2": "Its spare header, airy two-column hero, and seed-to-bud illustration rising from a dark soil band carry through the original\u2019s quiet garden mood."
+  }
+ },
+ "per_task": [
+  [
+   "T01",
+   "other",
+   "other"
+  ],
+  [
+   "T02",
+   "other",
+   "brief"
+  ],
+  [
+   "T03",
+   "other",
+   "brief"
+  ],
+  [
+   "T04",
+   "other",
+   "brief"
+  ],
+  [
+   "T05",
+   "other",
+   "brief"
+  ],
+  [
+   "T06",
+   "other",
+   "brief"
+  ],
+  [
+   "T07",
+   "other",
+   "brief"
+  ],
+  [
+   "T08",
+   "other",
+   "other"
+  ],
+  [
+   "T09",
+   "other",
+   "brief"
+  ],
+  [
+   "T10",
+   "other",
+   "tie"
+  ]
+ ],
+ "tally": {
+  "gate": {
+   "other": 10
+  },
+  "works": {
+   "other": 2,
+   "brief": 7,
+   "tie": 1
+  }
+ },
+ "first_position_picks": {
+  "first1": 10,
+  "first2": 9
+ }
+}

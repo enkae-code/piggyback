@@ -10,8 +10,7 @@ No writers are needed. The pages are generated from the starters' references, an
 
 ## Raters
 
-Rate one packet at the blind rating site: https://enkae-code.github.io/piggyback/bench/c3/rate/
-You must not have built any of the pages. Submit one `c3-rating` issue per packet.
+Not needed. Human rating was cancelled on 2026-11-22; see [RESULTS.md](RESULTS.md).
 
 ## Starters
 

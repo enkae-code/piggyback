@@ -1,4 +1,4 @@
-# C3 results (interim)
+# C3 results
 
 Registered run `c3-gate-20261122`, store `/home/brodey/projects/piggyback-evidence/c3/c3-gate-20261122/`.
 Locked 2026-11-22 (manifest `locked_at` 2026-11-22T21:21:50+00:00, Piggyback commit `7c52234`).
@@ -53,9 +53,46 @@ Reported beside the gate. It decides nothing. Turn totals: skill-alone 5, skill-
 
 ## Ratings
 
-Pending. Ratings are collected through `bench/c3/rate/` (issues labelled `c3-rating`). Per task,
-three raters pick a page for each of the two pairs. Results are published when three ratings per
-task are in.
+Not run. Human rating was cancelled on 2026-11-22 before any submission: the gate had already
+failed on turns, so ratings could not change the verdict, and the project does not depend on
+recruiting people. The rating site and form were removed.
+
+## Unofficial AI-judge check (decides nothing)
+
+Run after the gate failed, under rules fixed before any judging: [`ai-judge/PROTOCOL.md`](ai-judge/PROTOCOL.md).
+The judge was OpenAI gpt-6.2-sol through Codex CLI (images attached directly, no tools), a
+different vendor from the builder. It saw the starter screenshot and the four above-the-fold
+renders under neutral names, twice per task with each pair's order swapped. A pair counts only
+when both judgements agree.
+
+| Pair | Piggyback side wins | Ties | Other side wins |
+|---|---|---|---|
+| Piggyback brief vs screenshot | 0 | 0 | 10 |
+| Skill + brief vs skill alone | 7 | 1 | 2 |
+
+The judge picked the first-shown page 10 of 20 times in pair 1 and 9 of 20 in pair 2, so position
+did not drive the picks. One caveat favours the screenshot arm: the judge's reference image is the
+same screenshot that arm was given.
+
+Read the reasons in [`ai-judge/results.json`](ai-judge/results.json): the brief carried the
+original's colours and type, while the screenshot builds also copied its layout (for example
+ink-and-rule's reversed headline word, ruled spec sidebar and black callout).
+
+Machine measure: Piggyback's own gap check between each starter and page, share of comparable
+concepts that match ([`ai-judge/measure.json`](ai-judge/measure.json)). This metric is the one
+the brief is written from, so it favours the brief arm.
+
+| Arm | Mean match |
+|---|---|
+| Piggyback brief | 0.589 |
+| Screenshot | 0.592 |
+| Skill alone | 0.565 |
+| Skill + brief | 0.689 |
+
+Brief vs screenshot: 3 wins, 4 ties, 3 losses. Skill + brief vs skill alone: 8 wins, 2 losses.
+
+Summary: on its own, the brief did not beat a screenshot, even on Piggyback's own metric. Added to
+a design skill, it helped on both measures.
 
 ## Kill rule
 

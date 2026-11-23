@@ -1,0 +1,170 @@
+"""Machine design-match measure for the C3 pages against their starters.
+
+Each folder is served on 127.0.0.1 (ephemeral port) and fingerprinted by `python -m piggyback measure`.
+The comparison is Piggyback's own gap.compared / gap.gap / gap.differing. Read-only on the repo.
+"""
+
+import functools
+import json
+import os
+import subprocess
+import sys
+import threading
+from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
+
+sys.dont_write_bytecode = True  # never write __pycache__ into the read-only repo
+REPO = Path("/home/brodey/projects/piggyback")
+RUN = Path("/home/brodey/projects/piggyback-evidence/c3/c3-gate-20261122")
+HERE = Path(__file__).resolve().parent
+FP_DIR = HERE / "fp"
+OUT = HERE / "measure.json"
+PY = "/home/brodey/.venvs/taste-vault/bin/python"  # playwright; piggyback via PYTHONPATH
+ARMS = ("piggyback-brief", "screenshot", "skill-alone", "skill-plus-piggyback")
+# The sandbox HOME is not the user's home, so Playwright must be pointed at the installed browsers.
+ENV = {**os.environ, "PYTHONPATH": str(REPO), "PYTHONDONTWRITEBYTECODE": "1",
+       "PLAYWRIGHT_BROWSERS_PATH": "/home/brodey/.cache/ms-playwright"}
+
+sys.path.insert(0, str(REPO))
+from piggyback import fingerprint as fp  # noqa: E402
+from piggyback.gap import compared, differing, gap  # noqa: E402
+
+
+class Quiet(SimpleHTTPRequestHandler):
+    def log_message(self, *args):
+        pass
+
+
+def measure_folder(folder, name):
+    """Fingerprint folder/index.html into fp/<name>/. Returns (fingerprint, error)."""
+    if not (folder / "index.html").is_file():
+        return None, f"missing {folder}/index.html"
+    out = FP_DIR / name
+    out.mkdir(parents=True, exist_ok=True)
+    (out / "fingerprint.json").unlink(missing_ok=True)  # a stale file must never pass as fresh
+    server = ThreadingHTTPServer(
+        ("127.0.0.1", 0), functools.partial(Quiet, directory=str(folder))
+    )
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    try:
+        url = f"http://127.0.0.1:{server.server_address[1]}/index.html"
+        proc = subprocess.run(
+            [PY, "-m", "piggyback", "measure", url, "--out", str(out), "--allow-loopback"],
+            env=ENV, cwd=str(HERE), capture_output=True, text=True, timeout=240,
+        )
+    except subprocess.TimeoutExpired:
+        return None, "measure timed out (240s)"
+    finally:
+        server.shutdown()
+        server.server_close()
+    if proc.returncode != 0:
+        lines = proc.stderr.strip().splitlines() or ["no stderr; exit " + str(proc.returncode)]
+        return None, lines[-1]
+    try:
+        return fp.load(out / "fingerprint.json"), None
+    except (OSError, ValueError) as exc:
+        return None, f"fingerprint unreadable: {exc}"
+
+
+def score_pair(ref, build):
+    c = compared(ref, build)
+    d = differing(gap(ref, build)) & c
+    matched = len(c - d)
+    return sorted(c), sorted(d), matched, (matched / len(c) if c else None)
+
+
+def winner(a_name, a, b_name, b):
+    if a is None or b is None:
+        return "error/n-a"
+    if a > b:
+        return a_name
+    if b > a:
+        return b_name
+    return "tie"
+
+
+def fmt(score):
+    return "n/a" if score is None else f"{score:.3f}"
+
+
+def main():
+    check = subprocess.run(
+        [PY, "-c", "import piggyback.measure, playwright"], env=ENV, capture_output=True, text=True
+    )
+    if check.returncode != 0:
+        sys.exit(f"preflight failed for {PY}: {check.stderr.strip()}")
+
+    tasks = json.loads((REPO / "bench/c3/tasks.json").read_text(encoding="utf-8"))["tasks"]
+    starters = sorted({t["starter_id"] for t in tasks})
+    refs, ref_errors = {}, {}
+    for sid in starters:
+        refs[sid], ref_errors[sid] = measure_folder(REPO / "starters" / sid, f"starter-{sid}")
+        print(f"starter {sid}: {'ok' if ref_errors[sid] is None else 'ERROR ' + ref_errors[sid]}")
+
+    records = []
+    for task in tasks:
+        sid = task["starter_id"]
+        for arm in ARMS:
+            name = f"{task['id']}-{arm}"
+            rec = {"page": name, "task": task["id"], "arm": arm, "starter": sid,
+                   "compared": None, "differing": None, "matched": None, "score": None,
+                   "error": None}
+            build, err = measure_folder(RUN / "pages" / task["id"] / arm / "project", name)
+            if err is None and ref_errors[sid] is not None:
+                err = f"reference {sid}: {ref_errors[sid]}"
+            if err is None:
+                try:
+                    rec["compared"], rec["differing"], rec["matched"], rec["score"] = score_pair(
+                        refs[sid], build
+                    )
+                except Exception as exc:  # a malformed page value must show as an error, not vanish
+                    err = f"compare: {type(exc).__name__}: {exc}"
+            rec["error"] = err
+            records.append(rec)
+            print(f"{name}: {'ok score=' + fmt(rec['score']) if err is None else 'ERROR ' + err}")
+
+    OUT.write_text(json.dumps({"python": PY, "viewport": "default 1440x900",
+                               "starter_errors": ref_errors, "pages": records},
+                              indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+
+    by_key = {(r["task"], r["arm"]): r for r in records}
+    header = f"{'task':<5} {'starter':<16} {'brief':>7} {'shot':>7} {'alone':>7} {'s+pig':>7}  " \
+             f"{'brief vs shot':<20} {'s+pig vs alone':<20}"
+    print()
+    print(header)
+    print("-" * len(header))
+    pair1 = {"wins": 0, "ties": 0, "losses": 0, "other": 0}
+    pair2 = {"wins": 0, "ties": 0, "losses": 0, "other": 0}
+    for task in tasks:
+        s = {arm: by_key[(task["id"], arm)]["score"] for arm in ARMS}
+        for arm in ARMS:
+            if by_key[(task["id"], arm)]["error"]:
+                s[arm] = None
+        w1 = winner("brief", s["piggyback-brief"], "screenshot", s["screenshot"])
+        w2 = winner("s+pig", s["skill-plus-piggyback"], "alone", s["skill-alone"])
+        for tally, w, mine, other in ((pair1, w1, "brief", "screenshot"),
+                                      (pair2, w2, "s+pig", "alone")):
+            key = "wins" if w == mine else "losses" if w == other else "ties" if w == "tie" else "other"
+            tally[key] += 1
+        print(f"{task['id']:<5} {task['starter_id']:<16} {fmt(s['piggyback-brief']):>7} "
+              f"{fmt(s['screenshot']):>7} {fmt(s['skill-alone']):>7} "
+              f"{fmt(s['skill-plus-piggyback']):>7}  {w1:<20} {w2:<20}")
+
+    print()
+    print(f"brief vs screenshot (brief arm): wins {pair1['wins']}, ties {pair1['ties']}, "
+          f"losses {pair1['losses']}, not compared {pair1['other']}")
+    print(f"skill-plus-piggyback vs skill-alone (s+pig arm): wins {pair2['wins']}, "
+          f"ties {pair2['ties']}, losses {pair2['losses']}, not compared {pair2['other']}")
+    for arm in ARMS:
+        scores = [r["score"] for r in records if r["arm"] == arm and r["score"] is not None]
+        mean = f"{sum(scores) / len(scores):.3f}" if scores else "n/a"
+        print(f"mean score {arm}: {mean} over {len(scores)} pages")
+    errors = [r for r in records if r["error"]]
+    print(f"errors: {len(errors)} of {len(records)} pages")
+    for r in errors:
+        print(f"  ERROR {r['page']}: {r['error']}")
+    print(f"wrote {OUT}")
+
+
+if __name__ == "__main__":
+    main()

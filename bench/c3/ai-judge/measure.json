@@ -1,0 +1,1111 @@
+{
+  "python": "/home/brodey/.venvs/taste-vault/bin/python",
+  "viewport": "default 1440x900",
+  "starter_errors": {
+    "field-journal": null,
+    "good-day-assembly": null,
+    "ink-and-rule": null,
+    "little-plot": null,
+    "mina-okafor": null,
+    "northline-ops": null
+  },
+  "pages": [
+    {
+      "page": "T01-piggyback-brief",
+      "task": "T01",
+      "arm": "piggyback-brief",
+      "starter": "northline-ops",
+      "compared": [
+        "accent",
+        "body_type",
+        "button_type",
+        "card_type",
+        "container",
+        "heading_type",
+        "motion_only_one_page",
+        "motion_reach",
+        "motion_total",
+        "nav_type",
+        "reduced_motion"
+      ],
+      "differing": [
+        "button_type",
+        "card_type",
+        "heading_type",
+        "nav_type"
+      ],
+      "matched": 7,
+      "score": 0.6363636363636364,
+      "error": null
+    },
+    {
+      "page": "T01-screenshot",
+      "task": "T01",
+      "arm": "screenshot",
+      "starter": "northline-ops",
+      "compared": [
+        "accent",
+        "body_type",
+        "button_type",
+        "container",
+        "heading_type",
+        "motion_only_one_page",
+        "motion_reach",
+        "motion_total",
+        "nav_type",
+        "reduced_motion"
+      ],
+      "differing": [
+        "body_type",
+        "button_type",
+        "heading_type",
+        "nav_type"
+      ],
+      "matched": 6,
+      "score": 0.6,
+      "error": null
+    },
+    {
+      "page": "T01-skill-alone",
+      "task": "T01",
+      "arm": "skill-alone",
+      "starter": "northline-ops",
+      "compared": [
+        "accent",
+        "body_type",
+        "button_type",
+        "card_type",
+        "container",
+        "heading_type",
+        "motion_only_one_page",
+        "motion_reach",
+        "motion_total",
+        "nav_type",
+        "reduced_motion"
+      ],
+      "differing": [
+        "body_type",
+        "button_type",
+        "card_type",
+        "heading_type",
+        "nav_type"
+      ],
+      "matched": 6,
+      "score": 0.5454545454545454,
+      "error": null
+    },
+    {
+      "page": "T01-skill-plus-piggyback",
+      "task": "T01",
+      "arm": "skill-plus-piggyback",
+      "starter": "northline-ops",
+      "compared": [
+        "accent",
+        "body_type",
+        "button_type",
+        "container",
+        "heading_type",
+        "motion_only_one_page",
+        "motion_reach",
+        "motion_total",
+        "nav_type",
+        "reduced_motion"
+      ],
+      "differing": [
+        "body_type",
+        "button_type",
+        "heading_type",
+        "nav_type"
+      ],
+      "matched": 6,
+      "score": 0.6,
+      "error": null
+    },
+    {
+      "page": "T02-piggyback-brief",
+      "task": "T02",
+      "arm": "piggyback-brief",
+      "starter": "mina-okafor",
+      "compared": [
+        "accent",
+        "body_type",
+        "button_type",
+        "card_type",
+        "container",
+        "heading_type",
+        "motion_only_one_page",
+        "motion_reach",
+        "motion_total",
+        "nav_type",
+        "reduced_motion"
+      ],
+      "differing": [
+        "body_type",
+        "button_type",
+        "card_type",
+        "heading_type",
+        "nav_type"
+      ],
+      "matched": 6,
+      "score": 0.5454545454545454,
+      "error": null
+    },
+    {
+      "page": "T02-screenshot",
+      "task": "T02",
+      "arm": "screenshot",
+      "starter": "mina-okafor",
+      "compared": [
+        "accent",
+        "body_type",
+        "button_type",
+        "card_type",
+        "container",
+        "heading_type",
+        "motion_only_one_page",
+        "motion_reach",
+        "motion_total",
+        "nav_type",
+        "reduced_motion"
+      ],
+      "differing": [
+        "body_type",
+        "button_type",
+        "card_type",
+        "heading_type",
+        "nav_type"
+      ],
+      "matched": 6,
+      "score": 0.5454545454545454,
+      "error": null
+    },
+    {
+      "page": "T02-skill-alone",
+      "task": "T02",
+      "arm": "skill-alone",
+      "starter": "mina-okafor",
+      "compared": [
+        "accent",
+        "body_type",
+        "button_type",
+        "card_type",
+        "container",
+        "heading_type",
+        "motion_only_one_page",
+        "motion_reach",
+        "motion_total",
+        "nav_type",
+        "reduced_motion"
+      ],
+      "differing": [
+        "body_type",
+        "button_type",
+        "card_type",
+        "heading_type",
+        "nav_type"
+      ],
+      "matched": 6,
+      "score": 0.5454545454545454,
+      "error": null
+    },
+    {
+      "page": "T02-skill-plus-piggyback",
+      "task": "T02",
+      "arm": "skill-plus-piggyback",
+      "starter": "mina-okafor",
+      "compared": [
+        "accent",
+        "body_type",
+        "card_type",
+        "container",
+        "heading_type",
+        "motion_only_one_page",
+        "motion_reach",
+        "motion_total",
+        "nav_type",
+        "reduced_motion"
+      ],
+      "differing": [
+        "heading_type"
+      ],
+      "matched": 9,
+      "score": 0.9,
+      "error": null
+    },
+    {
+      "page": "T03-piggyback-brief",
+      "task": "T03",
+      "arm": "piggyback-brief",
+      "starter": "field-journal",
+      "compared": [
+        "accent",
+        "body_type",
+        "card_type",
+        "container",
+        "heading_type",
+        "motion_only_one_page",
+        "motion_reach",
+        "motion_total",
+        "nav_type",
+        "reduced_motion"
+      ],
+      "differing": [
+        "body_type",
+        "container",
+        "heading_type",
+        "nav_type"
+      ],
+      "matched": 6,
+      "score": 0.6,
+      "error": null
+    },
+    {
+      "page": "T03-screenshot",
+      "task": "T03",
+      "arm": "screenshot",
+      "starter": "field-journal",
+      "compared": [
+        "accent",
+        "body_type",
+        "card_type",
+        "container",
+        "heading_type",
+        "motion_only_one_page",
+        "motion_reach",
+        "motion_total",
+        "nav_type",
+        "reduced_motion"
+      ],
+      "differing": [
+        "body_type",
+        "card_type",
+        "heading_type",
+        "nav_type"
+      ],
+      "matched": 6,
+      "score": 0.6,
+      "error": null
+    },
+    {
+      "page": "T03-skill-alone",
+      "task": "T03",
+      "arm": "skill-alone",
+      "starter": "field-journal",
+      "compared": [
+        "accent",
+        "body_type",
+        "card_type",
+        "container",
+        "heading_type",
+        "motion_only_one_page",
+        "motion_reach",
+        "motion_total",
+        "nav_type",
+        "reduced_motion"
+      ],
+      "differing": [
+        "body_type",
+        "container",
+        "heading_type",
+        "nav_type"
+      ],
+      "matched": 6,
+      "score": 0.6,
+      "error": null
+    },
+    {
+      "page": "T03-skill-plus-piggyback",
+      "task": "T03",
+      "arm": "skill-plus-piggyback",
+      "starter": "field-journal",
+      "compared": [
+        "accent",
+        "body_type",
+        "card_type",
+        "container",
+        "heading_type",
+        "motion_only_one_page",
+        "motion_reach",
+        "motion_total",
+        "nav_type",
+        "reduced_motion"
+      ],
+      "differing": [
+        "body_type",
+        "heading_type",
+        "nav_type"
+      ],
+      "matched": 7,
+      "score": 0.7,
+      "error": null
+    },
+    {
+      "page": "T04-piggyback-brief",
+      "task": "T04",
+      "arm": "piggyback-brief",
+      "starter": "ink-and-rule",
+      "compared": [
+        "accent",
+        "body_type",
+        "card_type",
+        "heading_type",
+        "motion_only_one_page",
+        "motion_reach",
+        "motion_total",
+        "nav_type",
+        "reduced_motion"
+      ],
+      "differing": [
+        "accent",
+        "body_type",
+        "heading_type",
+        "nav_type"
+      ],
+      "matched": 5,
+      "score": 0.5555555555555556,
+      "error": null
+    },
+    {
+      "page": "T04-screenshot",
+      "task": "T04",
+      "arm": "screenshot",
+      "starter": "ink-and-rule",
+      "compared": [
+        "accent",
+        "body_type",
+        "card_type",
+        "heading_type",
+        "motion_only_one_page",
+        "motion_reach",
+        "motion_total",
+        "nav_type",
+        "reduced_motion"
+      ],
+      "differing": [
+        "body_type",
+        "card_type",
+        "heading_type",
+        "nav_type"
+      ],
+      "matched": 5,
+      "score": 0.5555555555555556,
+      "error": null
+    },
+    {
+      "page": "T04-skill-alone",
+      "task": "T04",
+      "arm": "skill-alone",
+      "starter": "ink-and-rule",
+      "compared": [
+        "accent",
+        "body_type",
+        "button_type",
+        "card_type",
+        "heading_type",
+        "motion_only_one_page",
+        "motion_reach",
+        "motion_total",
+        "nav_type",
+        "reduced_motion"
+      ],
+      "differing": [
+        "accent",
+        "body_type",
+        "button_type",
+        "card_type",
+        "heading_type",
+        "nav_type"
+      ],
+      "matched": 4,
+      "score": 0.4,
+      "error": null
+    },
+    {
+      "page": "T04-skill-plus-piggyback",
+      "task": "T04",
+      "arm": "skill-plus-piggyback",
+      "starter": "ink-and-rule",
+      "compared": [
+        "accent",
+        "body_type",
+        "card_type",
+        "heading_type",
+        "motion_only_one_page",
+        "motion_reach",
+        "motion_total",
+        "nav_type",
+        "reduced_motion"
+      ],
+      "differing": [
+        "accent",
+        "body_type",
+        "card_type",
+        "heading_type",
+        "nav_type"
+      ],
+      "matched": 4,
+      "score": 0.4444444444444444,
+      "error": null
+    },
+    {
+      "page": "T05-piggyback-brief",
+      "task": "T05",
+      "arm": "piggyback-brief",
+      "starter": "little-plot",
+      "compared": [
+        "accent",
+        "body_type",
+        "button_type",
+        "card_type",
+        "container",
+        "heading_type",
+        "motion_only_one_page",
+        "motion_reach",
+        "motion_total",
+        "nav_type",
+        "reduced_motion"
+      ],
+      "differing": [
+        "body_type",
+        "button_type",
+        "nav_type"
+      ],
+      "matched": 8,
+      "score": 0.7272727272727273,
+      "error": null
+    },
+    {
+      "page": "T05-screenshot",
+      "task": "T05",
+      "arm": "screenshot",
+      "starter": "little-plot",
+      "compared": [
+        "accent",
+        "body_type",
+        "button_type",
+        "card_type",
+        "container",
+        "heading_type",
+        "motion_only_one_page",
+        "motion_reach",
+        "motion_total",
+        "nav_type",
+        "reduced_motion"
+      ],
+      "differing": [
+        "body_type",
+        "button_type",
+        "heading_type",
+        "nav_type"
+      ],
+      "matched": 7,
+      "score": 0.6363636363636364,
+      "error": null
+    },
+    {
+      "page": "T05-skill-alone",
+      "task": "T05",
+      "arm": "skill-alone",
+      "starter": "little-plot",
+      "compared": [
+        "accent",
+        "body_type",
+        "button_type",
+        "card_type",
+        "container",
+        "heading_type",
+        "motion_only_one_page",
+        "motion_reach",
+        "motion_total",
+        "nav_type",
+        "reduced_motion"
+      ],
+      "differing": [
+        "heading_type",
+        "nav_type"
+      ],
+      "matched": 9,
+      "score": 0.8181818181818182,
+      "error": null
+    },
+    {
+      "page": "T05-skill-plus-piggyback",
+      "task": "T05",
+      "arm": "skill-plus-piggyback",
+      "starter": "little-plot",
+      "compared": [
+        "accent",
+        "body_type",
+        "button_type",
+        "container",
+        "heading_type",
+        "motion_only_one_page",
+        "motion_reach",
+        "motion_total",
+        "nav_type",
+        "reduced_motion"
+      ],
+      "differing": [
+        "heading_type",
+        "nav_type"
+      ],
+      "matched": 8,
+      "score": 0.8,
+      "error": null
+    },
+    {
+      "page": "T06-piggyback-brief",
+      "task": "T06",
+      "arm": "piggyback-brief",
+      "starter": "good-day-assembly",
+      "compared": [
+        "accent",
+        "body_type",
+        "card_type",
+        "container",
+        "heading_type",
+        "motion_only_one_page",
+        "motion_reach",
+        "motion_total",
+        "nav_type",
+        "reduced_motion"
+      ],
+      "differing": [
+        "accent",
+        "body_type",
+        "card_type",
+        "heading_type",
+        "nav_type"
+      ],
+      "matched": 5,
+      "score": 0.5,
+      "error": null
+    },
+    {
+      "page": "T06-screenshot",
+      "task": "T06",
+      "arm": "screenshot",
+      "starter": "good-day-assembly",
+      "compared": [
+        "accent",
+        "body_type",
+        "card_type",
+        "container",
+        "heading_type",
+        "motion_only_one_page",
+        "motion_reach",
+        "motion_total",
+        "nav_type",
+        "reduced_motion"
+      ],
+      "differing": [
+        "accent",
+        "body_type",
+        "card_type",
+        "heading_type",
+        "nav_type"
+      ],
+      "matched": 5,
+      "score": 0.5,
+      "error": null
+    },
+    {
+      "page": "T06-skill-alone",
+      "task": "T06",
+      "arm": "skill-alone",
+      "starter": "good-day-assembly",
+      "compared": [
+        "accent",
+        "body_type",
+        "card_type",
+        "container",
+        "heading_type",
+        "motion_only_one_page",
+        "motion_reach",
+        "motion_total",
+        "nav_type",
+        "reduced_motion"
+      ],
+      "differing": [
+        "body_type",
+        "card_type",
+        "heading_type",
+        "nav_type"
+      ],
+      "matched": 6,
+      "score": 0.6,
+      "error": null
+    },
+    {
+      "page": "T06-skill-plus-piggyback",
+      "task": "T06",
+      "arm": "skill-plus-piggyback",
+      "starter": "good-day-assembly",
+      "compared": [
+        "accent",
+        "body_type",
+        "card_type",
+        "container",
+        "heading_type",
+        "motion_only_one_page",
+        "motion_reach",
+        "motion_total",
+        "nav_type",
+        "reduced_motion"
+      ],
+      "differing": [
+        "card_type",
+        "heading_type",
+        "nav_type"
+      ],
+      "matched": 7,
+      "score": 0.7,
+      "error": null
+    },
+    {
+      "page": "T07-piggyback-brief",
+      "task": "T07",
+      "arm": "piggyback-brief",
+      "starter": "northline-ops",
+      "compared": [
+        "accent",
+        "body_type",
+        "button_type",
+        "card_type",
+        "container",
+        "heading_type",
+        "motion_only_one_page",
+        "motion_reach",
+        "motion_total",
+        "nav_type",
+        "reduced_motion"
+      ],
+      "differing": [
+        "body_type",
+        "button_type",
+        "card_type",
+        "heading_type",
+        "nav_type"
+      ],
+      "matched": 6,
+      "score": 0.5454545454545454,
+      "error": null
+    },
+    {
+      "page": "T07-screenshot",
+      "task": "T07",
+      "arm": "screenshot",
+      "starter": "northline-ops",
+      "compared": [
+        "accent",
+        "body_type",
+        "button_type",
+        "container",
+        "heading_type",
+        "motion_only_one_page",
+        "motion_reach",
+        "motion_total",
+        "nav_type",
+        "reduced_motion"
+      ],
+      "differing": [
+        "body_type",
+        "button_type",
+        "heading_type",
+        "nav_type"
+      ],
+      "matched": 6,
+      "score": 0.6,
+      "error": null
+    },
+    {
+      "page": "T07-skill-alone",
+      "task": "T07",
+      "arm": "skill-alone",
+      "starter": "northline-ops",
+      "compared": [
+        "accent",
+        "body_type",
+        "button_type",
+        "card_type",
+        "container",
+        "heading_type",
+        "motion_only_one_page",
+        "motion_reach",
+        "motion_total",
+        "nav_type",
+        "reduced_motion"
+      ],
+      "differing": [
+        "body_type",
+        "button_type",
+        "card_type",
+        "heading_type",
+        "nav_type"
+      ],
+      "matched": 6,
+      "score": 0.5454545454545454,
+      "error": null
+    },
+    {
+      "page": "T07-skill-plus-piggyback",
+      "task": "T07",
+      "arm": "skill-plus-piggyback",
+      "starter": "northline-ops",
+      "compared": [
+        "accent",
+        "body_type",
+        "card_type",
+        "container",
+        "heading_type",
+        "motion_only_one_page",
+        "motion_reach",
+        "motion_total",
+        "nav_type",
+        "reduced_motion"
+      ],
+      "differing": [
+        "accent",
+        "body_type",
+        "card_type",
+        "heading_type",
+        "nav_type"
+      ],
+      "matched": 5,
+      "score": 0.5,
+      "error": null
+    },
+    {
+      "page": "T08-piggyback-brief",
+      "task": "T08",
+      "arm": "piggyback-brief",
+      "starter": "mina-okafor",
+      "compared": [
+        "accent",
+        "body_type",
+        "button_type",
+        "card_type",
+        "container",
+        "heading_type",
+        "motion_only_one_page",
+        "motion_reach",
+        "motion_total",
+        "nav_type",
+        "reduced_motion"
+      ],
+      "differing": [
+        "body_type",
+        "button_type",
+        "card_type",
+        "container",
+        "heading_type",
+        "nav_type"
+      ],
+      "matched": 5,
+      "score": 0.45454545454545453,
+      "error": null
+    },
+    {
+      "page": "T08-screenshot",
+      "task": "T08",
+      "arm": "screenshot",
+      "starter": "mina-okafor",
+      "compared": [
+        "accent",
+        "body_type",
+        "button_type",
+        "card_type",
+        "container",
+        "heading_type",
+        "motion_only_one_page",
+        "motion_reach",
+        "motion_total",
+        "nav_type",
+        "reduced_motion"
+      ],
+      "differing": [
+        "body_type",
+        "button_type",
+        "card_type",
+        "heading_type",
+        "nav_type"
+      ],
+      "matched": 6,
+      "score": 0.5454545454545454,
+      "error": null
+    },
+    {
+      "page": "T08-skill-alone",
+      "task": "T08",
+      "arm": "skill-alone",
+      "starter": "mina-okafor",
+      "compared": [
+        "accent",
+        "body_type",
+        "button_type",
+        "card_type",
+        "container",
+        "heading_type",
+        "motion_only_one_page",
+        "motion_reach",
+        "motion_total",
+        "nav_type",
+        "reduced_motion"
+      ],
+      "differing": [
+        "body_type",
+        "button_type",
+        "card_type",
+        "heading_type",
+        "nav_type"
+      ],
+      "matched": 6,
+      "score": 0.5454545454545454,
+      "error": null
+    },
+    {
+      "page": "T08-skill-plus-piggyback",
+      "task": "T08",
+      "arm": "skill-plus-piggyback",
+      "starter": "mina-okafor",
+      "compared": [
+        "accent",
+        "body_type",
+        "button_type",
+        "card_type",
+        "container",
+        "heading_type",
+        "motion_only_one_page",
+        "motion_reach",
+        "motion_total",
+        "nav_type",
+        "reduced_motion"
+      ],
+      "differing": [
+        "body_type",
+        "button_type",
+        "card_type"
+      ],
+      "matched": 8,
+      "score": 0.7272727272727273,
+      "error": null
+    },
+    {
+      "page": "T09-piggyback-brief",
+      "task": "T09",
+      "arm": "piggyback-brief",
+      "starter": "field-journal",
+      "compared": [
+        "accent",
+        "body_type",
+        "card_type",
+        "container",
+        "heading_type",
+        "motion_only_one_page",
+        "motion_reach",
+        "motion_total",
+        "nav_type",
+        "reduced_motion"
+      ],
+      "differing": [
+        "body_type",
+        "container",
+        "heading_type",
+        "nav_type"
+      ],
+      "matched": 6,
+      "score": 0.6,
+      "error": null
+    },
+    {
+      "page": "T09-screenshot",
+      "task": "T09",
+      "arm": "screenshot",
+      "starter": "field-journal",
+      "compared": [
+        "accent",
+        "body_type",
+        "card_type",
+        "container",
+        "heading_type",
+        "motion_only_one_page",
+        "motion_reach",
+        "motion_total",
+        "nav_type",
+        "reduced_motion"
+      ],
+      "differing": [
+        "body_type",
+        "heading_type",
+        "nav_type"
+      ],
+      "matched": 7,
+      "score": 0.7,
+      "error": null
+    },
+    {
+      "page": "T09-skill-alone",
+      "task": "T09",
+      "arm": "skill-alone",
+      "starter": "field-journal",
+      "compared": [
+        "accent",
+        "body_type",
+        "card_type",
+        "container",
+        "heading_type",
+        "motion_only_one_page",
+        "motion_reach",
+        "motion_total",
+        "nav_type",
+        "reduced_motion"
+      ],
+      "differing": [
+        "body_type",
+        "card_type",
+        "heading_type",
+        "nav_type"
+      ],
+      "matched": 6,
+      "score": 0.6,
+      "error": null
+    },
+    {
+      "page": "T09-skill-plus-piggyback",
+      "task": "T09",
+      "arm": "skill-plus-piggyback",
+      "starter": "field-journal",
+      "compared": [
+        "accent",
+        "body_type",
+        "card_type",
+        "container",
+        "heading_type",
+        "motion_only_one_page",
+        "motion_reach",
+        "motion_total",
+        "nav_type",
+        "reduced_motion"
+      ],
+      "differing": [
+        "body_type",
+        "heading_type",
+        "nav_type"
+      ],
+      "matched": 7,
+      "score": 0.7,
+      "error": null
+    },
+    {
+      "page": "T10-piggyback-brief",
+      "task": "T10",
+      "arm": "piggyback-brief",
+      "starter": "little-plot",
+      "compared": [
+        "accent",
+        "body_type",
+        "button_type",
+        "card_type",
+        "container",
+        "heading_type",
+        "motion_only_one_page",
+        "motion_reach",
+        "motion_total",
+        "nav_type",
+        "reduced_motion"
+      ],
+      "differing": [
+        "body_type",
+        "button_type",
+        "nav_type"
+      ],
+      "matched": 8,
+      "score": 0.7272727272727273,
+      "error": null
+    },
+    {
+      "page": "T10-screenshot",
+      "task": "T10",
+      "arm": "screenshot",
+      "starter": "little-plot",
+      "compared": [
+        "accent",
+        "body_type",
+        "button_type",
+        "card_type",
+        "container",
+        "heading_type",
+        "motion_only_one_page",
+        "motion_reach",
+        "motion_total",
+        "nav_type",
+        "reduced_motion"
+      ],
+      "differing": [
+        "button_type",
+        "container",
+        "heading_type",
+        "nav_type"
+      ],
+      "matched": 7,
+      "score": 0.6363636363636364,
+      "error": null
+    },
+    {
+      "page": "T10-skill-alone",
+      "task": "T10",
+      "arm": "skill-alone",
+      "starter": "little-plot",
+      "compared": [
+        "accent",
+        "body_type",
+        "button_type",
+        "card_type",
+        "container",
+        "heading_type",
+        "motion_only_one_page",
+        "motion_reach",
+        "motion_total",
+        "nav_type",
+        "reduced_motion"
+      ],
+      "differing": [
+        "button_type",
+        "container",
+        "heading_type",
+        "motion_only_one_page",
+        "motion_total",
+        "nav_type"
+      ],
+      "matched": 5,
+      "score": 0.45454545454545453,
+      "error": null
+    },
+    {
+      "page": "T10-skill-plus-piggyback",
+      "task": "T10",
+      "arm": "skill-plus-piggyback",
+      "starter": "little-plot",
+      "compared": [
+        "accent",
+        "body_type",
+        "button_type",
+        "card_type",
+        "container",
+        "heading_type",
+        "motion_only_one_page",
+        "motion_reach",
+        "motion_total",
+        "nav_type",
+        "reduced_motion"
+      ],
+      "differing": [
+        "button_type",
+        "nav_type"
+      ],
+      "matched": 9,
+      "score": 0.8181818181818182,
+      "error": null
+    }
+  ]
+}
