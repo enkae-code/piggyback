@@ -135,17 +135,22 @@ INDEX = """<!doctype html>
 </head>
 <body>
 <main>
-<h1>C3 blind design rating</h1>
-<p>Thanks for rating. This takes about 15 minutes.</p>
+<h1>Which page matches the original? A blind test</h1>
+<p>An AI built web pages from an original design in different ways. For each item you see the
+original page, then two AI-built pages, A and B, with no labels. Pick the one that looks more like
+the original's design: its colours, fonts, spacing and layout. Judge the look, not which page you
+like more or which has more content. It takes about 15 minutes, and you need a GitHub account to
+submit.</p>
 <ol>
-<li>Check the <a href="https://github.com/enkae-code/piggyback/issues?q=label%3Ac3-rating">issues
-labelled c3-rating</a> and pick a packet (P1 to P6) with fewer than three submissions.</li>
-<li>You must not have built any of these pages.</li>
-<li>For each item, judge only which page looks more like the original's design direction for
-the task. Do not judge which you like more, or which is more complete.</li>
+<li>Open the <a href="https://github.com/enkae-code/piggyback/issues?q=label%3Ac3-rating">list of
+submissions</a> and pick a packet (P1 to P6) that nobody has taken yet. Each packet needs one
+person. Please don't read other people's picks.</li>
+<li>Open your packet below. It has five tasks with two pairs each, so ten picks.</li>
 <li>Submit one <a href="https://github.com/enkae-code/piggyback/issues/new?template=c3-rating.yml">
-C3 rating issue</a> with your packet and ten picks. Rate once.</li>
+rating form</a>: choose your packet, put it in the title (for example "[C3 rating] P2"), and give
+each pick with one line on why. Submit once.</li>
 </ol>
+<p>The pages were built by an AI for this test. If you helped make them, please don't rate.</p>
 <h2>Packets</h2>
 <ul>
 {links}
