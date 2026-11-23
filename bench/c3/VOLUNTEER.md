@@ -8,9 +8,10 @@ Piggyback reads a web page and writes a short brief of its measured design: colo
 
 No writers are needed. The pages are generated from the starters' references, and the test does not depend on anyone writing a design file.
 
-## Raters: later
+## Raters
 
-A rating round comes after the pages are built. Details will be posted here.
+Rate one packet at the blind rating site: https://enkae-code.github.io/piggyback/bench/c3/rate/
+You must not have built any of the pages. Submit one `c3-rating` issue per packet.
 
 ## Starters
 

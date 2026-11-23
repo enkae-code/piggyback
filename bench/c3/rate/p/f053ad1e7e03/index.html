@@ -1,0 +1,289 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hollow Lane Commons — a community garden</title>
+<meta name="description" content="Hollow Lane Commons is a nonprofit community garden. Volunteer a shift, share the harvest, and grow food together.">
+<style>
+  :root{
+    --bg:#dce6d0;
+    --ink:#1e3024;
+    --leaf:#3f6447;
+    --cream:#ecd5a8;
+    --bud:#b2401f;
+    --serif:"EB Garamond","Garamond","Cormorant Garamond","Adobe Garamond Pro","Iowan Old Style","Palatino Linotype","Book Antiqua",Palatino,Georgia,serif;
+    --wrap:1160px;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--serif);font-size:1.25rem;line-height:1.6;-webkit-font-smoothing:antialiased;overflow-wrap:break-word}
+  a{color:inherit}
+  .wrap{max-width:var(--wrap);margin:0 auto;padding:0 clamp(1.25rem,4vw,2rem)}
+  .skip{position:absolute;left:-999px;top:0;background:var(--ink);color:var(--bg);padding:.5rem 1rem;z-index:10}
+  .skip:focus{left:1rem}
+  .sr-only{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
+  :focus-visible{outline:3px solid var(--bud);outline-offset:3px;border-radius:4px}
+
+  /* header */
+  .site-header .wrap{display:flex;align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap;padding-top:1.4rem;padding-bottom:1.4rem}
+  .brand{font-size:1.85rem;font-weight:600;letter-spacing:-.01em;text-decoration:none;line-height:1}
+  .site-nav ul{list-style:none;margin:0;padding:0;display:flex;flex-wrap:wrap;gap:.4rem 2.1rem}
+  .site-nav a{text-decoration:none;font-size:1.15rem;padding:.25rem 0;border-bottom:1px solid transparent}
+  .site-nav a:hover{border-bottom-color:currentColor}
+
+  /* hero */
+  .hero .wrap{display:grid;grid-template-columns:1.45fr 1fr;gap:3rem;align-items:center;padding-top:clamp(2rem,6vw,4.5rem);padding-bottom:2rem}
+  .hero .wrap > *{min-width:0}
+  h1{font-weight:400;font-size:clamp(3.2rem,9.8vw,9.25rem);line-height:.98;letter-spacing:-.025em;margin:0}
+  .hero p{font-size:1.45rem;line-height:1.4;margin:0 0 1.6rem;max-width:22ch}
+  .btn{display:inline-block;background:var(--ink);color:#f3f1e4;text-decoration:none;font-weight:600;font-size:1.2rem;padding:.8rem 1.6rem;border-radius:6px;border:2px solid var(--ink);transition:transform .15s}
+  .btn:hover{transform:translateY(-2px)}
+  .btn.light{background:var(--cream);color:var(--ink);border-color:var(--cream)}
+
+  /* week strip / volunteer schedule */
+  .week{--soil:186px;position:relative;background:linear-gradient(to bottom,transparent 0 var(--soil),var(--ink) var(--soil) 100%);color:#f3f1e4;margin-top:1rem}
+  .week ol{list-style:none;margin:0 auto;padding:0 clamp(1.25rem,4vw,2rem) 1.6rem;max-width:var(--wrap);display:grid;grid-template-columns:repeat(7,minmax(0,1fr))}
+  .day{text-align:center;display:flex;flex-direction:column;align-items:center;min-width:0;padding:0 .2rem}
+  .day svg{width:80px;height:230px;display:block;flex:none}
+  .day strong{display:block;font-size:1.2rem;margin-top:.2rem;line-height:1.3}
+  .day .stage{display:block;font-size:1rem;opacity:.85;line-height:1.3}
+  .day .shift{display:block;font-size:.95rem;color:var(--cream);margin-top:.45rem;line-height:1.3}
+
+  /* sections */
+  section.block{padding:clamp(3.5rem,8vw,6.5rem) 0}
+  .eyebrow{font-size:1rem;letter-spacing:.14em;text-transform:uppercase;color:var(--leaf);margin:0 0 .8rem;font-weight:600}
+  h2{font-weight:400;font-size:clamp(2.3rem,5vw,4rem);line-height:1.02;letter-spacing:-.02em;margin:0 0 1.2rem}
+  h3{font-weight:600;font-size:1.45rem;line-height:1.2;margin:0 0 .4rem}
+  .split{display:grid;grid-template-columns:1fr 1fr;gap:3rem 5rem;align-items:start}
+  .split > *{min-width:0}
+  .mission .statement{font-size:1.6rem;line-height:1.35;margin:0;max-width:24ch}
+  .mission .more{margin:0 0 1.6rem;max-width:34ch}
+  .facts{list-style:none;margin:0;padding:1.6rem 0 0;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1.6rem 2rem;border-top:1px solid rgba(30,48,36,.25)}
+  .facts b{display:block;font-size:3rem;font-weight:400;line-height:1}
+  .facts span{font-size:1.05rem}
+
+  .produce{border-top:1px solid rgba(30,48,36,.2)}
+  .produce .intro{max-width:40ch;margin:0 0 2.4rem}
+  .cards{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:1.25rem}
+  .card{background:#e7eedd;border:1px solid rgba(30,48,36,.14);border-radius:10px;padding:1.5rem 1.4rem 1.6rem;display:flex;flex-direction:column}
+  .card svg{width:56px;height:56px;margin-bottom:1rem}
+  .card p{font-size:1.08rem;line-height:1.45;margin:0 0 1rem}
+  .card .when{margin-top:auto;font-size:.95rem;color:var(--leaf);font-weight:600}
+
+  .volunteer{background:var(--ink);color:#f3f1e4}
+  .volunteer .eyebrow{color:var(--cream)}
+  .volunteer p{max-width:36ch;margin:0 0 1.6rem}
+  .steps{margin:0;padding:0;list-style:none;counter-reset:s}
+  .steps li{counter-increment:s;display:grid;grid-template-columns:2.6rem minmax(0,1fr);gap:.8rem;padding:1rem 0;border-bottom:1px solid rgba(243,241,228,.18);font-size:1.12rem;line-height:1.45}
+  .steps li::before{content:counter(s);font-size:1.6rem;color:var(--cream);line-height:1}
+  .steps strong{display:block}
+
+  footer{padding:2.2rem 0;font-size:1rem}
+  footer .wrap{display:flex;justify-content:space-between;flex-wrap:wrap;gap:1rem}
+  footer p{margin:0}
+
+  @media (max-width:900px){
+    .hero .wrap,.split{grid-template-columns:1fr;gap:2rem}
+    .cards{grid-template-columns:repeat(2,minmax(0,1fr))}
+  }
+  /* small screens: the week wraps into two soil rows, full-bleed, no sideways scroll */
+  @media (max-width:760px){
+    .week{background:none}
+    .week ol{grid-template-columns:repeat(4,minmax(0,1fr));padding:0;max-width:none}
+    .day{background:linear-gradient(to bottom,transparent 0 186px,var(--ink) 186px 100%);padding-bottom:1.4rem}
+    .day:last-child{grid-column:span 2}
+    .day svg{width:72px;height:230px}
+    .day strong{font-size:1.1rem}
+    .day .stage{font-size:.9rem}
+    .day .shift{font-size:.85rem}
+  }
+  @media (max-width:560px){
+    .site-nav ul{gap:.3rem 1.2rem}
+    .site-nav a{font-size:1.05rem}
+    .cards{grid-template-columns:1fr}
+  }
+  @media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}.btn{transition:none}}
+</style>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+
+<svg width="0" height="0" style="position:absolute;left:0;top:0" aria-hidden="true" focusable="false">
+  <defs>
+    <g id="pair">
+      <path d="M40 0C32-12 16-13 3-5 14 6 30 7 40 0Z" fill="#3f6447"/>
+      <path d="M40 0C48-12 64-13 77-5 66 6 50 7 40 0Z" fill="#3f6447"/>
+    </g>
+    <path id="roots" d="M40 186V222M40 206l-14 8M40 206l14 8" stroke="#ecd5a8" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+  </defs>
+</svg>
+
+<header class="site-header" id="top">
+  <div class="wrap">
+    <a class="brand" href="#top">hollow lane commons</a>
+    <nav class="site-nav" aria-label="Main">
+      <ul>
+        <li><a href="#mission">Our mission</a></li>
+        <li><a href="#schedule">Volunteer week</a></li>
+        <li><a href="#produce">Produce share</a></li>
+        <li><a href="#volunteer">Join a shift</a></li>
+      </ul>
+    </nav>
+  </div>
+</header>
+
+<main id="main">
+  <section class="hero" aria-labelledby="hero-title">
+    <div class="wrap">
+      <h1 id="hero-title">Grow food for the whole street.</h1>
+      <div>
+        <p>A nonprofit community garden on a once-empty lot, tended by neighbours and shared with anyone who needs fresh food.</p>
+        <a class="btn" href="#volunteer">Volunteer this week</a>
+      </div>
+    </div>
+  </section>
+
+  <section class="week" id="schedule" aria-labelledby="week-title">
+    <h2 id="week-title" class="sr-only">Volunteer schedule for the week</h2>
+    <ol>
+      <li class="day">
+        <svg viewBox="0 0 80 230" aria-hidden="true"><ellipse cx="40" cy="196" rx="12" ry="7" fill="#ecd5a8"/></svg>
+        <strong>Mon</strong><span class="stage">seed sorting</span><span class="shift">5–7 pm</span>
+      </li>
+      <li class="day">
+        <svg viewBox="0 0 80 230" aria-hidden="true">
+          <path d="M40 190V168q0-8 8-8" stroke="#3f6447" stroke-width="4" fill="none" stroke-linecap="round"/>
+          <path d="M40 196V222" stroke="#ecd5a8" stroke-width="2.5" stroke-linecap="round"/>
+          <ellipse cx="40" cy="192" rx="12" ry="7" fill="#ecd5a8"/>
+        </svg>
+        <strong>Tue</strong><span class="stage">compost &amp; soil</span><span class="shift">7–9 am</span>
+      </li>
+      <li class="day">
+        <svg viewBox="0 0 80 230" aria-hidden="true">
+          <path d="M40 186V150" stroke="#3f6447" stroke-width="3" stroke-linecap="round"/>
+          <use href="#pair" transform="translate(20 152) scale(.5)"/>
+          <path d="M40 186V214M40 202l-10 6M40 202l10 6" stroke="#ecd5a8" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+        </svg>
+        <strong>Wed</strong><span class="stage">seedling transplant</span><span class="shift">5–7 pm</span>
+      </li>
+      <li class="day">
+        <svg viewBox="0 0 80 230" aria-hidden="true">
+          <path d="M40 186V122" stroke="#3f6447" stroke-width="3.5" stroke-linecap="round"/>
+          <use href="#pair" transform="translate(8 126) scale(.8)"/>
+          <use href="#roots"/>
+        </svg>
+        <strong>Thu</strong><span class="stage">watering round</span><span class="shift">6–8 pm</span>
+      </li>
+      <li class="day">
+        <svg viewBox="0 0 80 230" aria-hidden="true">
+          <path d="M40 186V92" stroke="#3f6447" stroke-width="4" stroke-linecap="round"/>
+          <use href="#pair" transform="translate(0 140)"/>
+          <use href="#pair" transform="translate(4 102) scale(.9)"/>
+          <use href="#roots"/>
+        </svg>
+        <strong>Fri</strong><span class="stage">weeding &amp; paths</span><span class="shift">9–11 am</span>
+      </li>
+      <li class="day">
+        <svg viewBox="0 0 80 230" aria-hidden="true">
+          <path d="M40 186V62" stroke="#3f6447" stroke-width="4" stroke-linecap="round"/>
+          <use href="#pair" transform="translate(0 146)"/>
+          <use href="#pair" transform="translate(2 110) scale(.95)"/>
+          <use href="#pair" transform="translate(6 74) scale(.85)"/>
+          <use href="#roots"/>
+        </svg>
+        <strong>Sat</strong><span class="stage">harvest day</span><span class="shift">8 am–noon</span>
+      </li>
+      <li class="day">
+        <svg viewBox="0 0 80 230" aria-hidden="true">
+          <path d="M40 186V30" stroke="#3f6447" stroke-width="4" stroke-linecap="round"/>
+          <use href="#pair" transform="translate(0 150)"/>
+          <use href="#pair" transform="translate(2 118) scale(.95)"/>
+          <use href="#pair" transform="translate(6 86) scale(.85)"/>
+          <use href="#pair" transform="translate(12 52) scale(.7)"/>
+          <circle cx="40" cy="24" r="9" fill="#b2401f"/>
+          <use href="#roots"/>
+        </svg>
+        <strong>Sun</strong><span class="stage">produce share</span><span class="shift">10 am–1 pm</span>
+      </li>
+    </ol>
+  </section>
+
+  <section class="block mission" id="mission" aria-labelledby="mission-title">
+    <div class="wrap split">
+      <div>
+        <h2 id="mission-title">Our mission</h2>
+        <p class="statement">We turn an empty lot into a volunteer-run garden that grows fresh, chemical-free food, teaches anyone who wants to learn, and gives every harvest back to our neighbours.</p>
+      </div>
+      <div>
+        <p class="more">No plot fees, no experience needed — just a pair of hands and an hour or two in the week.</p>
+        <ul class="facts">
+          <li><b>38</b><span>raised beds in rotation</span></li>
+          <li><b>1.2 t</b><span>of produce shared last season</span></li>
+          <li><b>140</b><span>neighbours on the volunteer list</span></li>
+          <li><b>0</b><span>cost to take part</span></li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section class="block produce" id="produce" aria-labelledby="produce-title">
+    <div class="wrap">
+      <p class="eyebrow">Produce share</p>
+      <h2 id="produce-title">What’s in the basket this season.</h2>
+      <p class="intro">Every Sunday the week’s harvest goes out on long tables by the gate. Take what you’ll use — volunteers, neighbours and the local food pantry all share from the same harvest.</p>
+      <ul class="cards">
+        <li class="card">
+          <svg viewBox="0 0 56 56" aria-hidden="true"><path d="M28 14C18 14 10 22 10 32s8 16 18 16 18-6 18-16-8-18-18-18Z" fill="#b2401f"/><path d="M28 16c-4-6-10-6-12-4 4 0 8 2 12 4 4-2 8-4 12-4-2-2-8-2-12 4Z" fill="#3f6447"/></svg>
+          <h3>Tomatoes</h3>
+          <p>Heirloom slicers and cherry tomatoes from the south beds.</p>
+          <span class="when">July – September</span>
+        </li>
+        <li class="card">
+          <svg viewBox="0 0 56 56" aria-hidden="true"><path d="M28 48C14 40 10 26 16 12c6 6 10 14 12 22 2-8 6-16 12-22 6 14 2 28-12 36Z" fill="#3f6447"/><path d="M28 48V22" stroke="#dce6d0" stroke-width="2"/></svg>
+          <h3>Leafy greens</h3>
+          <p>Chard, kale, lettuce and spinach, cut fresh the morning of the share.</p>
+          <span class="when">April – November</span>
+        </li>
+        <li class="card">
+          <svg viewBox="0 0 56 56" aria-hidden="true"><path d="M22 20h12l-4 30h-4Z" fill="#d9792c"/><path d="M28 20c-2-6-6-10-10-10 4 4 6 7 8 10m2 0c2-6 6-10 10-10-4 4-6 7-8 10" stroke="#3f6447" stroke-width="3" fill="none" stroke-linecap="round"/></svg>
+          <h3>Roots</h3>
+          <p>Carrots, beets and new potatoes pulled on Saturday harvest day.</p>
+          <span class="when">June – October</span>
+        </li>
+        <li class="card">
+          <svg viewBox="0 0 56 56" aria-hidden="true"><path d="M28 50V18" stroke="#3f6447" stroke-width="3" stroke-linecap="round"/><g fill="#3f6447"><ellipse cx="20" cy="22" rx="7" ry="4" transform="rotate(-30 20 22)"/><ellipse cx="36" cy="30" rx="7" ry="4" transform="rotate(30 36 30)"/><ellipse cx="20" cy="38" rx="7" ry="4" transform="rotate(-30 20 38)"/></g><circle cx="28" cy="14" r="5" fill="#ecd5a8"/></svg>
+          <h3>Herbs &amp; flowers</h3>
+          <p>Basil, mint, dill and a cut-flower bunch for the kitchen table.</p>
+          <span class="when">May – October</span>
+        </li>
+      </ul>
+    </div>
+  </section>
+
+  <section class="block volunteer" id="volunteer" aria-labelledby="volunteer-title">
+    <div class="wrap split">
+      <div>
+        <p class="eyebrow">Volunteer with us</p>
+        <h2 id="volunteer-title">Bring your hands. We’ll bring the gloves.</h2>
+        <p>Pick any shift from the week above and just turn up — tools, gloves, water and a friendly lead gardener are waiting at the shed.</p>
+        <a class="btn light" href="mailto:?subject=Volunteering%20at%20Hollow%20Lane%20Commons">Sign up for a shift</a>
+      </div>
+      <ol class="steps">
+        <li><span><strong>Choose a day</strong>Any shift, any week. Come once or come every Saturday.</span></li>
+        <li><span><strong>Meet at the green shed</strong>Your shift lead will pair you with a task and a buddy.</span></li>
+        <li><span><strong>Take some home</strong>Every volunteer leaves with a share of the harvest.</span></li>
+      </ol>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <p><strong>hollow lane commons</strong> — a volunteer-run nonprofit garden.</p>
+    <p>Gate open daily, dawn to dusk.</p>
+  </div>
+</footer>
+</body>
+</html>

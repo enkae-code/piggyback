@@ -1,0 +1,564 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The Ferry That Ran on Faith — The Millbrook Ledger</title>
+<meta name="description" content="A local history story from The Millbrook Ledger: how the Alder Creek ferry kept a river town connected for sixty-one years.">
+<style>
+  /* Fonts: EB Garamond if installed locally; otherwise a close local serif. No network requests. */
+  @font-face {
+    font-family: "Ledger Serif";
+    src: local("EB Garamond"), local("EBGaramond-Regular"), local("EB Garamond Regular");
+    font-weight: 400;
+    font-style: normal;
+  }
+  @font-face {
+    font-family: "Ledger Serif";
+    src: local("EB Garamond Italic"), local("EBGaramond-Italic");
+    font-weight: 400;
+    font-style: italic;
+  }
+  @font-face {
+    font-family: "Ledger Serif";
+    src: local("EB Garamond SemiBold"), local("EBGaramond-SemiBold"), local("EB Garamond Medium");
+    font-weight: 600;
+    font-style: normal;
+  }
+
+  :root {
+    --bg: #e1e6e9;
+    --ink: #131a21;
+    --ink-2: #343e46;
+    --rule: #b9c2c8;
+    --paper: #eaeef0;
+    --accent: #8a3b1f;          /* used only for tiny marks */
+    --serif: "Ledger Serif", "EB Garamond", Garamond, "Garamond Premier Pro", "Cormorant Garamond", "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+
+    --s-1: 4px;
+    --s-2: 10px;
+    --s-3: 14px;
+    --s-4: 20px;
+    --s-5: 22px;
+    --s-6: 39px;
+
+    --t-display: clamp(3rem, 7.2vw, 6.48rem); /* 103.7px at 1440 */
+    --t-h2: clamp(1.6rem, 2.4vw, 2rem);         /* 32px */
+    --t-deck: clamp(1.35rem, 2vw, 1.75rem);     /* 28px */
+    --t-body: 1.1875rem;                         /* 19px */
+    --t-lead: 1.125rem;                          /* 18px */
+    --t-small: 0.95rem;                          /* 15.2px */
+
+    --container: 1180px;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--serif);
+    font-size: var(--t-body);
+    line-height: 1.55;
+    font-kerning: normal;
+    font-variant-ligatures: common-ligatures;
+  }
+  img, svg { display: block; max-width: 100%; }
+  a { color: inherit; }
+  a:focus-visible, button:focus-visible, input:focus-visible {
+    outline: 2px solid var(--ink);
+    outline-offset: 3px;
+  }
+
+  .skip {
+    position: absolute; left: var(--s-2); top: -60px;
+    background: var(--ink); color: var(--bg);
+    padding: var(--s-2) var(--s-3); text-decoration: none; z-index: 10;
+  }
+  .skip:focus { top: var(--s-2); }
+
+  .wrap {
+    width: 100%;
+    max-width: var(--container);
+    margin: 0 auto;
+    padding: 0 var(--s-4);
+  }
+
+  /* Masthead + nav */
+  .masthead {
+    border-bottom: 1px solid var(--ink);
+  }
+  .masthead .wrap {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--s-4);
+    padding-top: var(--s-5);
+    padding-bottom: var(--s-3);
+    flex-wrap: wrap;
+  }
+  .brand {
+    font-size: var(--t-deck);
+    font-weight: 600;
+    letter-spacing: 0.01em;
+    text-decoration: none;
+    line-height: 1.1;
+  }
+  .brand small {
+    display: block;
+    font-size: var(--t-small);
+    font-weight: 400;
+    font-style: italic;
+    color: var(--ink-2);
+    letter-spacing: 0;
+    margin-top: var(--s-1);
+  }
+  .nav ul {
+    list-style: none;
+    margin: 0; padding: 0;
+    display: flex; flex-wrap: wrap;
+    gap: var(--s-1) var(--s-5);
+    font-size: var(--t-lead);
+  }
+  .nav a {
+    text-decoration: none;
+    padding: var(--s-1) 0;
+    border-bottom: 1px solid transparent;
+  }
+  .nav a:hover, .nav a[aria-current="page"] { border-bottom-color: var(--ink); }
+  .nav .nav-cta {
+    font-style: italic;
+  }
+
+  /* Story header */
+  .story-head {
+    padding-top: var(--s-6);
+    padding-bottom: var(--s-6);
+    border-bottom: 1px solid var(--rule);
+  }
+  .kicker {
+    display: flex; align-items: center; gap: var(--s-2);
+    margin: 0 0 var(--s-4);
+    font-size: var(--t-small);
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--ink-2);
+  }
+  .kicker::before {
+    content: "";
+    width: 9px; height: 9px;
+    background: var(--accent);
+    transform: rotate(45deg);
+  }
+  h1 {
+    font-size: var(--t-display);
+    font-weight: 400;
+    line-height: 0.98;
+    letter-spacing: -0.015em;
+    margin: 0 0 var(--s-5);
+    max-width: 11.5em;
+    text-wrap: balance;
+  }
+  h1 em { font-style: italic; }
+  .deck {
+    font-size: var(--t-deck);
+    line-height: 1.3;
+    font-style: italic;
+    color: var(--ink-2);
+    margin: 0 0 var(--s-6);
+    max-width: 34em;
+  }
+  .byline {
+    display: flex; flex-wrap: wrap;
+    gap: var(--s-2) var(--s-6);
+    margin: 0;
+    font-size: var(--t-small);
+    border-top: 1px solid var(--ink);
+    padding-top: var(--s-3);
+  }
+  .byline div { display: flex; flex-direction: column; gap: var(--s-1); }
+  .byline dt {
+    letter-spacing: 0.12em; text-transform: uppercase;
+    color: var(--ink-2);
+    font-size: 0.8rem;
+  }
+  .byline dd { margin: 0; font-size: var(--t-lead); }
+
+  /* Body */
+  .story {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 680px) minmax(0, 1fr);
+    gap: var(--s-6);
+    padding-top: var(--s-6);
+    padding-bottom: var(--s-6);
+  }
+  .field-note {
+    grid-column: 1;
+    align-self: start;
+    font-size: var(--t-small);
+    color: var(--ink-2);
+    border-top: 1px solid var(--ink);
+    padding-top: var(--s-3);
+  }
+  .field-note h2 {
+    font-size: var(--t-small);
+    letter-spacing: 0.12em; text-transform: uppercase;
+    font-weight: 400;
+    margin: 0 0 var(--s-2);
+  }
+  .field-note ul { list-style: none; margin: 0; padding: 0; }
+  .field-note li {
+    display: flex; justify-content: space-between; gap: var(--s-2);
+    padding: var(--s-1) 0;
+    border-bottom: 1px dotted var(--rule);
+  }
+  .field-note li span:last-child { color: var(--ink); font-variant-numeric: oldstyle-nums; }
+
+  .story-body { grid-column: 2; }
+  .story-body p { margin: 0 0 var(--s-5); hyphens: auto; }
+  .story-body > p:first-of-type::first-letter {
+    float: left;
+    font-size: 5.1em;
+    line-height: 0.82;
+    padding: 0.06em var(--s-2) 0 0;
+    font-weight: 400;
+  }
+  .story-body h2 {
+    font-size: var(--t-h2);
+    font-weight: 400;
+    font-style: italic;
+    line-height: 1.2;
+    margin: var(--s-6) 0 var(--s-3);
+  }
+  figure.plate {
+    margin: var(--s-6) 0;
+  }
+  .plate svg {
+    width: 100%; height: auto;
+    background: var(--paper);
+    border: 1px solid var(--ink);
+  }
+  figcaption {
+    font-size: var(--t-small);
+    color: var(--ink-2);
+    margin-top: var(--s-2);
+    font-style: italic;
+  }
+  blockquote {
+    margin: var(--s-6) 0;
+    padding: var(--s-4) 0 var(--s-4) var(--s-5);
+    border-left: 2px solid var(--ink);
+    font-size: var(--t-deck);
+    line-height: 1.3;
+  }
+  blockquote p { margin: 0 0 var(--s-2) !important; }
+  blockquote footer { font-size: var(--t-small); color: var(--ink-2); font-style: italic; }
+  .continue {
+    font-size: var(--t-lead);
+    font-style: italic;
+    color: var(--ink-2);
+  }
+
+  /* Related cards */
+  .related {
+    border-top: 1px solid var(--ink);
+    padding-top: var(--s-6);
+    padding-bottom: var(--s-6);
+  }
+  .section-head {
+    display: flex; justify-content: space-between; align-items: baseline;
+    gap: var(--s-4); flex-wrap: wrap;
+    margin-bottom: var(--s-5);
+  }
+  .section-head h2 {
+    font-size: var(--t-h2);
+    font-weight: 400;
+    margin: 0;
+  }
+  .section-head a { font-size: var(--t-small); font-style: italic; }
+  .cards {
+    list-style: none; margin: 0; padding: 0;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: var(--s-5);
+  }
+  .card {
+    position: relative;
+    display: flex; flex-direction: column;
+    background: var(--paper);
+    border: 1px solid var(--rule);
+    border-top: 2px solid var(--ink);
+    padding: var(--s-4);
+    transition: border-color .2s ease, transform .2s ease;
+  }
+  .card:hover { border-color: var(--ink); transform: translateY(-2px); }
+  .card:focus-within { border-color: var(--ink); }
+  .card .entry {
+    font-size: var(--t-small);
+    letter-spacing: 0.1em; text-transform: uppercase;
+    color: var(--ink-2);
+    margin: 0 0 var(--s-3);
+    display: flex; justify-content: space-between;
+  }
+  .card h3 {
+    font-size: var(--t-deck);
+    font-weight: 400;
+    line-height: 1.15;
+    margin: 0 0 var(--s-2);
+  }
+  .card h3 a { text-decoration: none; }
+  .card h3 a::after { content: ""; position: absolute; inset: 0; }
+  .card p { margin: 0 0 var(--s-4); font-size: var(--t-lead); color: var(--ink-2); }
+  .card .meta {
+    margin-top: auto;
+    font-size: var(--t-small);
+    font-style: italic;
+    border-top: 1px dotted var(--rule);
+    padding-top: var(--s-2);
+  }
+
+  /* Membership CTA */
+  .membership {
+    background: var(--ink);
+    color: var(--bg);
+  }
+  .membership .wrap {
+    display: grid;
+    grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr);
+    gap: var(--s-6);
+    padding-top: var(--s-6);
+    padding-bottom: var(--s-6);
+    align-items: end;
+  }
+  .membership .kicker { color: #b9c2c8; }
+  .membership .kicker::before { background: var(--bg); }
+  .membership h2 {
+    font-size: clamp(2.2rem, 4.4vw, 3.75rem);
+    font-weight: 400;
+    line-height: 1.02;
+    margin: 0 0 var(--s-4);
+    letter-spacing: -0.01em;
+  }
+  .membership p { margin: 0; font-size: var(--t-lead); color: #c9d0d5; max-width: 34em; }
+  .perks { list-style: none; margin: 0 0 var(--s-5); padding: 0; font-size: var(--t-lead); }
+  .perks li {
+    padding: var(--s-2) 0;
+    border-bottom: 1px solid #343e46;
+    display: flex; gap: var(--s-3);
+  }
+  .perks li::before { content: "—"; color: #8b969e; }
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center;
+    gap: var(--s-2);
+    min-height: 48px;
+    padding: var(--s-3) var(--s-6);
+    background: var(--bg);
+    color: var(--ink);
+    font-family: inherit;
+    font-size: var(--t-lead);
+    font-weight: 600;
+    text-decoration: none;
+    border: 1px solid var(--bg);
+    transition: background .2s ease, color .2s ease;
+  }
+  .btn:hover { background: transparent; color: var(--bg); }
+  .membership .btn:focus-visible { outline-color: var(--bg); }
+  .fine { display: block; margin-top: var(--s-2); font-size: var(--t-small); color: #8b969e; font-style: italic; }
+
+  /* Footer */
+  .site-foot .wrap {
+    display: flex; justify-content: space-between; flex-wrap: wrap;
+    gap: var(--s-3);
+    padding-top: var(--s-5); padding-bottom: var(--s-6);
+    font-size: var(--t-small);
+    color: var(--ink-2);
+  }
+  .site-foot ul { list-style: none; margin: 0; padding: 0; display: flex; gap: var(--s-4); flex-wrap: wrap; }
+
+  /* Responsive */
+  @media (max-width: 1080px) {
+    .story { grid-template-columns: minmax(0, 220px) minmax(0, 1fr); }
+    .story-body { grid-column: 2; }
+  }
+  @media (max-width: 860px) {
+    .cards { grid-template-columns: 1fr 1fr; }
+    .membership .wrap { grid-template-columns: 1fr; }
+  }
+  @media (max-width: 720px) {
+    .story { grid-template-columns: 1fr; gap: var(--s-5); }
+    .field-note, .story-body { grid-column: 1; }
+    .field-note { order: 2; }
+    .cards { grid-template-columns: 1fr; }
+    h1 { line-height: 1.02; }
+    .masthead .wrap { flex-direction: column; align-items: flex-start; }
+    .btn { width: 100%; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      transition: none !important;
+      animation: none !important;
+      scroll-behavior: auto !important;
+    }
+    .card:hover { transform: none; }
+  }
+</style>
+</head>
+<body>
+<a class="skip" href="#main">Skip to story</a>
+
+<header class="masthead">
+  <div class="wrap">
+    <a class="brand" href="#top" id="top">The Millbrook Ledger
+      <small>A field journal of the lower valley, est. 1974</small>
+    </a>
+    <nav class="nav" aria-label="Primary">
+      <ul>
+        <li><a href="#main" aria-current="page">Stories</a></li>
+        <li><a href="#related">Archive</a></li>
+        <li><a href="#field-notes">Field Notes</a></li>
+        <li><a href="#membership" class="nav-cta">Become a member</a></li>
+      </ul>
+    </nav>
+  </div>
+</header>
+
+<main id="main">
+  <article>
+    <header class="story-head wrap">
+      <p class="kicker">Rivers &amp; Crossings · Entry No. 212</p>
+      <h1>The Ferry That Ran on <em>Faith</em> and Fence Wire</h1>
+      <p class="deck">For sixty-one years, a flat-bottomed barge and one stubborn family carried Millbrook across Alder Creek. The bridge that replaced it took four months to build — and the town is still deciding what it lost.</p>
+      <dl class="byline">
+        <div><dt>Written by</dt><dd>Marguerite Oyelaran</dd></div>
+        <div><dt>Published</dt><dd><time datetime="2026-11-18">November 18, 2026</time></dd></div>
+        <div><dt>Reading time</dt><dd>14 minutes</dd></div>
+        <div><dt>Sources</dt><dd>County Archive, Box 41</dd></div>
+      </dl>
+    </header>
+
+    <div class="story wrap">
+      <aside class="field-note" id="field-notes" aria-labelledby="fn-title">
+        <h2 id="fn-title">Field notes</h2>
+        <ul>
+          <li><span>First crossing</span><span>1898</span></li>
+          <li><span>Last crossing</span><span>1959</span></li>
+          <li><span>Fare, 1910</span><span>3¢</span></li>
+          <li><span>Fare, 1958</span><span>15¢</span></li>
+          <li><span>Creek width</span><span>212 ft</span></li>
+          <li><span>Operators</span><span>4 Haldanes</span></li>
+        </ul>
+      </aside>
+
+      <div class="story-body">
+        <p>On the morning of April 3, 1959, Ruth Haldane winched the ferry across Alder Creek for the last time. There were eleven passengers, two milk cans, and a borrowed Ford pickup on the deck. Nobody made a speech. Her nephew remembers that she checked the cable twice, the way she always did, and that she did not look at the new steel bridge rising a quarter mile downstream.</p>
+
+        <p>The crossing had been in her family since 1898, when her grandfather, Elias Haldane, strung a salvaged telegraph cable between two cottonwoods and built a barge from barn timbers. The county never owned it. For most of its life, the Alder Creek ferry ran on a handshake agreement, a ledger of unpaid fares, and a coil of fence wire that patched everything from the guide rail to the toll box hinge.</p>
+
+        <figure class="plate">
+          <svg viewBox="0 0 680 300" role="img" aria-labelledby="plate-title plate-desc">
+            <title id="plate-title">Sketch map of the Alder Creek crossing</title>
+            <desc id="plate-desc">A hand-drawn style map showing Alder Creek running diagonally, the ferry cable crossing at the Haldane landing, and the 1959 bridge further downstream.</desc>
+            <defs>
+              <pattern id="grid" width="20" height="20" patternUnits="userSpaceOnUse">
+                <path d="M20 0H0V20" fill="none" stroke="#c9d1d6" stroke-width="0.6"/>
+              </pattern>
+            </defs>
+            <rect width="680" height="300" fill="url(#grid)"/>
+            <path d="M-10 70 C 140 90, 220 150, 340 150 S 560 210, 690 250" fill="none" stroke="#343e46" stroke-width="34" stroke-linecap="round" opacity="0.18"/>
+            <path d="M-10 70 C 140 90, 220 150, 340 150 S 560 210, 690 250" fill="none" stroke="#131a21" stroke-width="1" stroke-dasharray="3 5"/>
+            <line x1="250" y1="95" x2="230" y2="190" stroke="#131a21" stroke-width="1.6"/>
+            <circle cx="250" cy="95" r="4" fill="#131a21"/>
+            <circle cx="230" cy="190" r="4" fill="#131a21"/>
+            <rect x="232" y="132" width="20" height="12" fill="#e1e6e9" stroke="#131a21" transform="rotate(-12 242 138)"/>
+            <line x1="520" y1="155" x2="505" y2="245" stroke="#131a21" stroke-width="5"/>
+            <g font-family="Georgia, serif" font-size="15" fill="#131a21">
+              <text x="262" y="92" font-style="italic">Haldane landing</text>
+              <text x="150" y="214" font-style="italic">Ferry cable, 1898</text>
+              <text x="532" y="160" font-style="italic">Steel bridge, 1959</text>
+              <text x="380" y="140" font-size="13" letter-spacing="2" fill="#343e46">ALDER CREEK</text>
+            </g>
+            <g transform="translate(620 40)" stroke="#131a21" fill="none">
+              <circle r="16"/>
+              <path d="M0 -14 L4 0 L0 14 L-4 0Z" fill="#131a21"/>
+            </g>
+            <text x="616" y="20" font-family="Georgia, serif" font-size="12" fill="#131a21">N</text>
+          </svg>
+          <figcaption>The crossing as reconstructed from the 1912 county survey and Elias Haldane’s own notebook. Drawing by the Ledger.</figcaption>
+        </figure>
+
+        <h2>A ledger of the unpaid</h2>
+        <p>The family’s fare book survives in Box 41 of the county archive, its spine split and resewn with — of course — wire. Between 1931 and 1937, nearly a third of the entries read simply “on account.” Some debts were settled in eggs, some in labour, and one, from a schoolteacher named Clara Voss, in a winter of reading lessons for the Haldane children.</p>
+
+        <blockquote>
+          <p>“Grandmother said the ferry wasn’t a business. It was a promise that the other side of the creek would always be there.”</p>
+          <footer>— Thomas Haldane, interviewed October 2026</footer>
+        </blockquote>
+
+        <p>When the state proposed the bridge in 1956, the town meeting ran past midnight. Farmers on the east bank wanted the road; shopkeepers on the west bank feared it would carry customers straight past them toward the county seat. Both turned out to be right.</p>
+
+        <p class="continue">This story continues in the members’ edition, with the full fare ledger, unpublished photographs, and an oral history recorded at the old landing.</p>
+      </div>
+    </div>
+  </article>
+
+  <section class="related wrap" id="related" aria-labelledby="related-title">
+    <div class="section-head">
+      <h2 id="related-title">More from the field journal</h2>
+      <a href="#related">Browse the full archive</a>
+    </div>
+    <ul class="cards">
+      <li class="card">
+        <p class="entry"><span>Entry 209</span><span>Industry</span></p>
+        <h3><a href="#related">The Cooper’s Daughter and the Last Barrel Works</a></h3>
+        <p>How a cooperage on Mill Street outlasted Prohibition by making pickle casks for half the state.</p>
+        <span class="meta">By Daniel Reyes · 11 min read</span>
+      </li>
+      <li class="card">
+        <p class="entry"><span>Entry 205</span><span>Places</span></p>
+        <h3><a href="#related">Reading the Stones at Pine Hollow Cemetery</a></h3>
+        <p>A volunteer survey of 412 headstones turns up a forgotten flood, three lost families, and one very long joke.</p>
+        <span class="meta">By Anneke Swart · 9 min read</span>
+      </li>
+      <li class="card">
+        <p class="entry"><span>Entry 198</span><span>People</span></p>
+        <h3><a href="#related">Clara Voss Kept the School Open in a Corn Crib</a></h3>
+        <p>After the 1934 fire, a teacher refused to cancel classes — and the county’s records show she was never paid for it.</p>
+        <span class="meta">By Marguerite Oyelaran · 12 min read</span>
+      </li>
+    </ul>
+  </section>
+
+  <section class="membership" id="membership" aria-labelledby="member-title">
+    <div class="wrap">
+      <div>
+        <p class="kicker">Membership</p>
+        <h2 id="member-title">Keep the valley’s memory in print.</h2>
+        <p>The Ledger is funded by 1,840 readers, not advertisers. Members pay for archive visits, oral-history recordings, and the slow work of checking every date twice.</p>
+      </div>
+      <div>
+        <ul class="perks">
+          <li>The full members’ edition of every story</li>
+          <li>A printed field journal, mailed each season</li>
+          <li>Invitations to archive walks and landing-site talks</li>
+        </ul>
+        <a class="btn" href="#membership">Become a member — $6 a month</a>
+        <span class="fine">Cancel anytime. Students and seniors pay what they can.</span>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer class="site-foot">
+  <div class="wrap">
+    <p style="margin:0">© 2026 The Millbrook Ledger · A nonprofit local history publication</p>
+    <ul>
+      <li><a href="#main">Stories</a></li>
+      <li><a href="#related">Archive</a></li>
+      <li><a href="#membership">Membership</a></li>
+    </ul>
+  </div>
+</footer>
+</body>
+</html>

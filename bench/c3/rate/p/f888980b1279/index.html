@@ -1,0 +1,312 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Little Plot Community Garden</title>
+<meta name="description" content="Little Plot is a nonprofit community garden. Volunteer on a weekly shift and share in the harvest.">
+<link rel="icon" href="data:,">
+<style>
+  :root {
+    --bg: #dce7d3;
+    --ink: #1c3023;
+    --paper: #eef4e4;
+    --line: rgba(28, 48, 35, .22);
+    --radius: 8px;
+    --s1: 14px; --s2: 22px; --s3: 26px; --s4: 44px;
+    --wrap: 1160px;
+    --serif: "EB Garamond", Garamond, "Garamond Premier Pro", "Cormorant Garamond", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif;
+  }
+  *, *::before, *::after { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--serif);
+    font-size: 21px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+  h1, h2, h3 { font-weight: 500; line-height: 1.02; margin: 0; letter-spacing: -.01em; }
+  p { margin: 0; }
+  a { color: inherit; }
+  .wrap { width: min(var(--wrap), 100% - 2 * var(--s3)); margin-inline: auto; }
+
+  .skip { position: absolute; left: -999px; top: var(--s1); background: var(--ink); color: var(--paper); padding: var(--s1) var(--s2); border-radius: var(--radius); z-index: 10; }
+  .skip:focus { left: var(--s1); }
+  :focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; }
+
+  /* Header / nav */
+  .site-header { background: var(--ink); color: var(--paper); }
+  .site-header .wrap { display: flex; align-items: center; justify-content: space-between; gap: var(--s2); padding-block: var(--s1); flex-wrap: wrap; }
+  .brand { font-size: 30px; text-decoration: none; font-weight: 500; letter-spacing: .01em; }
+  .site-nav ul { list-style: none; display: flex; gap: var(--s3); margin: 0; padding: 0; flex-wrap: wrap; }
+  .site-nav a { font-size: 19px; text-decoration: none; padding-block: 4px; border-bottom: 1px solid transparent; }
+  .site-nav a:hover { border-bottom-color: currentColor; }
+  .site-header :focus-visible { outline-color: var(--paper); }
+
+  /* Hero */
+  .hero { padding-block: var(--s4) calc(var(--s4) * 1.5); border-bottom: 1px solid var(--line); }
+  .eyebrow { font-size: 19px; letter-spacing: .14em; text-transform: uppercase; margin-bottom: var(--s2); }
+  .hero h1 { font-size: clamp(64px, 10.4vw, 150px); line-height: .92; letter-spacing: -.025em; max-width: 10ch; }
+  .hero h1 em { font-style: italic; }
+  .hero-row { display: grid; grid-template-columns: 1.3fr 1fr; gap: var(--s4); align-items: end; margin-top: var(--s4); }
+  .lede { font-size: 23px; max-width: 34ch; }
+  .actions { display: flex; flex-wrap: wrap; gap: var(--s1); justify-content: flex-end; }
+  .btn { display: inline-block; font: inherit; font-size: 21px; text-decoration: none; padding: var(--s1) var(--s3); border-radius: var(--radius); border: 1.5px solid var(--ink); transition: background-color .2s, color .2s; }
+  .btn-primary { background: var(--ink); color: var(--paper); }
+  .btn-primary:hover { background: #2c4634; }
+  .btn-ghost:hover { background: var(--ink); color: var(--paper); }
+
+  /* Sections */
+  section { padding-block: calc(var(--s4) * 2); }
+  .sec-head { display: grid; grid-template-columns: 1fr 1.4fr; gap: var(--s4); align-items: start; margin-bottom: var(--s4); }
+  .sec-head h2 { font-size: 62px; }
+  .sec-head p { font-size: 23px; max-width: 40ch; }
+  .mission-head { grid-template-areas: "num stmt" "title stmt"; row-gap: 0; }
+  .mission-head .num { grid-area: num; }
+  .mission-head h2 { grid-area: title; }
+  .mission-head p { grid-area: stmt; }
+  .num { display: block; font-size: 19px; letter-spacing: .14em; text-transform: uppercase; margin-bottom: var(--s1); }
+
+  .mission-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--s2); }
+  .pillar { border-top: 1px solid var(--ink); padding-top: var(--s2); }
+  .pillar h3 { font-size: 30px; margin-bottom: var(--s1); }
+  .pillar p { font-size: 19px; }
+  .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--s2); margin-top: var(--s4); }
+  .stat { font-size: 19px; }
+  .stat strong { display: block; font-size: 62px; font-weight: 500; line-height: 1; }
+
+  /* Schedule cards */
+  #schedule { border-top: 1px solid var(--line); }
+  .cards { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--s2); }
+  .card { background: var(--paper); border: 1px solid var(--line); border-radius: var(--radius); padding: var(--s3); display: flex; flex-direction: column; gap: var(--s1); }
+  .card .day { font-size: 19px; letter-spacing: .14em; text-transform: uppercase; }
+  .card h3 { font-size: 30px; }
+  .card time { font-size: 23px; font-style: italic; }
+  .card p { font-size: 19px; }
+  .card .meta { margin-top: auto; padding-top: var(--s1); border-top: 1px solid var(--line); font-size: 19px; display: flex; justify-content: space-between; gap: var(--s1); }
+  .note { margin-top: var(--s3); font-size: 19px; }
+
+  /* Produce share (dark band) */
+  .share { background: var(--ink); color: var(--paper); }
+  .share .sec-head h2 { color: var(--paper); }
+  .share-list { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--s2); }
+  .share-list li { border: 1px solid rgba(238, 244, 228, .28); border-radius: var(--radius); padding: var(--s3); }
+  .share-list h3 { font-size: 30px; margin-bottom: var(--s1); }
+  .share-list .season { font-size: 19px; font-style: italic; display: block; margin-bottom: var(--s1); }
+  .share-list p { font-size: 19px; }
+  .how { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--s2); margin: var(--s4) 0 0; padding: 0; list-style: none; counter-reset: step; }
+  .how li { counter-increment: step; font-size: 19px; padding-top: var(--s2); border-top: 1px solid rgba(238, 244, 228, .4); }
+  .how li::before { content: counter(step, decimal-leading-zero); display: block; font-size: 30px; margin-bottom: 6px; }
+
+  /* CTA */
+  .cta { text-align: center; }
+  .cta h2 { font-size: clamp(48px, 7vw, 96px); max-width: 14ch; margin-inline: auto; }
+  .cta p { font-size: 23px; max-width: 40ch; margin: var(--s3) auto var(--s4); }
+  .cta .actions { justify-content: center; }
+
+  footer { border-top: 1px solid var(--line); padding-block: var(--s4); font-size: 19px; }
+  footer .wrap { display: flex; justify-content: space-between; gap: var(--s2); flex-wrap: wrap; }
+  address { font-style: normal; }
+
+  @media (max-width: 960px) {
+    .hero-row, .sec-head { grid-template-columns: 1fr; gap: var(--s3); }
+    .mission-head { grid-template-areas: "num" "title" "stmt"; row-gap: 0; }
+    .mission-head h2 { margin-bottom: var(--s3); }
+    .actions { justify-content: flex-start; }
+    .cards, .mission-grid { grid-template-columns: 1fr 1fr; }
+    .share-list { grid-template-columns: 1fr 1fr; }
+    .sec-head h2 { font-size: 48px; }
+  }
+  @media (max-width: 620px) {
+    body { font-size: 19px; }
+    .cards, .mission-grid, .share-list, .how, .stats { grid-template-columns: 1fr; }
+    .site-nav ul { gap: var(--s2); }
+    .sec-head h2 { font-size: 40px; }
+    .stat strong { font-size: 48px; }
+    section { padding-block: calc(var(--s4) * 1.4); }
+    .lede, .sec-head p, .cta p { font-size: 21px; }
+  }
+</style>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="site-header">
+  <div class="wrap">
+    <a class="brand" href="#top">Little Plot</a>
+    <nav class="site-nav" aria-label="Primary">
+      <ul>
+        <li><a href="#mission">Mission</a></li>
+        <li><a href="#schedule">Schedule</a></li>
+        <li><a href="#share">Produce share</a></li>
+        <li><a href="#volunteer">Volunteer</a></li>
+      </ul>
+    </nav>
+  </div>
+</header>
+
+<main id="main">
+  <div class="hero" id="top">
+    <div class="wrap">
+      <p class="eyebrow">A nonprofit community garden</p>
+      <h1>Grow food, <em>together.</em></h1>
+      <div class="hero-row">
+        <p class="lede">Little Plot turns a quarter-acre of shared ground into fresh vegetables for our neighbours. Anyone can dig in — no experience, no membership fee, just a few hours a week.</p>
+        <div class="actions">
+          <a class="btn btn-primary" href="#volunteer">Volunteer with us</a>
+          <a class="btn btn-ghost" href="#schedule">See the schedule</a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <section id="mission" aria-labelledby="mission-title">
+    <div class="wrap">
+      <div class="sec-head mission-head">
+        <span class="num">01 — Good soil, shared fairly</span>
+        <h2 id="mission-title">Our mission</h2>
+        <p class="mission-statement">Little Plot exists to grow fresh, healthy food with our neighbours and share it freely. Volunteers plant, tend and harvest side by side, and every harvest goes back to the people who live here.</p>
+      </div>
+      <div class="mission-grid">
+        <article class="pillar">
+          <h3>Feed the block</h3>
+          <p>Every week, at least half of what we grow is set aside for households that need it, distributed with no forms and no questions.</p>
+        </article>
+        <article class="pillar">
+          <h3>Teach by doing</h3>
+          <p>Seasoned gardeners pair with newcomers on every shift, so skills like composting, seed saving and pruning stay in the community.</p>
+        </article>
+        <article class="pillar">
+          <h3>Care for the ground</h3>
+          <p>No synthetic pesticides. We rotate crops, build soil with our own compost and leave room for pollinators along every bed.</p>
+        </article>
+      </div>
+      <div class="stats" role="list">
+        <p class="stat" role="listitem"><strong>38</strong> raised beds in cultivation</p>
+        <p class="stat" role="listitem"><strong>1,900 lb</strong> of produce shared last season</p>
+        <p class="stat" role="listitem"><strong>120+</strong> volunteers on the roster</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="schedule" aria-labelledby="schedule-title">
+    <div class="wrap">
+      <div class="sec-head">
+        <div>
+          <span class="num">02 — Volunteer schedule</span>
+          <h2 id="schedule-title">Pick a shift that fits.</h2>
+        </div>
+        <p>Shifts run April through October. Tools, gloves and water are provided — bring a hat and closed-toe shoes. Drop in or sign up ahead so crew leads can plan.</p>
+      </div>
+      <ul class="cards">
+        <li class="card">
+          <span class="day">Tuesday</span>
+          <h3>Evening watering</h3>
+          <time>5:30 – 7:30 pm</time>
+          <p>Hand-water seedlings, check irrigation lines and do a quick weed sweep before sundown.</p>
+          <p class="meta"><span>Light work</span><span>6 spots</span></p>
+        </li>
+        <li class="card">
+          <span class="day">Thursday</span>
+          <h3>Bed care &amp; compost</h3>
+          <time>4:00 – 7:00 pm</time>
+          <p>Turn compost, mulch paths, stake tomatoes and learn the weekly crop plan from our crew lead.</p>
+          <p class="meta"><span>Moderate work</span><span>10 spots</span></p>
+        </li>
+        <li class="card">
+          <span class="day">Saturday</span>
+          <h3>Harvest morning</h3>
+          <time>8:00 – 11:00 am</time>
+          <p>Pick, wash and sort the week's produce, then help pack shares for Saturday afternoon pickup.</p>
+          <p class="meta"><span>All ages</span><span>16 spots</span></p>
+        </li>
+        <li class="card">
+          <span class="day">Saturday</span>
+          <h3>Share distribution</h3>
+          <time>12:00 – 2:00 pm</time>
+          <p>Greet neighbours at the garden gate, hand out shares and keep the free-swap table stocked.</p>
+          <p class="meta"><span>Light work</span><span>4 spots</span></p>
+        </li>
+        <li class="card">
+          <span class="day">Sunday</span>
+          <h3>Family planting</h3>
+          <time>10:00 am – 12:00 pm</time>
+          <p>Kid-friendly planting in the children's beds, with seed starting and worm-bin tours.</p>
+          <p class="meta"><span>All ages</span><span>12 spots</span></p>
+        </li>
+        <li class="card">
+          <span class="day">First Monday</span>
+          <h3>Planning circle</h3>
+          <time>6:30 – 8:00 pm</time>
+          <p>Help decide what we grow next, how shares are allocated and which workshops to host.</p>
+          <p class="meta"><span>Indoors</span><span>Open to all</span></p>
+        </li>
+      </ul>
+      <p class="note">Shifts are cancelled in lightning or heavy rain; we post updates on the gate board by 7 am.</p>
+    </div>
+  </section>
+
+  <section id="share" class="share" aria-labelledby="share-title">
+    <div class="wrap">
+      <div class="sec-head">
+        <div>
+          <span class="num">03 — Produce share</span>
+          <h2 id="share-title">What the beds give back.</h2>
+        </div>
+        <p>Each Saturday from June to October, the harvest is split into free shares for volunteers and neighbouring households. Sizes vary with the season — here is what a typical bag holds.</p>
+      </div>
+      <ul class="share-list">
+        <li>
+          <h3>Greens</h3>
+          <span class="season">May – October</span>
+          <p>Lettuce, chard, kale and a handful of herbs: basil, parsley, dill.</p>
+        </li>
+        <li>
+          <h3>Fruiting crops</h3>
+          <span class="season">July – September</span>
+          <p>Tomatoes, peppers, cucumbers, summer squash and green beans.</p>
+        </li>
+        <li>
+          <h3>Roots</h3>
+          <span class="season">June – October</span>
+          <p>Carrots, beets, radishes and new potatoes, washed and bundled.</p>
+        </li>
+        <li>
+          <h3>Seasonal extras</h3>
+          <span class="season">When we have them</span>
+          <p>Berries, cut flowers, saved seed packets and pumpkins in fall.</p>
+        </li>
+      </ul>
+      <ol class="how" aria-label="How to receive a share">
+        <li>Add your household to the share list at the gate or during any shift.</li>
+        <li>Pick up on Saturdays, 12–2 pm, at the garden's north entrance.</li>
+        <li>Can't make it? Name a neighbour to collect — or ask about delivery.</li>
+      </ol>
+    </div>
+  </section>
+
+  <section id="volunteer" class="cta" aria-labelledby="volunteer-title">
+    <div class="wrap">
+      <span class="num">04 — Join the crew</span>
+      <h2 id="volunteer-title">There is a row with your name on it.</h2>
+      <p>Come to any shift and a crew lead will show you around. Sign up by email so we can add you to the roster and send the weekly harvest note.</p>
+      <div class="actions">
+        <a class="btn btn-primary" href="mailto:volunteer@littleplot.example?subject=I%27d%20like%20to%20volunteer">Sign up to volunteer</a>
+        <a class="btn btn-ghost" href="#schedule">Browse shifts</a>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <address>Little Plot Community Garden<br>Corner of Elm &amp; 4th, behind the library</address>
+    <p>A volunteer-run nonprofit.<br>Gates open daily, dawn to dusk.</p>
+  </div>
+</footer>
+</body>
+</html>

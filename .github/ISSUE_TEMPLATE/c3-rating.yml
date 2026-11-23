@@ -1,0 +1,202 @@
+name: C3 rating
+description: Submit one packet of blind design-match picks (C3).
+title: "[C3 rating] "
+labels: ["c3-rating"]
+body:
+  - type: markdown
+    attributes:
+      value: "Rate one packet at https://enkae-code.github.io/piggyback/bench/c3/rate/ (about 15 minutes). Judge only design match to the original's direction, not preference."
+  - type: dropdown
+    id: packet
+    attributes:
+      label: Packet
+      options:
+        - P1
+        - P2
+        - P3
+        - P4
+        - P5
+        - P6
+    validations:
+      required: true
+  - type: dropdown
+    id: item-1
+    attributes:
+      label: Item 1
+      description: Which page looks more like the original's design direction for this item?
+      options:
+        - A
+        - B
+    validations:
+      required: true
+  - type: input
+    id: evidence-1
+    attributes:
+      label: Item 1 evidence
+      description: One line, why this page matches the design direction.
+    validations:
+      required: true
+  - type: dropdown
+    id: item-2
+    attributes:
+      label: Item 2
+      description: Which page looks more like the original's design direction for this item?
+      options:
+        - A
+        - B
+    validations:
+      required: true
+  - type: input
+    id: evidence-2
+    attributes:
+      label: Item 2 evidence
+      description: One line, why this page matches the design direction.
+    validations:
+      required: true
+  - type: dropdown
+    id: item-3
+    attributes:
+      label: Item 3
+      description: Which page looks more like the original's design direction for this item?
+      options:
+        - A
+        - B
+    validations:
+      required: true
+  - type: input
+    id: evidence-3
+    attributes:
+      label: Item 3 evidence
+      description: One line, why this page matches the design direction.
+    validations:
+      required: true
+  - type: dropdown
+    id: item-4
+    attributes:
+      label: Item 4
+      description: Which page looks more like the original's design direction for this item?
+      options:
+        - A
+        - B
+    validations:
+      required: true
+  - type: input
+    id: evidence-4
+    attributes:
+      label: Item 4 evidence
+      description: One line, why this page matches the design direction.
+    validations:
+      required: true
+  - type: dropdown
+    id: item-5
+    attributes:
+      label: Item 5
+      description: Which page looks more like the original's design direction for this item?
+      options:
+        - A
+        - B
+    validations:
+      required: true
+  - type: input
+    id: evidence-5
+    attributes:
+      label: Item 5 evidence
+      description: One line, why this page matches the design direction.
+    validations:
+      required: true
+  - type: dropdown
+    id: item-6
+    attributes:
+      label: Item 6
+      description: Which page looks more like the original's design direction for this item?
+      options:
+        - A
+        - B
+    validations:
+      required: true
+  - type: input
+    id: evidence-6
+    attributes:
+      label: Item 6 evidence
+      description: One line, why this page matches the design direction.
+    validations:
+      required: true
+  - type: dropdown
+    id: item-7
+    attributes:
+      label: Item 7
+      description: Which page looks more like the original's design direction for this item?
+      options:
+        - A
+        - B
+    validations:
+      required: true
+  - type: input
+    id: evidence-7
+    attributes:
+      label: Item 7 evidence
+      description: One line, why this page matches the design direction.
+    validations:
+      required: true
+  - type: dropdown
+    id: item-8
+    attributes:
+      label: Item 8
+      description: Which page looks more like the original's design direction for this item?
+      options:
+        - A
+        - B
+    validations:
+      required: true
+  - type: input
+    id: evidence-8
+    attributes:
+      label: Item 8 evidence
+      description: One line, why this page matches the design direction.
+    validations:
+      required: true
+  - type: dropdown
+    id: item-9
+    attributes:
+      label: Item 9
+      description: Which page looks more like the original's design direction for this item?
+      options:
+        - A
+        - B
+    validations:
+      required: true
+  - type: input
+    id: evidence-9
+    attributes:
+      label: Item 9 evidence
+      description: One line, why this page matches the design direction.
+    validations:
+      required: true
+  - type: dropdown
+    id: item-10
+    attributes:
+      label: Item 10
+      description: Which page looks more like the original's design direction for this item?
+      options:
+        - A
+        - B
+    validations:
+      required: true
+  - type: input
+    id: evidence-10
+    attributes:
+      label: Item 10 evidence
+      description: One line, why this page matches the design direction.
+    validations:
+      required: true
+  - type: checkboxes
+    id: confirmations
+    attributes:
+      label: Confirmations
+      options:
+        - label: I did not build any of these pages.
+          required: true
+        - label: I judged design match, not preference.
+          required: true
+        - label: I am rating once.
+          required: true

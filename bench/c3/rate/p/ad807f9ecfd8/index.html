@@ -1,0 +1,332 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>corner acre — a small urban farm</title>
+<meta name="description" content="Corner Acre is a small urban farm growing seasonal vegetables on a quarter acre of reclaimed city ground. Visit the Saturday market or order a weekly box.">
+<style>
+  :root{
+    --bg:#dce6d2;
+    --ink:#1e3024;
+    --leaf:#3f6447;
+    --leaf-text:#2a4630;
+    --cream:#f1dcb4;
+    --bud:#b4401f;
+    --soft:#cbd8bf;
+    --serif:"EB Garamond","Cormorant Garamond",Garamond,"Adobe Garamond Pro","Palatino Linotype",Palatino,"Book Antiqua",Georgia,serif;
+    --wrap:1160px;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--serif);font-size:1.25rem;line-height:1.6;-webkit-font-smoothing:antialiased}
+  img,svg{display:block;max-width:100%}
+  a{color:inherit}
+  .wrap{width:min(var(--wrap),100% - 3rem);margin-inline:auto}
+  .skip{position:absolute;left:-999px;top:0;background:var(--ink);color:var(--bg);padding:.5rem 1rem;z-index:10}
+  .skip:focus{left:1rem;top:1rem}
+  .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+  :focus-visible{outline:3px solid var(--bud);outline-offset:3px;border-radius:2px}
+
+  /* header */
+  .site-header{padding:1.4rem 0}
+  .site-header .wrap{display:flex;align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap}
+  .brand{font-size:1.85rem;font-weight:600;letter-spacing:-.01em;text-decoration:none;line-height:1}
+  .nav ul{list-style:none;margin:0;padding:0;display:flex;gap:2.1rem;flex-wrap:wrap}
+  .nav a{text-decoration:none;font-size:1.15rem;padding:.25rem 0;background:linear-gradient(currentColor,currentColor) 0 100%/0 1px no-repeat;transition:background-size .25s}
+  .nav a:hover,.nav a:focus-visible{background-size:100% 1px}
+
+  /* hero */
+  .hero{padding:4.5rem 0 1rem}
+  .hero .wrap{display:grid;grid-template-columns:1.55fr 1fr;gap:3rem;align-items:start}
+  h1{font-weight:400;font-size:clamp(3.6rem,10vw,9.1rem);line-height:.98;letter-spacing:-.035em;margin:0}
+  .lede{margin:2.2rem 0 1.8rem;font-size:1.45rem;line-height:1.45;max-width:20ch}
+  .btn{display:inline-block;background:var(--ink);color:#fff;text-decoration:none;font-weight:600;font-size:1.2rem;padding:.8rem 1.6rem;border-radius:5px;transition:transform .15s,background .15s}
+  .btn:hover{background:#2c4434;transform:translateY(-1px)}
+  .btn.light{background:var(--cream);color:var(--ink)}
+  .btn.light:hover{background:#f7e8cb}
+  .text-link{margin-left:1.2rem;font-size:1.15rem}
+
+  /* season strip */
+  .strip{margin-top:1.5rem}
+  .strip ol{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(7,1fr)}
+  .strip li{display:flex;flex-direction:column;align-items:center}
+  .strip .plant{height:190px;display:flex;align-items:flex-end}
+  .strip .ground{background:var(--ink);color:#fff;width:100%;text-align:center;padding:0 .25rem 1.6rem}
+  .strip .roots{height:46px;margin:0 auto .6rem}
+  .strip strong{display:block;font-size:1.2rem;line-height:1.2}
+  .strip span{font-size:1rem;color:#e8eadf}
+  .strip-bg{background:linear-gradient(transparent 190px,var(--ink) 190px)}
+
+  /* sections */
+  section{scroll-margin-top:1rem}
+  .section{padding:6.5rem 0}
+  .kicker{font-size:1rem;letter-spacing:.14em;text-transform:uppercase;color:var(--leaf-text);margin:0 0 .6rem;font-weight:600}
+  h2{font-weight:400;font-size:clamp(2.4rem,5vw,4.2rem);line-height:1.02;letter-spacing:-.025em;margin:0 0 1.2rem}
+  h3{font-weight:600;font-size:1.5rem;line-height:1.15;margin:0 0 .4rem}
+  .intro{display:grid;grid-template-columns:1.2fr 1fr;gap:3rem;align-items:end;margin-bottom:3rem}
+  .intro p{margin:0;max-width:34ch}
+
+  /* produce cards */
+  .cards{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(4,1fr);gap:1.5rem}
+  .card{background:var(--soft);border-radius:8px;padding:1.6rem 1.5rem 1.7rem;display:flex;flex-direction:column}
+  .card svg{height:110px;width:auto;margin:0 0 1.2rem}
+  .card .when{font-size:.95rem;color:var(--leaf-text);font-weight:600;letter-spacing:.04em;margin:0 0 .2rem}
+  .card p{margin:0;font-size:1.1rem;line-height:1.45}
+  .card .picks{margin-top:auto;padding-top:1rem;border-top:1px solid #a9bb9c;font-size:1rem;margin-top:1.2rem}
+
+  /* approach */
+  .approach{background:var(--ink);color:#f3f2ea}
+  .approach .kicker{color:var(--cream)}
+  .approach .grid{display:grid;grid-template-columns:1fr 1.4fr;gap:4rem}
+  .steps{list-style:none;margin:0;padding:0;counter-reset:s}
+  .steps li{counter-increment:s;display:grid;grid-template-columns:3.5rem 1fr;gap:1rem;padding:1.4rem 0;border-top:1px solid #3a5042}
+  .steps li:last-child{border-bottom:1px solid #3a5042}
+  .steps li::before{content:counter(s,decimal-leading-zero);font-size:1.6rem;color:var(--cream);line-height:1.1}
+  .steps p{margin:0;font-size:1.12rem;color:#d5dccd}
+  .stats{display:flex;gap:2.5rem;margin-top:2rem;flex-wrap:wrap}
+  .stats div{font-size:1rem;color:#d5dccd}
+  .stats b{display:block;font-size:2.6rem;font-weight:400;color:#fff;line-height:1}
+
+  /* market */
+  .market .grid{display:grid;grid-template-columns:1fr 1fr;gap:4rem;align-items:start}
+  .ticket{border:2px solid var(--ink);border-radius:8px;padding:2rem 2.2rem}
+  .ticket dl{margin:0;display:grid;grid-template-columns:7.5rem 1fr;row-gap:1rem}
+  .ticket dt{font-weight:600}
+  .ticket dd{margin:0}
+  .week{list-style:none;margin:1.5rem 0 0;padding:0;display:grid;grid-template-columns:repeat(7,1fr);gap:.4rem;text-align:center;font-size:.95rem}
+  .week li{padding:.55rem 0;border-radius:4px;background:var(--soft)}
+  .week li.on{background:var(--ink);color:#fff;font-weight:600}
+
+  /* visit / order */
+  .visit{padding-bottom:0}
+  .visit-box{background:#2c4b33;color:#fff;border-radius:10px;padding:4rem;display:grid;grid-template-columns:1.3fr 1fr;gap:3rem;align-items:center;position:relative;overflow:hidden}
+  .visit-box h2{color:#fff}
+  .visit-box p{margin:0 0 2rem;color:#f1f5ec;max-width:36ch}
+  .visit-box .text-link{color:#fff}
+  .options{list-style:none;margin:0;padding:0;display:grid;gap:1rem}
+  .options li{background:#1e3024;border-radius:6px;padding:1.1rem 1.3rem}
+  .options strong{display:block;font-size:1.25rem}
+  .options span{font-size:1.05rem;color:#f1f5ec}
+
+  footer{padding:4rem 0 3rem;font-size:1rem}
+  footer .wrap{display:flex;justify-content:space-between;gap:1.5rem;flex-wrap:wrap;border-top:1px solid #a9bb9c;padding-top:2rem}
+  footer p{margin:0}
+
+  @media (max-width:1000px){
+    .hero .wrap,.intro,.approach .grid,.market .grid,.visit-box{grid-template-columns:1fr}
+    .hero .wrap{gap:0}
+    .lede{max-width:32ch}
+    .cards{grid-template-columns:repeat(2,1fr)}
+    .visit-box{padding:2.8rem}
+  }
+  @media (max-width:700px){
+    body{font-size:1.15rem}
+    .nav ul{gap:1.2rem}
+    .nav a{font-size:1.05rem}
+    .hero{padding-top:2.5rem}
+    .strip .plant{height:120px}
+    .strip .plant svg{height:110px;width:auto}
+    .strip-bg{background:linear-gradient(transparent 120px,var(--ink) 120px)}
+    .strip .roots{height:32px}
+    .strip strong{font-size:.95rem}
+    .strip span{font-size:.78rem}
+    .cards{grid-template-columns:1fr}
+    .section{padding:4.5rem 0}
+    .ticket{padding:1.5rem}
+    .ticket dl{grid-template-columns:1fr;row-gap:.2rem}
+    .ticket dd{margin-bottom:.8rem}
+    .visit-box{padding:2rem 1.5rem}
+    .text-link{display:inline-block;margin:1rem 0 0}
+  }
+  @media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}*{transition:none!important}}
+</style>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <defs>
+    <path id="leafL" d="M0 0 C-8 -14 -26 -16 -38 -10 C-28 0 -12 4 0 0Z"/>
+    <path id="leafR" d="M0 0 C8 -14 26 -16 38 -10 C28 0 12 4 0 0Z"/>
+    <g id="roots" fill="none" stroke="#f1dcb4" stroke-width="3" stroke-linecap="round">
+      <path d="M30 0 V36 M30 22 L16 32 M30 22 L42 30"/>
+    </g>
+  </defs>
+</svg>
+
+<header class="site-header">
+  <div class="wrap">
+    <a class="brand" href="#top">corner acre</a>
+    <nav class="nav" aria-label="Primary">
+      <ul>
+        <li><a href="#produce">In season</a></li>
+        <li><a href="#approach">How we grow</a></li>
+        <li><a href="#market">Saturday market</a></li>
+        <li><a href="#visit">Visit &amp; order</a></li>
+      </ul>
+    </nav>
+  </div>
+</header>
+
+<main id="main">
+  <section class="hero" id="top" aria-labelledby="hero-title">
+    <div class="wrap">
+      <h1 id="hero-title">Food from the end of your street.</h1>
+      <div>
+        <p class="lede">A quarter-acre farm on reclaimed city ground, growing vegetables, herbs and flowers for the neighbours who walk past it every day.</p>
+        <a class="btn" href="#visit">Visit or order a box</a>
+      </div>
+    </div>
+  </section>
+
+  
+  <section class="strip strip-bg" aria-labelledby="strip-label">
+    <div class="wrap">
+      <h2 id="strip-label" class="sr-only">One bed, through the year</h2>
+      <ol>
+        <li>
+          <div class="plant" aria-hidden="true"><svg width="80" height="40" viewBox="0 0 80 40"><ellipse cx="40" cy="30" rx="12" ry="7" fill="#f1dcb4"/></svg></div>
+          <div class="ground"><svg class="roots" viewBox="0 0 60 46" aria-hidden="true"></svg><strong>Jan</strong><span>compost</span></div>
+        </li>
+        <li>
+          <div class="plant" aria-hidden="true"><svg width="80" height="70" viewBox="0 0 80 70"><path d="M40 66 V30 Q40 22 48 22" fill="none" stroke="#3f6447" stroke-width="4" stroke-linecap="round"/><ellipse cx="40" cy="62" rx="12" ry="7" fill="#f1dcb4"/></svg></div>
+          <div class="ground"><svg class="roots" viewBox="0 0 60 46" aria-hidden="true"><use href="#roots"/></svg><strong>Mar</strong><span>sow</span></div>
+        </li>
+        <li>
+          <div class="plant" aria-hidden="true"><svg width="80" height="80" viewBox="0 0 80 80"><path d="M40 80 V30" stroke="#3f6447" stroke-width="3"/><g fill="#3f6447" transform="translate(40 32) scale(.45)"><use href="#leafL"/><use href="#leafR"/></g></svg></div>
+          <div class="ground"><svg class="roots" viewBox="0 0 60 46" aria-hidden="true"><use href="#roots"/></svg><strong>Apr</strong><span>sprout</span></div>
+        </li>
+        <li>
+          <div class="plant" aria-hidden="true"><svg width="80" height="120" viewBox="0 0 80 120"><path d="M40 120 V32" stroke="#3f6447" stroke-width="3"/><g fill="#3f6447" transform="translate(40 36) scale(.8)"><use href="#leafL"/><use href="#leafR"/></g></svg></div>
+          <div class="ground"><svg class="roots" viewBox="0 0 60 46" aria-hidden="true"><use href="#roots"/></svg><strong>May</strong><span>plant out</span></div>
+        </li>
+        <li>
+          <div class="plant" aria-hidden="true"><svg width="90" height="150" viewBox="0 0 90 150"><path d="M45 150 V24" stroke="#3f6447" stroke-width="4"/><g fill="#3f6447"><g transform="translate(45 30)"><use href="#leafL"/><use href="#leafR"/></g><g transform="translate(45 70)"><use href="#leafL"/><use href="#leafR"/></g></g></svg></div>
+          <div class="ground"><svg class="roots" viewBox="0 0 60 46" aria-hidden="true"><use href="#roots"/></svg><strong>Jul</strong><span>first pick</span></div>
+        </li>
+        <li>
+          <div class="plant" aria-hidden="true"><svg width="90" height="170" viewBox="0 0 90 170"><path d="M45 170 V16" stroke="#3f6447" stroke-width="4"/><g fill="#3f6447"><g transform="translate(45 22) scale(.8)"><use href="#leafL"/><use href="#leafR"/></g><g transform="translate(45 56)"><use href="#leafL"/><use href="#leafR"/></g><g transform="translate(45 92)"><use href="#leafL"/><use href="#leafR"/></g></g></svg></div>
+          <div class="ground"><svg class="roots" viewBox="0 0 60 46" aria-hidden="true"><use href="#roots"/></svg><strong>Sep</strong><span>full harvest</span></div>
+        </li>
+        <li>
+          <div class="plant" aria-hidden="true"><svg width="90" height="190" viewBox="0 0 90 190"><path d="M45 190 V12" stroke="#3f6447" stroke-width="4"/><g fill="#3f6447"><g transform="translate(45 22) scale(.7)"><use href="#leafL"/><use href="#leafR"/></g><g transform="translate(45 54) scale(.85)"><use href="#leafL"/><use href="#leafR"/></g><g transform="translate(45 86)"><use href="#leafL"/><use href="#leafR"/></g><g transform="translate(45 122)"><use href="#leafL"/><use href="#leafR"/></g></g><circle cx="45" cy="10" r="9" fill="#b4401f"/></svg></div>
+          <div class="ground"><svg class="roots" viewBox="0 0 60 46" aria-hidden="true"><use href="#roots"/></svg><strong>Nov</strong><span>seed saving</span></div>
+        </li>
+      </ol>
+    </div>
+  </section>
+
+  <section class="section" id="produce" aria-labelledby="produce-title">
+    <div class="wrap">
+      <div class="intro">
+        <div>
+          <p class="kicker">In season now · late November</p>
+          <h2 id="produce-title">What’s coming out of the ground.</h2>
+        </div>
+        <p>Everything below was picked within a day of reaching you. When a row runs out, it runs out — and something else is already on its way.</p>
+      </div>
+      <ul class="cards">
+        <li class="card">
+          <svg viewBox="0 0 100 110" aria-hidden="true"><path d="M50 50 C30 20 30 8 40 2 M50 50 C50 20 56 6 64 4 M50 50 C66 26 78 18 86 20" fill="none" stroke="#3f6447" stroke-width="5" stroke-linecap="round"/><path d="M50 44 C68 44 78 56 70 76 C64 92 56 106 50 108 C44 106 36 92 30 76 C22 56 32 44 50 44Z" fill="#b4401f"/></svg>
+          <p class="when">Oct – Feb</p>
+          <h3>Winter roots</h3>
+          <p>Carrots, beetroot and parsnips, sweeter after the first frost.</p>
+          <p class="picks">£3 a bunch</p>
+        </li>
+        <li class="card">
+          <svg viewBox="0 0 100 110" aria-hidden="true"><path d="M50 108 V40" stroke="#3f6447" stroke-width="4"/><g fill="#3f6447"><path d="M50 100 C20 96 8 70 14 44 C34 52 46 74 50 100Z"/><path d="M50 100 C80 96 92 70 86 44 C66 52 54 74 50 100Z"/><path d="M50 80 C34 60 36 22 50 6 C64 22 66 60 50 80Z"/></g></svg>
+          <p class="when">All year</p>
+          <h3>Salad leaves</h3>
+          <p>Mizuna, mustard, winter purslane and lamb’s lettuce from the polytunnel.</p>
+          <p class="picks">£2.50 a bag</p>
+        </li>
+        <li class="card">
+          <svg viewBox="0 0 100 110" aria-hidden="true"><path d="M50 108 V20" stroke="#3f6447" stroke-width="4"/><g fill="#3f6447"><g transform="translate(50 30) scale(.8)"><use href="#leafL"/><use href="#leafR"/></g><g transform="translate(50 60)"><use href="#leafL"/><use href="#leafR"/></g><g transform="translate(50 92) scale(1.1)"><use href="#leafL"/><use href="#leafR"/></g></g></svg>
+          <p class="when">Nov – Mar</p>
+          <h3>Kale &amp; chard</h3>
+          <p>Cavolo nero, red Russian kale and rainbow chard, picked leaf by leaf.</p>
+          <p class="picks">£2.50 a bunch</p>
+        </li>
+        <li class="card">
+          <svg viewBox="0 0 100 110" aria-hidden="true"><path d="M50 108 V22" stroke="#3f6447" stroke-width="4"/><g fill="#3f6447"><g transform="translate(50 58) scale(.7)"><use href="#leafL"/><use href="#leafR"/></g><g transform="translate(50 88) scale(.85)"><use href="#leafL"/><use href="#leafR"/></g></g><g fill="#b4401f"><circle cx="50" cy="18" r="11"/><circle cx="38" cy="26" r="7"/><circle cx="62" cy="26" r="7"/></g><circle cx="50" cy="18" r="4" fill="#f1dcb4"/></svg>
+          <p class="when">Fridays only</p>
+          <h3>Cut flowers</h3>
+          <p>Late chrysanthemums, dried statice and seed heads, wrapped in newspaper.</p>
+          <p class="picks">£8 a bundle</p>
+        </li>
+      </ul>
+    </div>
+  </section>
+
+  <section class="section approach" id="approach" aria-labelledby="approach-title">
+    <div class="wrap grid">
+      <div>
+        <p class="kicker">How we grow</p>
+        <h2 id="approach-title">Small beds, slow soil, no shortcuts.</h2>
+        <p>We farm the way a careful gardener would — just a little more of it. No sprays, no peat, no digging the life out of the ground.</p>
+        <div class="stats">
+          <div><b>¼</b>acre of beds</div>
+          <div><b>60+</b>varieties a year</div>
+          <div><b>0</b>miles by van</div>
+        </div>
+      </div>
+      <ol class="steps">
+        <li><div><h3>No-dig beds</h3><p>Compost goes on top each winter and the worms do the rest, keeping the soil structure and its carbon in place.</p></div></li>
+        <li><div><h3>City compost</h3><p>Coffee grounds from three cafés and leaf litter from the park become next year’s growing medium.</p></div></li>
+        <li><div><h3>Rain, not mains</h3><p>Four rooftop tanks catch enough water to carry the beds through most summers.</p></div></li>
+        <li><div><h3>Saved seed</h3><p>We keep seed from our best plants each autumn, so the varieties slowly learn this corner of town.</p></div></li>
+      </ol>
+    </div>
+  </section>
+
+  <section class="section market" id="market" aria-labelledby="market-title">
+    <div class="wrap grid">
+      <div>
+        <p class="kicker">Weekly market</p>
+        <h2 id="market-title">Saturdays at the farm gate.</h2>
+        <p>The stall goes up beside the tool shed every week of the year, rain or shine. Bring a bag, say hello, and ask what we pulled up this morning.</p>
+        <a class="btn" href="#visit">Plan your visit</a>
+      </div>
+      <div class="ticket">
+        <dl>
+          <dt>When</dt><dd>Every Saturday, 9am – 1pm</dd>
+          <dt>Where</dt><dd>Farm gate, 14 Allotment Lane — behind the old bus depot</dd>
+          <dt>Pay</dt><dd>Card, cash, or pay-what-you-can on the last hour’s produce</dd>
+          <dt>Also</dt><dd>Box pick-ups Wednesday 4 – 7pm</dd>
+        </dl>
+        <ul class="week" aria-label="Open days">
+          <li>Mon</li><li>Tue</li><li class="on">Wed<span class="sr-only"> (box pick-up)</span></li><li>Thu</li><li>Fri</li><li class="on">Sat<span class="sr-only"> (market)</span></li><li>Sun</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section class="section visit" id="visit" aria-labelledby="visit-title">
+    <div class="wrap">
+      <div class="visit-box">
+        <div>
+          <h2 id="visit-title">Come and see it grow.</h2>
+          <p>Walk the beds on a Saturday, or let a weekly box come to you. Boxes are packed Wednesday morning and there are only forty of them.</p>
+          <a class="btn light" href="mailto:hello@corneracre.example?subject=Weekly%20box%20order">Order a weekly box</a>
+          <a class="text-link" href="mailto:hello@corneracre.example?subject=Farm%20visit">Book a group visit</a>
+        </div>
+        <ul class="options">
+          <li><strong>Small box · £14</strong><span>Five seasonal items, enough for one or two.</span></li>
+          <li><strong>Family box · £22</strong><span>Eight items plus a bag of salad, every week.</span></li>
+          <li><strong>Open farm · free</strong><span>First Saturday of the month, 10am tour.</span></li>
+        </ul>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <p><strong>corner acre</strong> · 14 Allotment Lane</p>
+    <p>Growing since 2019 on borrowed ground.</p>
+  </div>
+</footer>
+</body>
+</html>

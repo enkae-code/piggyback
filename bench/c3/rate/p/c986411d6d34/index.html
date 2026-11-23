@@ -1,0 +1,259 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ines Marlow — Book Designer</title>
+<meta name="description" content="Ines Marlow designs covers, interiors and series systems for independent publishers.">
+<style>
+  :root {
+    --bg: #121110;
+    --panel: #273f2b;
+    --panel-2: #1d1c1a;
+    --ink: #ece6da;
+    --ink-panel: #e6eecb;
+    --muted: #a8a193;
+    --rule: #3a3733;
+    --serif: "EB Garamond", "Garamond", "Adobe Garamond Pro", "Cormorant Garamond", "Georgia", serif;
+    --mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", "Menlo", "Consolas", monospace;
+    --gutter: clamp(20px, 4.2vw, 60px);
+    --s-xl: 115px; --s-l: 63px; --s-m: 44px; --s-sm: 38px; --s-s: 22px; --s-xs: 18px;
+  }
+  *, *::before, *::after { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font-family: var(--serif); font-size: 21px; line-height: 1.45;
+    -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility;
+  }
+  a { color: inherit; }
+  :focus-visible { outline: 2px solid var(--ink); outline-offset: 4px; }
+  .wrap { width: 100%; max-width: calc(1320px + 2 * var(--gutter)); margin: 0 auto; padding: 0 var(--gutter); }
+  .mono { font-family: var(--mono); font-size: 14px; letter-spacing: 0.01em; line-height: 1.5; }
+  .skip { position: absolute; left: -9999px; top: 0; background: var(--ink); color: var(--bg); padding: 10px 14px; }
+  .skip:focus { left: 12px; top: 12px; z-index: 10; }
+
+  /* Header */
+  .site-header .wrap {
+    display: grid; grid-template-columns: 1fr auto 1fr; align-items: center;
+    padding-top: var(--s-s); padding-bottom: var(--s-s);
+  }
+  .wordmark { font-size: 24px; color: var(--muted); text-decoration: none; letter-spacing: -0.01em; }
+  .nav ul { list-style: none; display: flex; gap: 30px; margin: 0; padding: 0; }
+  .nav a { text-decoration: none; padding: 6px 0; }
+  .nav a:hover { text-decoration: underline; text-underline-offset: 5px; }
+  .locale { justify-self: end; color: var(--muted); margin: 0; }
+
+  /* Hero */
+  .hero { padding-top: var(--s-sm); }
+  .hero h1 {
+    margin: 0; font-weight: 400; letter-spacing: -0.035em; line-height: 0.92;
+    font-size: clamp(64px, 19.1vw, 275px); margin-left: -0.04em;
+  }
+  .intro-row {
+    display: flex; justify-content: space-between; align-items: flex-end; gap: var(--s-m);
+    margin-top: var(--s-l); padding-bottom: var(--s-l); border-bottom: 1px solid var(--rule);
+  }
+  .intro {
+    margin: 0; max-width: 17.5em; font-size: clamp(30px, 3.5vw, 50px); line-height: 1.1; letter-spacing: -0.015em;
+  }
+  .intro span { color: var(--muted); }
+  .cta {
+    display: inline-block; flex: none; background: var(--ink); color: var(--bg);
+    font-family: var(--mono); font-size: 14px; letter-spacing: 0.1em; text-transform: uppercase;
+    text-decoration: none; padding: 15px 24px; border: 1px solid var(--ink);
+    transition: background-color .2s ease, color .2s ease;
+  }
+  .cta:hover { background: transparent; color: var(--ink); }
+
+  /* Work */
+  .work-head { display: flex; justify-content: space-between; color: var(--muted); padding: var(--s-s) 0 var(--s-m); margin: 0; }
+  .work-head h2 { font: inherit; margin: 0; }
+  .projects { list-style: none; margin: 0; padding: 0; }
+  .project {
+    display: grid; grid-template-columns: 113px minmax(0, 1fr) minmax(0, 531px); gap: 0 var(--s-l);
+    padding-bottom: var(--s-xl);
+  }
+  .project + .project { padding-top: var(--s-m); border-top: 1px solid var(--rule); }
+  .project .num { color: var(--muted); padding-top: 14px; }
+  .project h3 {
+    margin: 0 0 var(--s-sm); font-weight: 400; font-size: clamp(44px, 5.6vw, 80.6px);
+    line-height: 0.98; letter-spacing: -0.03em;
+  }
+  .project p { margin: 0 0 var(--s-s); max-width: 32em; }
+  .meta { display: grid; grid-template-columns: auto 1fr; gap: 6px 24px; margin: var(--s-sm) 0 0; color: var(--muted); }
+  .meta dt { color: var(--muted); }
+  .meta dd { margin: 0; color: var(--ink); }
+
+  /* Covers: drawn in CSS, no image assets */
+  .cover {
+    margin: 0; aspect-ratio: 531 / 640; background: var(--panel); color: var(--ink-panel);
+    padding: 28px; display: flex; flex-direction: column; justify-content: space-between; overflow: hidden;
+  }
+  .cover .c-title {
+    font-size: clamp(48px, 5.4vw, 77.8px); line-height: 0.9; letter-spacing: -0.035em; font-weight: 600;
+  }
+  .cover .c-foot { display: flex; justify-content: space-between; gap: 12px; }
+  .cover.alt { background: var(--ink); color: var(--bg); }
+  .cover.alt .c-title { font-weight: 400; font-style: italic; }
+  .cover.dark { background: var(--panel-2); color: var(--ink); border: 1px solid var(--rule); }
+  .cover.dark .c-title { text-transform: uppercase; letter-spacing: 0.02em; font-size: clamp(36px, 4vw, 58px); font-weight: 500; }
+  .c-rule { height: 1px; background: currentColor; opacity: .5; margin: 18px 0; }
+  .cover figcaption { position: absolute; left: -9999px; }
+
+  /* Contact */
+  .contact { padding: var(--s-xl) 0; border-top: 1px solid var(--rule); }
+  .contact .label { color: var(--muted); margin: 0 0 var(--s-s); }
+  .contact h2 {
+    margin: 0 0 var(--s-m); font-weight: 400; font-size: clamp(44px, 5.6vw, 80.6px);
+    line-height: 1; letter-spacing: -0.03em; max-width: 14em;
+  }
+  .contact h2 span { color: var(--muted); }
+  .contact-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-s) var(--s-m); }
+  .contact-row a.mail { font-size: 24px; text-underline-offset: 6px; text-decoration-thickness: 1px; }
+
+  .site-footer .wrap { display: flex; justify-content: space-between; gap: var(--s-s); color: var(--muted); padding-top: var(--s-s); padding-bottom: var(--s-sm); border-top: 1px solid var(--rule); }
+  .site-footer p { margin: 0; }
+
+  /* Responsive */
+  @media (max-width: 1100px) {
+    .project { grid-template-columns: 60px minmax(0, 1fr) minmax(0, 420px); gap: 0 var(--s-m); }
+  }
+  @media (max-width: 860px) {
+    body { font-size: 19px; }
+    .site-header .wrap { grid-template-columns: 1fr auto; row-gap: 10px; }
+    .locale { display: none; }
+    .nav ul { gap: 20px; }
+    .intro-row { flex-direction: column; align-items: flex-start; margin-top: var(--s-m); padding-bottom: var(--s-m); }
+    .project { grid-template-columns: 1fr; padding-bottom: var(--s-l); }
+    .project .num { padding: 0 0 var(--s-xs); }
+    .project .cover { margin-top: var(--s-m); max-width: 480px; }
+    .contact { padding: var(--s-l) 0; }
+  }
+  @media (max-width: 520px) {
+    .site-header .wrap { grid-template-columns: 1fr; }
+    .work-head { flex-direction: column; gap: 6px; }
+    .site-footer .wrap { flex-direction: column; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { transition: none !important; animation: none !important; }
+  }
+</style>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="site-header">
+  <div class="wrap">
+    <a class="wordmark" href="#top" aria-label="Ines Marlow, home">Ines Marlow</a>
+    <nav class="nav mono" aria-label="Primary">
+      <ul>
+        <li><a href="#work">Work</a></li>
+        <li><a href="#approach">Approach</a></li>
+        <li><a href="#contact">Contact</a></li>
+      </ul>
+    </nav>
+    <p class="locale mono">Independent book designer, Glasgow</p>
+  </div>
+</header>
+
+<main id="main">
+  <section class="hero wrap" id="top" aria-labelledby="hero-title">
+    <h1 id="hero-title">Ines Marlow</h1>
+    <div class="intro-row" id="approach">
+      <p class="intro">Designs covers, interiors and series systems for small presses. <span>Every book set by hand, read before it is designed, and printed to be kept.</span></p>
+      <a class="cta" href="#contact">Commission a book</a>
+    </div>
+  </section>
+
+  <section class="wrap" id="work" aria-labelledby="work-title">
+    <div class="work-head mono">
+      <h2 id="work-title">Selected books, 2023 to 2025</h2>
+      <p style="margin:0">3 of 58 titles</p>
+    </div>
+
+    <ol class="projects">
+      <li class="project">
+        <span class="num mono" aria-hidden="true">01</span>
+        <div>
+          <h3>The Salt Almanac</h3>
+          <p>A cover and full interior for a year of coastal field notes. Tide tables run as marginalia, and a single green carries through endpapers, chapter openers and the spine.</p>
+          <p>Set in a Garamond revival on uncoated cream stock, sewn and left with an open spine so it lies flat on a chart table.</p>
+          <dl class="meta mono">
+            <dt>Client</dt><dd>Harbourline Press</dd>
+            <dt>Scope</dt><dd>Cover, interior, typesetting</dd>
+            <dt>Year</dt><dd>2025</dd>
+          </dl>
+        </div>
+        <figure class="cover" aria-label="Cover of The Salt Almanac">
+          <span class="mono">Harbourline · Field Notes No. 7</span>
+          <span class="c-title">The Salt Almanac</span>
+          <span class="c-foot mono"><span>R. Thane</span><span>2025</span></span>
+          <figcaption>Green cover with heavy serif title.</figcaption>
+        </figure>
+      </li>
+
+      <li class="project">
+        <span class="num mono" aria-hidden="true">02</span>
+        <div>
+          <h3>Small Hours, a poetry series</h3>
+          <p>A system for six debut collections: one grid, one italic, and a colour that shifts per poet. It is quiet on the shelf, and each spine reads clearly next to the others.</p>
+          <dl class="meta mono">
+            <dt>Client</dt><dd>Lamp &amp; Ladder</dd>
+            <dt>Scope</dt><dd>Series design, six covers</dd>
+            <dt>Year</dt><dd>2024</dd>
+          </dl>
+        </div>
+        <figure class="cover alt" aria-label="Cover from the Small Hours series">
+          <span class="mono">Small Hours · 3 / 6</span>
+          <div>
+            <span class="c-title">Weather in the Kitchen</span>
+            <div class="c-rule"></div>
+            <span class="mono">Poems by Aoife Brennan</span>
+          </div>
+          <span class="c-foot mono"><span>Lamp &amp; Ladder</span><span>£12</span></span>
+          <figcaption>Cream cover with italic title.</figcaption>
+        </figure>
+      </li>
+
+      <li class="project">
+        <span class="num mono" aria-hidden="true">03</span>
+        <div>
+          <h3>Brick, Lime, Timber</h3>
+          <p>A 400-page architectural history with 220 plates. I built the image grid first, so the photographs set the pace and the text runs alongside them.</p>
+          <dl class="meta mono">
+            <dt>Client</dt><dd>Northgate University Press</dd>
+            <dt>Scope</dt><dd>Interior system, cover, plate layout</dd>
+            <dt>Year</dt><dd>2023</dd>
+          </dl>
+        </div>
+        <figure class="cover dark" aria-label="Cover of Brick, Lime, Timber">
+          <span class="mono">A Vernacular History</span>
+          <span class="c-title">Brick<br>Lime<br>Timber</span>
+          <span class="c-foot mono"><span>M. Okonjo-Reid</span><span>Northgate</span></span>
+          <figcaption>Near-black cover with stacked capitals.</figcaption>
+        </figure>
+      </li>
+    </ol>
+  </section>
+
+  <section class="contact" id="contact" aria-labelledby="contact-title">
+    <div class="wrap">
+      <p class="label mono">Contact</p>
+      <h2 id="contact-title">Have a manuscript that needs a shape? <span>Booking projects from February 2027.</span></h2>
+      <div class="contact-row">
+        <a class="cta" href="mailto:studio@inesmarlow.example?subject=Book%20design%20enquiry">Start a book</a>
+        <a class="mail" href="mailto:studio@inesmarlow.example">studio@inesmarlow.example</a>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer class="site-footer">
+  <div class="wrap mono">
+    <p>© 2026 Ines Marlow</p>
+    <p>Covers and interiors for independent publishers</p>
+  </div>
+</footer>
+</body>
+</html>

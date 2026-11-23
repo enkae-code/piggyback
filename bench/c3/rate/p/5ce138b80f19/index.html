@@ -1,0 +1,330 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Swap Saturday — Elm Street Neighborhood Skills Swap</title>
+<meta name="description" content="A free neighborhood skills-swap on Saturday 12 December at the Elm Street Community Hall. Bike repair, mending, and bread. Save your place.">
+<style>
+  :root {
+    --blue: #2446d8;
+    --yellow: #ffd23f;
+    --coral: #f06448;
+    --white: #ffffff;
+    --ink: #10163a;
+    --serif: "EB Garamond", "Garamond", "Adobe Garamond Pro", "Cormorant Garamond", Georgia, "Times New Roman", serif;
+    --mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, "Liberation Mono", monospace;
+    --s-xl: 72px;
+    --s-l: 44px;
+    --s-m: 18px;
+    --s-s: 14px;
+    --s-xs: 12px;
+  }
+  *, *::before, *::after { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+  body {
+    margin: 0;
+    background: var(--blue);
+    color: var(--white);
+    font-family: var(--serif);
+    font-size: 23px;
+    line-height: 1.45;
+    -webkit-font-smoothing: antialiased;
+  }
+  a { color: inherit; }
+  :focus-visible { outline: 3px solid var(--yellow); outline-offset: 3px; }
+  .wrap { width: min(1320px, 100% - 2 * var(--s-l)); margin-inline: auto; }
+  .mono { font-family: var(--mono); font-size: 16px; letter-spacing: .04em; text-transform: uppercase; }
+
+  .skip { position: absolute; left: -999px; top: 0; background: var(--yellow); color: var(--ink); padding: var(--s-xs) var(--s-m); z-index: 10; }
+  .skip:focus { left: var(--s-m); top: var(--s-m); }
+
+  /* Header / nav */
+  header.site { border-bottom: 2px solid var(--white); }
+  .bar { display: flex; align-items: center; justify-content: space-between; gap: var(--s-m); padding-block: var(--s-m); flex-wrap: wrap; }
+  .brand { font-family: var(--serif); font-size: 28px; font-style: italic; text-decoration: none; color: var(--yellow); }
+  nav ul { list-style: none; margin: 0; padding: 0; display: flex; gap: var(--s-l); flex-wrap: wrap; }
+  nav a { font-family: var(--mono); font-size: 16px; text-transform: uppercase; letter-spacing: .04em; text-decoration: none; padding-block: var(--s-xs); border-bottom: 2px solid transparent; }
+  nav a:hover { border-bottom-color: var(--yellow); color: var(--yellow); }
+
+  /* Hero */
+  .hero { padding-block: var(--s-l) var(--s-xl); }
+  .kicker { color: var(--yellow); margin: 0 0 var(--s-m); }
+  h1 {
+    font-size: clamp(76px, 16.6vw, 239px);
+    line-height: .84;
+    font-weight: 500;
+    letter-spacing: -.035em;
+    margin: 0 0 var(--s-l);
+  }
+  h1 em { color: var(--yellow); font-style: italic; }
+  .hero-grid { display: grid; grid-template-columns: 1.3fr 1fr; gap: var(--s-l); align-items: end; }
+  .lede { font-size: 27px; margin: 0; max-width: 34ch; }
+  .cta-row { display: flex; gap: var(--s-m); flex-wrap: wrap; justify-content: flex-end; align-items: center; }
+  .btn {
+    display: inline-block;
+    font-family: var(--mono);
+    font-size: 16px; font-weight: 700;
+    text-transform: uppercase; letter-spacing: .06em;
+    text-decoration: none;
+    background: var(--yellow); color: var(--ink);
+    border: 2px solid var(--yellow);
+    padding: var(--s-m) var(--s-l);
+    cursor: pointer;
+  }
+  .btn:hover { background: var(--coral); border-color: var(--coral); color: var(--ink); }
+  .link-quiet { font-family: var(--mono); font-size: 16px; text-transform: uppercase; letter-spacing: .04em; }
+
+  /* Facts strip */
+  .facts { background: var(--yellow); color: var(--ink); }
+  .facts dl { margin: 0; display: grid; grid-template-columns: repeat(4, 1fr); }
+  .facts div { padding: var(--s-l) var(--s-m); border-left: 2px solid var(--ink); }
+  .facts div:first-child { border-left: 0; padding-left: 0; }
+  .facts dt { font-family: var(--mono); font-size: 16px; text-transform: uppercase; letter-spacing: .04em; margin-bottom: var(--s-xs); }
+  .facts dd { margin: 0; font-size: 28px; line-height: 1.15; }
+
+  /* Sections */
+  section.block { padding-block: var(--s-xl); }
+  .sec-head { display: grid; grid-template-columns: 1fr 2fr; gap: var(--s-l); margin-bottom: var(--s-l); align-items: baseline; }
+  h2 { font-size: 43.9px; line-height: 1.05; font-weight: 500; margin: 0; }
+  h2 .num { color: var(--yellow); font-family: var(--mono); font-size: 16px; display: block; margin-bottom: var(--s-xs); letter-spacing: .04em; }
+  .sec-head p { margin: 0; max-width: 46ch; }
+
+  /* About */
+  .about-body { columns: 2; column-gap: var(--s-l); }
+  .about-body p { margin: 0 0 var(--s-m); break-inside: avoid; }
+
+  /* Activities */
+  .cards { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--s-m); }
+  .card { border: 2px solid var(--white); padding: var(--s-l) var(--s-m) var(--s-m); display: flex; flex-direction: column; gap: var(--s-s); background: var(--blue); }
+  .card:nth-child(2) { background: var(--coral); border-color: var(--coral); color: var(--ink); }
+  .card .time { color: var(--yellow); margin: 0; }
+  .card:nth-child(2) .time { color: var(--ink); }
+  .card h3 { font-size: 43.9px; line-height: 1; font-weight: 500; margin: 0; }
+  .card p { margin: 0; }
+  .card .bring { margin-top: auto; padding-top: var(--s-s); border-top: 2px solid currentColor; font-family: var(--mono); font-size: 16px; }
+
+  /* Access */
+  .access { background: var(--white); color: var(--ink); }
+  .access h2 .num { color: #b8341b; }
+  .access-list { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(2, 1fr); gap: 0 var(--s-l); }
+  .access-list li { padding-block: var(--s-m); border-top: 2px solid var(--ink); display: grid; grid-template-columns: 9ch 1fr; gap: var(--s-m); }
+  .access-list strong { font-family: var(--mono); font-size: 16px; text-transform: uppercase; letter-spacing: .04em; padding-top: 5px; color: #b8341b; }
+  .access a { color: var(--blue); }
+
+  /* RSVP */
+  .rsvp-grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s-l); align-items: start; }
+  .rsvp h2 { font-size: clamp(48px, 7vw, 96px); line-height: .92; }
+  form { display: grid; gap: var(--s-m); }
+  label { font-family: var(--mono); font-size: 16px; text-transform: uppercase; letter-spacing: .04em; display: block; margin-bottom: var(--s-xs); }
+  input, select {
+    width: 100%; font: inherit; font-size: 23px;
+    padding: var(--s-s) var(--s-m);
+    background: transparent; color: var(--white);
+    border: 2px solid var(--white); border-radius: 0;
+  }
+  input::placeholder { color: #dfe5ff; opacity: 1; }
+  select option { color: var(--ink); background: var(--white); }
+  input:focus, select:focus { outline: none; border-color: var(--yellow); box-shadow: 0 0 0 2px var(--yellow); }
+  .hint { font-size: 16px; font-family: var(--mono); margin: var(--s-xs) 0 0; }
+  .confirm { background: var(--yellow); color: var(--ink); padding: var(--s-m); margin: 0; }
+  .confirm[hidden] { display: none; }
+
+  footer { border-top: 2px solid var(--white); padding-block: var(--s-l); }
+  footer .bar { padding: 0; }
+  footer p { margin: 0; font-size: 16px; font-family: var(--mono); }
+
+  @media (max-width: 960px) {
+    .hero-grid, .sec-head, .rsvp-grid { grid-template-columns: 1fr; }
+    .cta-row { justify-content: flex-start; }
+    .cards { grid-template-columns: 1fr; }
+    .facts dl { grid-template-columns: repeat(2, 1fr); }
+    .facts div:nth-child(3) { border-left: 0; padding-left: 0; }
+    .facts div:nth-child(n+3) { border-top: 2px solid var(--ink); }
+    .access-list { grid-template-columns: 1fr; }
+    .about-body { columns: 1; }
+  }
+  @media (max-width: 600px) {
+    body { font-size: 19px; }
+    .wrap { width: calc(100% - 2 * var(--s-m)); }
+    nav ul { gap: var(--s-m); }
+    .facts dl { grid-template-columns: 1fr; }
+    .facts div { border-left: 0 !important; padding-left: 0; padding-block: var(--s-m); }
+    .facts div + div { border-top: 2px solid var(--ink); }
+    .lede { font-size: 22px; }
+    h2 { font-size: 34px; }
+    .card h3 { font-size: 34px; }
+    section.block { padding-block: var(--s-l); }
+    .access-list li { grid-template-columns: 1fr; gap: 4px; }
+    .btn { width: 100%; text-align: center; }
+  }
+</style>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="site">
+  <div class="wrap bar">
+    <a class="brand" href="#top">Swap Saturday</a>
+    <nav aria-label="Main">
+      <ul>
+        <li><a href="#details">Details</a></li>
+        <li><a href="#activities">Activities</a></li>
+        <li><a href="#access">Access</a></li>
+        <li><a href="#rsvp">Save a place</a></li>
+      </ul>
+    </nav>
+  </div>
+</header>
+
+<main id="main">
+  <section class="hero" id="top" aria-labelledby="hero-title">
+    <div class="wrap">
+      <p class="kicker mono">Elm Street Neighborhood · Free · All ages</p>
+      <h1 id="hero-title">Trade a <em>skill,</em> keep a neighbor.</h1>
+      <div class="hero-grid">
+        <p class="lede">One Saturday afternoon, three tables, and everyone teaching something. Bring what you know, leave with something new — no money changes hands.</p>
+        <div class="cta-row">
+          <a class="btn" href="#rsvp">Save your place</a>
+          <a class="link-quiet" href="#activities">See the activities</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="facts" id="details" aria-labelledby="details-title">
+    <div class="wrap">
+      <h2 id="details-title" class="mono" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);">Event details</h2>
+      <dl>
+        <div><dt>Date</dt><dd>Saturday, 12&nbsp;December 2026</dd></div>
+        <div><dt>Time</dt><dd>1:00 – 5:00 pm<br>doors at 12:45</dd></div>
+        <div><dt>Place</dt><dd>Elm Street Community Hall, 48&nbsp;Elm&nbsp;St</dd></div>
+        <div><dt>Cost</dt><dd>Free — just bring a skill or a question</dd></div>
+      </dl>
+    </div>
+  </section>
+
+  <section class="block" aria-labelledby="about-title">
+    <div class="wrap">
+      <div class="sec-head">
+        <h2 id="about-title"><span class="num">01 — How it works</span>Teach for twenty, learn for forty.</h2>
+        <div class="about-body">
+          <p>Every guest is both a teacher and a learner. When you arrive, pin your skill to the swap board — anything from sharpening knives to filling in tax forms — and pick two things you'd like to learn.</p>
+          <p>The three hosted tables run on the hour. In between, the hall is open for one-on-one swaps, tea, and the lost-and-found of good ideas. Children are welcome with a grown-up.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="block" id="activities" aria-labelledby="act-title" style="padding-top:0">
+    <div class="wrap">
+      <div class="sec-head">
+        <h2 id="act-title"><span class="num">02 — Activities</span>Three tables, all afternoon.</h2>
+        <p>Each table is led by a neighbor and runs three short sessions. Drop in to any of them; places are limited only by elbow room.</p>
+      </div>
+      <ul class="cards">
+        <li class="card">
+          <p class="time mono">1:15 · 2:30 · 3:45</p>
+          <h3>Bike fix-up bench</h3>
+          <p>Patch a tube, true a wheel and tune your brakes with Dara from the corner shop. Stands and tools provided.</p>
+          <p class="bring">Bring: your bike, if it fits through a door</p>
+        </li>
+        <li class="card">
+          <p class="time mono">1:30 · 2:45 · 4:00</p>
+          <h3>Mend &amp; make do</h3>
+          <p>Darning, buttons, hems and visible patches. The sewing circle brings machines, thread and an endless supply of patience.</p>
+          <p class="bring">Bring: one garment that needs rescuing</p>
+        </li>
+        <li class="card">
+          <p class="time mono">1:00 · 2:15 · 3:30</p>
+          <h3>Bread for beginners</h3>
+          <p>Mix, knead and shape a simple loaf, then take home a jar of sourdough starter from the hall's own culture.</p>
+          <p class="bring">Bring: an apron and a clean jar</p>
+        </li>
+      </ul>
+    </div>
+  </section>
+
+  <section class="block access" id="access" aria-labelledby="access-title">
+    <div class="wrap">
+      <div class="sec-head">
+        <h2 id="access-title"><span class="num">03 — Access</span>Getting in, getting comfortable.</h2>
+        <p>We want everyone at the tables. If something here doesn't work for you, tell us when you save your place and we'll sort it out.</p>
+      </div>
+      <ul class="access-list">
+        <li><strong>Entry</strong><span>Step-free main entrance on Elm Street with an automatic door. The whole event is on the ground floor.</span></li>
+        <li><strong>Toilets</strong><span>Accessible, gender-neutral toilet next to the kitchen, with a baby-changing table.</span></li>
+        <li><strong>Seating</strong><span>Chairs with arms at every table, and a quiet room with soft lighting off the main hall.</span></li>
+        <li><strong>Getting here</strong><span>Bus 14 stops outside (Elm &amp; 3rd). Bike racks by the door; two blue-badge parking bays.</span></li>
+        <li><strong>Hearing</strong><span>Hearing loop in the main hall. Each table has printed step-by-step cards.</span></li>
+        <li><strong>Food</strong><span>Tea, coffee and snacks are free. Ingredients are labelled, and gluten-free options are available.</span></li>
+      </ul>
+    </div>
+  </section>
+
+  <section class="block rsvp" id="rsvp" aria-labelledby="rsvp-title">
+    <div class="wrap rsvp-grid">
+      <div>
+        <h2 id="rsvp-title"><span class="num">04 — RSVP</span>Save your place.</h2>
+        <p>It's free, but knowing numbers helps us set out enough chairs, flour and inner tubes. One form per household is fine.</p>
+      </div>
+      <form id="rsvp-form" novalidate>
+        <div>
+          <label for="name">Your name</label>
+          <input id="name" name="name" type="text" autocomplete="name" required>
+        </div>
+        <div>
+          <label for="email">Email</label>
+          <input id="email" name="email" type="email" autocomplete="email" required aria-describedby="email-hint">
+          <p class="hint" id="email-hint">Only used to send a reminder the day before.</p>
+        </div>
+        <div>
+          <label for="table">Table you're most keen on</label>
+          <select id="table" name="table">
+            <option>Bike fix-up bench</option>
+            <option>Mend &amp; make do</option>
+            <option>Bread for beginners</option>
+            <option>Just here to swap</option>
+          </select>
+        </div>
+        <div>
+          <label for="skill">A skill you could share (optional)</label>
+          <input id="skill" name="skill" type="text" placeholder="e.g. knife sharpening">
+        </div>
+        <div>
+          <label for="needs">Access needs (optional)</label>
+          <input id="needs" name="needs" type="text">
+        </div>
+        <button class="btn" type="submit">Save my place</button>
+        <p class="confirm" id="confirm" role="status" aria-live="polite" hidden></p>
+      </form>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap bar">
+    <p>Swap Saturday · Elm Street Community Hall · 12 Dec 2026</p>
+    <p><a href="#top">Back to top ↑</a></p>
+  </div>
+</footer>
+
+<script>
+  (function () {
+    var form = document.getElementById('rsvp-form');
+    var out = document.getElementById('confirm');
+    form.addEventListener('submit', function (e) {
+      e.preventDefault();
+      var name = form.name.value.trim();
+      var email = form.email;
+      if (!name) { out.hidden = false; out.textContent = 'Please add your name.'; form.name.focus(); return; }
+      if (!email.value || !email.checkValidity()) { out.hidden = false; out.textContent = 'Please add a valid email address.'; email.focus(); return; }
+      out.hidden = false;
+      out.textContent = 'Thanks, ' + name + ' — your place is saved for Saturday 12 December. See you at the hall.';
+      form.querySelector('button').disabled = true;
+    });
+  })();
+</script>
+</body>
+</html>

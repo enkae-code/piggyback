@@ -1,0 +1,293 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Good Day Assembly — Neighborhood Skills Swap, Saturday June 13</title>
+<meta name="description" content="A neighborhood field day for swapping skills, making something lopsided, and eating outside. Saturday, June 13, 11 to 5 at Alder Park.">
+<style>
+  :root{
+    --blue:#2446d8;
+    --blue-deep:#1a35b0;
+    --yellow:#ffd23f;
+    --coral:#f0654a;
+    --ink:#161a33;
+    --paper:#fff8e6;
+    --serif:"EB Garamond","Cormorant Garamond",Garamond,"Iowan Old Style","Palatino Linotype",Palatino,"Book Antiqua",Georgia,serif;
+    --mono:"IBM Plex Mono","JetBrains Mono",ui-monospace,"SFMono-Regular",Menlo,Consolas,"DejaVu Sans Mono","Liberation Mono",monospace;
+    --pad:clamp(1.25rem,4.2vw,3.75rem);
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  @media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
+  body{margin:0;font-family:var(--serif);color:var(--ink);background:var(--blue);line-height:1.45;-webkit-font-smoothing:antialiased}
+  a{color:inherit}
+  .skip{position:absolute;left:-999px;top:0;background:var(--yellow);color:var(--ink);padding:.6rem 1rem;font-family:var(--mono);z-index:10}
+  .skip:focus{left:1rem;top:1rem}
+  :focus-visible{outline:3px solid var(--yellow);outline-offset:3px}
+  .on-yellow :focus-visible,.on-paper :focus-visible{outline-color:var(--blue)}
+
+  .mono{font-family:var(--mono);text-transform:uppercase;letter-spacing:.04em;font-weight:700}
+
+  /* Header */
+  .site-header{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:1rem 2rem;padding:1.4rem var(--pad) 0;color:#fff}
+  .brand{font-size:1.75rem;font-weight:700;text-decoration:none;letter-spacing:-.01em}
+  .site-nav ul{display:flex;flex-wrap:wrap;gap:.5rem 2rem;list-style:none;margin:0;padding:0}
+  .site-nav a{font-family:var(--mono);font-size:.875rem;font-weight:700;text-transform:uppercase;letter-spacing:.03em;text-decoration:none;padding:.35rem 0;border-bottom:2px solid transparent}
+  .site-nav a:hover{border-bottom-color:var(--yellow);color:var(--yellow)}
+
+  /* Hero */
+  .hero{color:#fff;padding:clamp(2rem,4vw,3.5rem) var(--pad) clamp(3rem,4vw,3.5rem)}
+  .hero h1{margin:0;color:var(--yellow);font-weight:700;font-size:clamp(3.75rem,15.2vw,13.75rem);line-height:.88;letter-spacing:-.035em;max-width:11ch}
+  .hero-foot{display:grid;grid-template-columns:1fr minmax(0,531px);gap:2rem;align-items:end;margin-top:clamp(1.5rem,0vw,0rem)}
+  .lede{font-size:clamp(1.25rem,1.9vw,1.6rem);line-height:1.4;max-width:24em;margin:0}
+  .date-card{background:var(--coral);color:var(--ink);margin-top:.25rem}
+  .date-card .when{padding:1rem 1.4rem 1.1rem}
+  .date-card h2{margin:0;font-size:clamp(1.9rem,3vw,2.6rem);line-height:1.1;letter-spacing:-.02em}
+  .date-card p{margin:.7rem 0 0;font-size:.85rem}
+  .cta{display:block;background:var(--yellow);color:var(--ink);text-decoration:none;padding:1.15rem 1.6rem;font-family:var(--mono);font-weight:700;text-transform:uppercase;letter-spacing:.1em;font-size:1rem;transition:background .15s}
+  .cta:hover{background:#fff}
+  .cta span{display:inline-block;transition:transform .15s}
+  .cta:hover span{transform:translateX(4px)}
+
+  /* Sections */
+  section{scroll-margin-top:1rem}
+  .band{padding:clamp(3.5rem,7vw,6.5rem) var(--pad)}
+  .band h2.title{font-size:clamp(2.6rem,6.5vw,5.5rem);line-height:.95;letter-spacing:-.03em;margin:0 0 1.5rem;font-weight:700}
+  .eyebrow{display:inline-block;font-size:.85rem;margin:0 0 1.1rem}
+
+  .on-yellow{background:var(--yellow);color:var(--ink)}
+  .on-yellow .eyebrow{color:var(--blue)}
+  .details{display:grid;grid-template-columns:1.1fr 1fr;gap:clamp(2rem,5vw,5rem);align-items:start}
+  .details p.body{font-size:clamp(1.15rem,1.5vw,1.35rem);max-width:32em;margin:0 0 1rem}
+  .facts{margin:0;display:grid;grid-template-columns:1fr 1fr;border-top:3px solid var(--ink)}
+  .facts div{padding:1.1rem 0;border-bottom:1.5px solid var(--ink)}
+  .facts div:nth-child(odd){padding-right:1rem}
+  .facts dt{font-family:var(--mono);font-size:.78rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--blue)}
+  .facts dd{margin:.3rem 0 0;font-size:1.35rem;font-weight:600;line-height:1.2}
+
+  /* Activities */
+  .on-blue{background:var(--blue);color:#fff}
+  .on-blue .title{color:var(--yellow)}
+  .on-blue .eyebrow{color:#fff}
+  .intro{font-size:clamp(1.15rem,1.5vw,1.35rem);max-width:34em;margin:0 0 3rem}
+  .cards{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(3,1fr);gap:1.5rem}
+  .card{background:var(--paper);color:var(--ink);display:flex;flex-direction:column}
+  .card-top{padding:1.1rem 1.4rem;display:flex;justify-content:space-between;align-items:baseline;gap:1rem;font-size:.8rem}
+  .card:nth-child(1) .card-top{background:var(--coral)}
+  .card:nth-child(2) .card-top{background:var(--yellow)}
+  .card:nth-child(3) .card-top{background:#9fd8b4}
+  .card-body{padding:1.4rem 1.4rem 1.6rem;display:flex;flex-direction:column;flex:1}
+  .card h3{font-size:clamp(1.8rem,2.6vw,2.4rem);line-height:1;letter-spacing:-.02em;margin:0 0 .8rem}
+  .card p{font-size:1.15rem;margin:0 0 1.2rem}
+  .card .bring{margin-top:auto;padding-top:1rem;border-top:1.5px solid var(--ink);font-size:.78rem}
+  .card .bring b{color:var(--blue)}
+
+  /* Access */
+  .on-coral{background:var(--coral);color:var(--ink)}
+  .on-coral .eyebrow{color:var(--ink)}
+  .access{display:grid;grid-template-columns:1fr 1.4fr;gap:clamp(2rem,5vw,5rem)}
+  .access-list{list-style:none;margin:0;padding:0;border-top:3px solid var(--ink)}
+  .access-list li{display:grid;grid-template-columns:11rem 1fr;gap:1rem;padding:1.1rem 0;border-bottom:1.5px solid var(--ink);font-size:1.2rem}
+  .access-list .mono{font-size:.8rem;padding-top:.3rem}
+  .access .body{font-size:1.25rem;margin:0;max-width:22em}
+
+  /* Save */
+  .save{display:grid;grid-template-columns:1fr minmax(0,531px);gap:clamp(2rem,5vw,5rem);align-items:start}
+  .save .title{color:var(--yellow)}
+  .save .body{font-size:clamp(1.15rem,1.5vw,1.35rem);max-width:26em;margin:0}
+  form{background:var(--paper);color:var(--ink);padding:1.6rem 1.4rem 0;display:grid;gap:1.1rem}
+  label{display:block;font-family:var(--mono);font-size:.78rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;margin-bottom:.4rem}
+  input,select{width:100%;font:inherit;font-size:1.15rem;padding:.7rem .8rem;border:2px solid var(--ink);background:#fff;color:var(--ink);border-radius:0}
+  input:focus-visible,select:focus-visible{outline:3px solid var(--blue);outline-offset:1px}
+  fieldset{border:0;margin:0;padding:0}
+  legend{font-family:var(--mono);font-size:.78rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;margin-bottom:.5rem;padding:0}
+  .checks{display:flex;flex-wrap:wrap;gap:.5rem 1.25rem;font-size:1.1rem}
+  .checks label{font-family:var(--serif);text-transform:none;letter-spacing:0;font-weight:500;font-size:1.1rem;display:flex;gap:.45rem;align-items:center;margin:0}
+  .checks input{width:1.15rem;height:1.15rem;accent-color:var(--blue)}
+  button.cta{border:0;width:calc(100% + 2.8rem);margin:.5rem -1.4rem 0;text-align:left;cursor:pointer}
+  .confirm{background:var(--yellow);color:var(--ink);padding:1.4rem;font-size:1.25rem}
+  .confirm[hidden]{display:none}
+  .confirm strong{display:block;font-size:2rem;line-height:1.05;margin-bottom:.4rem}
+
+  .site-footer{background:var(--ink);color:#fff;padding:2rem var(--pad);display:flex;flex-wrap:wrap;justify-content:space-between;gap:1rem;font-size:.8rem}
+  .site-footer .brand{font-size:1.4rem;font-family:var(--serif)}
+
+  @media (max-width:960px){
+    .hero-foot,.details,.access,.save{grid-template-columns:1fr}
+    .cards{grid-template-columns:1fr 1fr}
+    .cards .card:last-child{grid-column:1/-1}
+  }
+  @media (max-width:640px){
+    .site-header{flex-direction:column;align-items:flex-start}
+    .site-nav ul{gap:.25rem 1.25rem}
+    .site-nav a{font-size:.78rem}
+    .cards{grid-template-columns:1fr}
+    .access-list li{grid-template-columns:1fr;gap:.2rem}
+    .facts{grid-template-columns:1fr}
+  }
+</style>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="site-header">
+  <a class="brand" href="#top" aria-label="Good Day Assembly, home">Good Day Assembly</a>
+  <nav class="site-nav" aria-label="Main">
+    <ul>
+      <li><a href="#the-day">The day</a></li>
+      <li><a href="#activities">Make, trade, play</a></li>
+      <li><a href="#access">Getting there</a></li>
+      <li><a href="#save">Save your Saturday</a></li>
+    </ul>
+  </nav>
+</header>
+
+<main id="main">
+  <section class="hero" id="top" aria-labelledby="hero-title">
+    <h1 id="hero-title">Bring your good stuff.</h1>
+    <div class="hero-foot">
+      <p class="lede">A neighborhood skills swap and field day for trading what you know, making something lopsided, and eating outside.</p>
+      <aside class="date-card" aria-label="Event date and place">
+        <div class="when">
+          <h2>Saturday, June 13</h2>
+          <p class="mono">11 to 5 · Alder Park</p>
+        </div>
+        <a class="cta" href="#save">Save your place <span aria-hidden="true">→</span></a>
+      </aside>
+    </div>
+  </section>
+
+  <section class="band on-yellow" id="the-day" aria-labelledby="day-title">
+    <div class="details">
+      <div>
+        <p class="eyebrow mono">01 · The day</p>
+        <h2 class="title" id="day-title">One afternoon, everybody teaches something.</h2>
+        <p class="body">Good Day Assembly is a free, open-air swap where neighbors trade skills instead of money. Fix a bike, learn a stitch, pot a cutting, show someone how you make your bread. Nobody has to be an expert — just willing.</p>
+        <p class="body">Drop in for an hour or stay all day. Kids, grandparents, and the curious are all welcome.</p>
+      </div>
+      <dl class="facts">
+        <div><dt>Date</dt><dd>Saturday, June 13</dd></div>
+        <div><dt>Hours</dt><dd>11 am – 5 pm</dd></div>
+        <div><dt>Where</dt><dd>Alder Park, north lawn</dd></div>
+        <div><dt>Cost</dt><dd>Free, always</dd></div>
+        <div><dt>Rain plan</dt><dd>Alder Rec Hall, next door</dd></div>
+        <div><dt>Lunch</dt><dd>Potluck at 1 pm</dd></div>
+      </dl>
+    </div>
+  </section>
+
+  <section class="band on-blue" id="activities" aria-labelledby="act-title">
+    <p class="eyebrow mono">02 · Make, trade, play</p>
+    <h2 class="title" id="act-title">Three things to do.</h2>
+    <p class="intro">Each runs on a loose rotation all afternoon. Bring a skill, leave with another one.</p>
+    <ul class="cards">
+      <li class="card">
+        <div class="card-top mono"><span>Make</span><span>11:00 – 2:00</span></div>
+        <div class="card-body">
+          <h3>Fix-It Tables</h3>
+          <p>Bring a wobbly chair, a flat tire, or a toaster with opinions. Neighbors with tools and patience help you mend it — and show you how.</p>
+          <p class="bring mono"><b>Bring:</b> something broken</p>
+        </div>
+      </li>
+      <li class="card">
+        <div class="card-top mono"><span>Trade</span><span>12:00 – 4:00</span></div>
+        <div class="card-body">
+          <h3>The Skills Market</h3>
+          <p>Fifteen-minute lessons, traded one for one. Knot tying for knife sharpening, Spanish phrases for sourdough tips. Chalk your offer on the board.</p>
+          <p class="bring mono"><b>Bring:</b> one thing you know</p>
+        </div>
+      </li>
+      <li class="card">
+        <div class="card-top mono"><span>Play</span><span>2:00 – 5:00</span></div>
+        <div class="card-body">
+          <h3>Lopsided Workshop</h3>
+          <p>Clay, scrap wood, and fabric off-cuts for making something gloriously imperfect. Then a slow-paced field-day relay to close out the afternoon.</p>
+          <p class="bring mono"><b>Bring:</b> clothes you can get messy</p>
+        </div>
+      </li>
+    </ul>
+  </section>
+
+  <section class="band on-coral" id="access" aria-labelledby="access-title">
+    <div class="access">
+      <div>
+        <p class="eyebrow mono">03 · Getting there</p>
+        <h2 class="title" id="access-title">Everyone gets in.</h2>
+        <p class="body">If something here doesn't work for you, tell us when you save your place and we'll sort it out ahead of time.</p>
+      </div>
+      <ul class="access-list">
+        <li><span class="mono">Step-free</span><span>Paved paths from the Alder St. gate to every table. Firm ground mats on the lawn.</span></li>
+        <li><span class="mono">Transit</span><span>Bus 14 and 22 stop at Alder &amp; 5th, a two-minute walk. Bike racks at both gates.</span></li>
+        <li><span class="mono">Parking</span><span>Six accessible spaces at the Rec Hall lot, held for blue-badge holders all day.</span></li>
+        <li><span class="mono">Facilities</span><span>Accessible restrooms in the Rec Hall. Shaded seating and water at every station.</span></li>
+        <li><span class="mono">Quiet tent</span><span>A low-noise rest spot by the oak grove, open the whole day.</span></li>
+        <li><span class="mono">Language</span><span>ASL interpreter 12–3 pm. Volunteers speak Spanish and Vietnamese.</span></li>
+      </ul>
+    </div>
+  </section>
+
+  <section class="band on-blue" id="save" aria-labelledby="save-title">
+    <div class="save">
+      <div>
+        <p class="eyebrow mono">04 · Save your Saturday</p>
+        <h2 class="title" id="save-title">Save your place.</h2>
+        <p class="body">It's free, and walk-ups are welcome — but a headcount helps us set out enough chairs, clay, and lemonade.</p>
+      </div>
+      <div>
+        <form id="rsvp" novalidate>
+          <div>
+            <label for="name">Your name</label>
+            <input id="name" name="name" autocomplete="name" required>
+          </div>
+          <div>
+            <label for="party">How many of you?</label>
+            <select id="party" name="party">
+              <option>Just me</option><option>2</option><option>3</option><option>4</option><option>5 or more</option>
+            </select>
+          </div>
+          <fieldset>
+            <legend>Interested in</legend>
+            <div class="checks">
+              <label><input type="checkbox" name="act" value="Fix-It Tables"> Fix-It Tables</label>
+              <label><input type="checkbox" name="act" value="Skills Market"> Skills Market</label>
+              <label><input type="checkbox" name="act" value="Lopsided Workshop"> Lopsided Workshop</label>
+            </div>
+          </fieldset>
+          <div>
+            <label for="teach">A skill you could share (optional)</label>
+            <input id="teach" name="teach" placeholder="e.g. patching jeans">
+          </div>
+          <p id="err" class="mono" role="alert" style="margin:0;font-size:.8rem;color:#b3261e"></p>
+          <button class="cta" type="submit">Save my place <span aria-hidden="true">→</span></button>
+        </form>
+        <div class="confirm" id="confirm" hidden tabindex="-1" aria-live="polite"></div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer class="site-footer mono">
+  <span class="brand">Good Day Assembly</span>
+  <span>Saturday, June 13 · 11 to 5 · Alder Park</span>
+</footer>
+
+<script>
+  (function(){
+    var form=document.getElementById('rsvp'),err=document.getElementById('err'),box=document.getElementById('confirm');
+    form.addEventListener('submit',function(e){
+      e.preventDefault();
+      var input=document.getElementById('name'),name=input.value.trim();
+      if(!name){err.textContent='Please add your name.';input.focus();return;}
+      err.textContent='';
+      var first=name.split(/\s+/)[0];
+      box.textContent='';
+      var s=document.createElement('strong');s.textContent='See you there, '+first+'.';
+      var p=document.createElement('span');p.textContent='Your place is saved for Saturday, June 13 at Alder Park. Bring your good stuff.';
+      box.appendChild(s);box.appendChild(p);
+      form.hidden=true;box.hidden=false;box.focus();
+    });
+  })();
+</script>
+</body>
+</html>

@@ -1,0 +1,352 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Subscribe — Long Margin, a quarterly in print</title>
+<meta name="description" content="Three ways to subscribe to Long Margin, an independent print quarterly. Pick a plan, then subscribe.">
+<style>
+  :root {
+    --ink: #121212;
+    --paper: #f4b223;
+    --rule: 3px solid var(--ink);
+    --mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", "Cascadia Mono", "DejaVu Sans Mono", Menlo, Consolas, monospace;
+    --s-44: 44px; --s-37: 37px; --s-22: 22px; --s-18: 18px; --s-14: 14px;
+  }
+  *, *::before, *::after { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--mono);
+    font-size: 15px;
+    line-height: 1.55;
+    letter-spacing: 0.02em;
+  }
+  a { color: inherit; }
+  :focus-visible { outline: 3px solid var(--ink); outline-offset: 3px; }
+  .skip {
+    position: absolute; left: -9999px; top: 0;
+    background: var(--ink); color: var(--paper); padding: var(--s-14) var(--s-18);
+  }
+  .skip:focus { left: var(--s-14); top: var(--s-14); z-index: 10; }
+  .caps { text-transform: uppercase; font-weight: 700; letter-spacing: 0.06em; font-size: 13px; }
+
+  /* Masthead */
+  .masthead {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    align-items: center;
+    gap: var(--s-22);
+    padding: var(--s-18) 28px;
+    border-bottom: var(--rule);
+  }
+  .logo { font-size: 20px; font-weight: 700; text-decoration: none; letter-spacing: 0.04em; text-transform: uppercase; white-space: nowrap; }
+  .masthead nav ul { list-style: none; display: flex; gap: 32px; margin: 0; padding: 0; }
+  .masthead nav a { text-decoration: none; }
+  .masthead nav a:hover, .masthead nav a[aria-current] { text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 5px; }
+  .masthead .meta { justify-self: end; margin: 0; white-space: nowrap; }
+
+  /* Hero */
+  .hero { display: grid; grid-template-columns: minmax(0, 1fr) 360px; border-bottom: var(--rule); }
+  .hero-main { padding: var(--s-44) var(--s-44) var(--s-37); display: flex; flex-direction: column; justify-content: space-between; gap: var(--s-44); }
+  h1 {
+    margin: 0;
+    font-size: clamp(56px, 12.4vw, 178.6px);
+    line-height: 0.92;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: -0.01em;
+  }
+  h1 .line { display: block; }
+  h1 .inverse { display: inline-block; background: var(--ink); color: var(--paper); padding: 0 0.1em; margin-left: -0.1em; }
+  .lede { max-width: 44ch; margin: 0; }
+
+  .ticket { border-left: var(--rule); display: flex; flex-direction: column; }
+  .ticket-head { padding: var(--s-37) 28px var(--s-22); }
+  .ticket-head h2 { margin: 0 0 var(--s-18); font-size: 22px; line-height: 1.15; text-transform: uppercase; font-weight: 700; padding-bottom: var(--s-18); border-bottom: var(--rule); }
+  .leaders { margin: 0; padding: 0; list-style: none; display: grid; gap: var(--s-14); }
+  .leaders li { display: flex; align-items: baseline; gap: 6px; }
+  .leaders dt, .leaders .k { font-weight: 700; text-transform: uppercase; }
+  .leaders .dots { flex: 1; border-bottom: 2px dotted var(--ink); transform: translateY(-4px); min-width: 12px; }
+  .ticket-note { margin: var(--s-22) 0 0; }
+  .ticket-foot { margin-top: auto; background: var(--ink); color: var(--paper); padding: var(--s-37) 28px; }
+  .ticket-foot p:first-child { font-size: 44px; line-height: 1; font-weight: 700; text-transform: uppercase; margin: 0 0 var(--s-18); }
+  .ticket-foot p { margin: 0; }
+
+  /* Plans */
+  .plans-wrap { display: grid; grid-template-columns: 260px minmax(0, 1fr); border-bottom: var(--rule); }
+  .side-label { padding: var(--s-37) 28px; border-right: var(--rule); margin: 0; }
+  .plans-body { padding: var(--s-44) var(--s-44) 0; }
+  .plans-body > h2 { margin: 0 0 var(--s-22); font-size: clamp(36px, 5vw, 72px); line-height: 1; text-transform: uppercase; font-weight: 700; max-width: 18ch; }
+  .plans-body > p { margin: 0 0 var(--s-44); max-width: 60ch; }
+
+  fieldset { border: 0; margin: 0; padding: 0; min-width: 0; }
+  .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  legend { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .plans { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border: var(--rule); }
+  .plan { position: relative; display: flex; flex-direction: column; padding: var(--s-22) var(--s-22) var(--s-37); cursor: pointer; transition: background-color 160ms ease-out, color 160ms ease-out; }
+  .plan + .plan { border-left: var(--rule); }
+  .plan input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+  .plan:has(input:focus-visible) { outline: 3px solid var(--ink); outline-offset: -9px; }
+  .plan:hover { background: #eaa816; }
+  .plan:has(input:checked) { background: var(--ink); color: var(--paper); }
+  .plan:has(input:checked) .leaders .dots { border-color: var(--paper); }
+  .plan:has(input:checked) .tick { background: var(--paper); box-shadow: inset 0 0 0 4px var(--ink); }
+  .plan-top { display: flex; justify-content: space-between; align-items: center; gap: var(--s-14); margin-bottom: var(--s-22); }
+  .tick { width: 22px; height: 22px; border: 3px solid currentColor; flex: none; }
+  .plan h3 { margin: 0; font-size: 44px; line-height: 1; text-transform: uppercase; font-weight: 700; }
+  .plan .for { margin: var(--s-14) 0 var(--s-22); min-height: 3.1em; }
+  .price { display: flex; align-items: baseline; gap: 8px; padding: var(--s-18) 0; border-top: 3px solid currentColor; border-bottom: 3px solid currentColor; margin-bottom: var(--s-22); }
+  .price strong { font-size: 72px; line-height: 0.9; font-weight: 700; letter-spacing: -0.02em; }
+  .price span { font-size: 15px; }
+  .plan .leaders { gap: var(--s-14); }
+  .plan .leaders .v { text-align: right; }
+  .plan .leaders .no { font-style: italic; }
+  .plan .flag { position: absolute; top: -3px; right: -3px; transform: translateY(-100%); background: var(--ink); color: var(--paper); padding: 4px 10px; }
+  .plan:has(input:checked) .flag { background: var(--ink); }
+
+  .checkout { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--s-22) var(--s-44); align-items: center; padding: var(--s-37) 0 var(--s-44); }
+  .summary { margin: 0; font-size: 20px; line-height: 1.4; }
+  .summary strong { text-transform: uppercase; }
+  .cta {
+    display: inline-flex; align-items: center; justify-content: center; gap: 12px;
+    min-height: 60px; padding: var(--s-18) var(--s-37);
+    background: var(--ink); color: var(--paper);
+    font: 700 15px/1.2 var(--mono); letter-spacing: 0.06em; text-transform: uppercase; text-decoration: none;
+    border: 3px solid var(--ink);
+    transition: background-color 160ms ease-out, color 160ms ease-out;
+  }
+  .cta:hover { background: var(--paper); color: var(--ink); }
+  .fine { grid-column: 1 / -1; margin: 0; max-width: 70ch; }
+
+  /* Compare */
+  .compare { padding: var(--s-44); border-bottom: var(--rule); }
+  .compare h2 { margin: 0 0 var(--s-22); font-size: 22px; text-transform: uppercase; }
+  .table-scroll { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; min-width: 620px; }
+  caption { text-align: left; padding-bottom: var(--s-14); }
+  th, td { text-align: left; padding: var(--s-14) var(--s-18) var(--s-14) 0; border-bottom: 2px solid var(--ink); vertical-align: top; }
+  thead th { border-bottom: var(--rule); text-transform: uppercase; }
+  tbody th { font-weight: 700; text-transform: uppercase; width: 28%; }
+
+  /* FAQ */
+  .faq { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border-bottom: var(--rule); }
+  .faq section { padding: var(--s-37) 28px var(--s-44); }
+  .faq section + section { border-left: var(--rule); }
+  .faq h2 { margin: 0 0 var(--s-14); font-size: 22px; line-height: 1.2; text-transform: uppercase; }
+  .faq p { margin: 0; }
+
+  footer { display: flex; flex-wrap: wrap; justify-content: space-between; gap: var(--s-14) var(--s-37); padding: var(--s-22) 28px var(--s-37); }
+  footer p { margin: 0; }
+
+  @media (max-width: 1100px) {
+    .hero { grid-template-columns: 1fr; }
+    .ticket { border-left: 0; border-top: var(--rule); }
+    .plans-wrap { grid-template-columns: 1fr; }
+    .side-label { border-right: 0; border-bottom: var(--rule); padding: var(--s-18) 28px; }
+  }
+  @media (max-width: 900px) {
+    .masthead { grid-template-columns: 1fr auto; }
+    .masthead .meta { display: none; }
+    .plans { grid-template-columns: 1fr; }
+    .plan + .plan { border-left: 0; border-top: var(--rule); }
+    .plan .for { min-height: 0; }
+    .plan .flag { position: static; transform: none; align-self: flex-start; margin-bottom: var(--s-14); }
+    .plan:has(input:checked) .flag { background: var(--paper); color: var(--ink); }
+    .faq { grid-template-columns: 1fr; }
+    .faq section + section { border-left: 0; border-top: var(--rule); }
+  }
+  @media (max-width: 640px) {
+    .masthead { grid-template-columns: 1fr; padding: var(--s-14) 18px; gap: var(--s-14); }
+    .masthead nav ul { gap: var(--s-18); flex-wrap: wrap; }
+    .hero-main, .plans-body, .compare { padding-left: 18px; padding-right: 18px; }
+    .hero-main { padding-top: var(--s-37); }
+    .ticket-head, .ticket-foot, .side-label, .faq section, footer { padding-left: 18px; padding-right: 18px; }
+    .ticket-foot p:first-child { font-size: 36px; }
+    .plan h3 { font-size: 36px; }
+    .price strong { font-size: 56px; }
+    .checkout { grid-template-columns: 1fr; }
+    .cta { width: 100%; }
+    table { min-width: 0; font-size: 13px; }
+    th, td { padding-right: 8px; overflow-wrap: anywhere; hyphens: auto; }
+    tbody th { width: 26%; }
+    .plan .leaders li { flex-wrap: wrap; }
+    .plan .leaders .v { overflow-wrap: anywhere; }
+  }
+  @media (max-width: 400px) {
+    .plan { padding-left: var(--s-18); padding-right: var(--s-18); }
+    .plan h3 { font-size: 32px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { transition: none !important; animation: none !important; }
+  }
+</style>
+</head>
+<body>
+<a class="skip" href="#plans">Skip to plans</a>
+
+<header class="masthead">
+  <a class="logo" href="#top" id="top">Long / Margin</a>
+  <nav aria-label="Primary">
+    <ul class="caps">
+      <li><a href="#plans" aria-current="page">Subscribe</a></li>
+      <li><a href="#compare">Compare</a></li>
+      <li><a href="#questions">Questions</a></li>
+    </ul>
+  </nav>
+  <p class="meta caps">Issue 23 ships 3 March</p>
+</header>
+
+<main>
+  <section class="hero" aria-labelledby="hero-title">
+    <div class="hero-main">
+      <h1 id="hero-title">
+        <span class="line">Paper,</span>
+        <span class="line"><span class="inverse">four</span></span>
+        <span class="line">times.</span>
+      </h1>
+      <p class="lede">Long Margin is a quarterly of essays, field notes and photographs, printed offset on uncoated stock in an independent shop. There are no ads and no algorithm. Four issues a year, posted to your door.</p>
+    </div>
+
+    <aside class="ticket" aria-labelledby="ticket-title">
+      <div class="ticket-head">
+        <h2 id="ticket-title">Every issue<br>No. 23</h2>
+        <ul class="leaders">
+          <li><span class="k">Pages</span><span class="dots" aria-hidden="true"></span><span>176</span></li>
+          <li><span class="k">Stock</span><span class="dots" aria-hidden="true"></span><span>Munken 100 gsm</span></li>
+          <li><span class="k">Format</span><span class="dots" aria-hidden="true"></span><span>170 × 240 mm</span></li>
+          <li><span class="k">Binding</span><span class="dots" aria-hidden="true"></span><span>Sewn, open spine</span></li>
+          <li><span class="k">Ads</span><span class="dots" aria-hidden="true"></span><span>None</span></li>
+        </ul>
+        <p class="ticket-note caps">March · June · September · December</p>
+      </div>
+      <div class="ticket-foot">
+        <p>Cancel any time</p>
+        <p>Stop before the next issue is printed and you won't be charged again.</p>
+      </div>
+    </aside>
+  </section>
+
+  <section class="plans-wrap" id="plans" aria-labelledby="plans-title">
+    <p class="side-label caps">Subscriptions · prices per year, UK post included</p>
+    <div class="plans-body">
+      <h2 id="plans-title">Choose how you read it.</h2>
+      <p>Every plan gets the same four issues on the same day. The differences are what comes with them: cover stock, extras in the post, and how much of the next issue you help pay for.</p>
+
+      <form id="subscribe-form" action="#" onsubmit="return false">
+        <fieldset>
+          <legend>Subscription plan</legend>
+          <div class="plans">
+            <label class="plan">
+              <input type="radio" name="plan" value="Reader" data-price="£38" checked>
+              <div class="plan-top"><h3>Reader</h3><span class="tick" aria-hidden="true"></span></div>
+              <p class="for">The magazine, four times a year. Nothing else.</p>
+              <p class="price"><strong>£38</strong><span>/ year</span></p>
+              <ul class="leaders">
+                <li><span class="k">Issues</span><span class="dots" aria-hidden="true"></span><span class="v">4</span></li>
+                <li><span class="k">Cover</span><span class="dots" aria-hidden="true"></span><span class="v">Standard 300 gsm</span></li>
+                <li><span class="k">Back issue</span><span class="dots" aria-hidden="true"></span><span class="v no">Not included</span></li>
+                <li><span class="k">Extras</span><span class="dots" aria-hidden="true"></span><span class="v no">None</span></li>
+              </ul>
+            </label>
+
+            <label class="plan">
+              <input type="radio" name="plan" value="Collector" data-price="£62">
+              <span class="flag caps">Most chosen</span>
+              <div class="plan-top"><h3>Collector</h3><span class="tick" aria-hidden="true"></span></div>
+              <p class="for">For readers who keep every issue on the shelf.</p>
+              <p class="price"><strong>£62</strong><span>/ year</span></p>
+              <ul class="leaders">
+                <li><span class="k">Issues</span><span class="dots" aria-hidden="true"></span><span class="v">4</span></li>
+                <li><span class="k">Cover</span><span class="dots" aria-hidden="true"></span><span class="v">Letterpress, numbered</span></li>
+                <li><span class="k">Back issue</span><span class="dots" aria-hidden="true"></span><span class="v">1 of your choice</span></li>
+                <li><span class="k">Extras</span><span class="dots" aria-hidden="true"></span><span class="v">Cloth slipcase</span></li>
+              </ul>
+            </label>
+
+            <label class="plan">
+              <input type="radio" name="plan" value="Patron" data-price="£140">
+              <div class="plan-top"><h3>Patron</h3><span class="tick" aria-hidden="true"></span></div>
+              <p class="for">Pays a contributor's fee for each issue you receive.</p>
+              <p class="price"><strong>£140</strong><span>/ year</span></p>
+              <ul class="leaders">
+                <li><span class="k">Issues</span><span class="dots" aria-hidden="true"></span><span class="v">4 + 1 gift copy</span></li>
+                <li><span class="k">Cover</span><span class="dots" aria-hidden="true"></span><span class="v">Letterpress, numbered</span></li>
+                <li><span class="k">Back issue</span><span class="dots" aria-hidden="true"></span><span class="v">3 of your choice</span></li>
+                <li><span class="k">Extras</span><span class="dots" aria-hidden="true"></span><span class="v">Name in the colophon</span></li>
+              </ul>
+            </label>
+          </div>
+        </fieldset>
+
+        <div class="checkout">
+          <p class="summary" id="summary" aria-live="polite">You've picked <strong>Reader</strong> · £38 a year, first issue 3 March.</p>
+          <a class="cta" id="cta" href="mailto:subscribe@longmargin.example?subject=Subscription%3A%20Reader%20(%C2%A338%2Fyear)">Subscribe <span aria-hidden="true">→</span></a>
+          <p class="fine">Subscribing opens an email to our subscriptions desk with your plan filled in; we reply within one working day with a payment link. Outside the UK, add £14 a year for post.</p>
+        </div>
+      </form>
+    </div>
+  </section>
+
+  <section class="compare" id="compare" aria-labelledby="compare-title">
+    <h2 id="compare-title">Side by side</h2>
+    <div class="table-scroll" tabindex="0" role="region" aria-labelledby="compare-title">
+      <table>
+        <caption class="sr-only">What each subscription includes, per year</caption>
+        <thead>
+          <tr><th scope="col">Included</th><th scope="col">Reader</th><th scope="col">Collector</th><th scope="col">Patron</th></tr>
+        </thead>
+        <tbody>
+          <tr><th scope="row">Price per year</th><td>£38</td><td>£62</td><td>£140</td></tr>
+          <tr><th scope="row">Issues posted</th><td>4</td><td>4</td><td>4, plus a gift copy to anyone you name</td></tr>
+          <tr><th scope="row">Cover</th><td>Standard 300 gsm board</td><td>Letterpress, hand-numbered</td><td>Letterpress, hand-numbered</td></tr>
+          <tr><th scope="row">Back issues</th><td>—</td><td>1</td><td>3</td></tr>
+          <tr><th scope="row">In the post</th><td>—</td><td>Cloth slipcase, holds a year</td><td>Slipcase and an annual risograph print</td></tr>
+          <tr><th scope="row">Your name printed</th><td>—</td><td>—</td><td>In the colophon of every issue</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <div class="faq" id="questions">
+    <section aria-labelledby="q1">
+      <h2 id="q1">When does my first issue arrive?</h2>
+      <p>Subscriptions confirmed before 20 February start with Issue 23, posted 3 March. After that, you start with Issue 24 in June.</p>
+    </section>
+    <section aria-labelledby="q2">
+      <h2 id="q2">Can I change plans?</h2>
+      <p>Yes. Move up or down between issues and we'll adjust the price for the issues you have left.</p>
+    </section>
+    <section aria-labelledby="q3">
+      <h2 id="q3">Is there a digital edition?</h2>
+      <p>No. Long Margin is made to be read on paper, and that's the only way we publish it.</p>
+    </section>
+  </div>
+</main>
+
+<footer class="caps">
+  <p>Long / Margin — independent since 2015</p>
+  <p>Printed in Leeds on FSC paper</p>
+</footer>
+
+<script>
+  (function () {
+    var form = document.getElementById('subscribe-form');
+    var cta = document.getElementById('cta');
+    var summary = document.getElementById('summary');
+    function update() {
+      var picked = form.querySelector('input[name="plan"]:checked');
+      if (!picked) return;
+      var name = picked.value, price = picked.getAttribute('data-price');
+      summary.innerHTML = "You've picked <strong>" + name + "</strong> · " + price + " a year, first issue 3 March.";
+      cta.href = 'mailto:subscribe@longmargin.example?subject=' +
+        encodeURIComponent('Subscription: ' + name + ' (' + price + '/year)');
+    }
+    form.addEventListener('change', update);
+    update();
+  })();
+</script>
+</body>
+</html>

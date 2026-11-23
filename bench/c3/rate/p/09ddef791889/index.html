@@ -1,0 +1,446 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The thick wall comes back — Field Journal, Issue 08</title>
+<meta name="description" content="In a converted bathhouse on Mercer Row, mass and shade are doing the work that machines used to. The lead story from Field Journal, an independent architecture journal.">
+<style>
+  :root {
+    --bg: #e1e6e9;
+    --ink: #131a21;
+    --ink-2: #343e46;
+    --rule: #131a21;
+    --accent: #a8382a;
+    --wrap: 1180px;
+    --s-1: 4px;
+    --s-2: 10px;
+    --s-3: 14px;
+    --s-4: 20px;
+    --s-5: 22px;
+    --s-6: 39px;
+    --serif: "EB Garamond", "Garamond", "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif;
+  }
+  *, *::before, *::after { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--serif);
+    font-size: 19px;
+    line-height: 1.52;
+    font-kerning: normal;
+    font-variant-numeric: oldstyle-nums proportional-nums;
+    text-rendering: optimizeLegibility;
+  }
+  a { color: inherit; text-decoration-thickness: 1px; text-underline-offset: 0.18em; }
+  a:hover { text-decoration-color: var(--accent); }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+  .wrap { width: min(100% - 2 * var(--s-5), var(--wrap)); margin-inline: auto; }
+
+  .skip {
+    position: absolute; left: var(--s-2); top: -100px;
+    background: var(--ink); color: var(--bg); padding: var(--s-2) var(--s-3);
+    font-size: 15.2px; z-index: 10;
+  }
+  .skip:focus { top: var(--s-2); }
+
+  /* Masthead */
+  .masthead {
+    display: flex; align-items: baseline; justify-content: space-between;
+    flex-wrap: wrap; gap: var(--s-2) var(--s-6);
+    padding: var(--s-4) 0 var(--s-3);
+    border-bottom: 1px solid var(--rule);
+  }
+  .brand { display: flex; align-items: baseline; gap: var(--s-5); flex-wrap: wrap; }
+  .brand a {
+    font-size: 32px; font-weight: 700; letter-spacing: -0.01em;
+    text-decoration: none; line-height: 1;
+  }
+  .issue { font-size: 18px; color: var(--ink-2); }
+  .site-nav ul { list-style: none; display: flex; gap: var(--s-5) 28px; margin: 0; padding: 0; flex-wrap: wrap; }
+  .site-nav a { font-size: 18px; text-decoration: none; padding-block: var(--s-1); }
+  .site-nav a:hover, .site-nav a[aria-current="page"] { text-decoration: underline; text-decoration-color: var(--accent); }
+
+  /* Headline block */
+  .feature-head { padding-top: var(--s-5); }
+  .kicker {
+    margin: 0 0 var(--s-1);
+    font-size: 15.2px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-2);
+  }
+  h1 {
+    margin: 0;
+    font-size: clamp(3.1rem, 7.2vw, 103.7px);
+    font-weight: 700;
+    line-height: 0.98;
+    letter-spacing: -0.022em;
+    text-wrap: balance;
+  }
+  .head-foot {
+    display: flex; justify-content: space-between; align-items: baseline;
+    flex-wrap: wrap; gap: var(--s-2) var(--s-6);
+    margin-top: var(--s-3);
+  }
+  .standfirst {
+    margin: 0; max-width: 34ch;
+    font-size: 28px; line-height: 1.25; color: var(--ink-2);
+  }
+  .byline { margin: 0; display: flex; flex-wrap: wrap; gap: var(--s-1) 26px; font-size: 18px; color: var(--ink-2); }
+  .byline span { white-space: nowrap; }
+
+  /* Drawing */
+  .plate { margin: var(--s-5) 0 0; }
+  .plate svg { display: block; width: 100%; height: auto; overflow: visible; }
+  .plate figcaption { margin-top: var(--s-3); font-size: 15.2px; color: var(--ink-2); max-width: 90ch; }
+
+  /* Article opening */
+  .article-body {
+    display: grid;
+    grid-template-columns: 1fr 1fr minmax(300px, 0.95fr);
+    gap: var(--s-6);
+    margin-top: var(--s-6);
+    padding-bottom: var(--s-6);
+  }
+  .prose p { margin: 0; hyphens: auto; }
+  .prose p + p { text-indent: 1.5em; }
+  .prose .lede::first-line { font-variant-caps: small-caps; letter-spacing: 0.03em; }
+  .prose .continue { margin-top: var(--s-4); text-indent: 0; }
+  .prose .continue a { font-style: italic; }
+  sup { line-height: 0; font-size: 0.68em; }
+  sup a { color: var(--accent); text-decoration: none; font-weight: 700; padding-inline: 1px; }
+
+  .aside-col { display: flex; flex-direction: column; gap: var(--s-6); }
+  .key h2, .print h2 { margin: 0 0 var(--s-2); font-size: 19px; font-weight: 700; letter-spacing: 0.01em; }
+  .key ol { margin: 0; padding: 0; list-style: none; counter-reset: k; font-size: 18px; }
+  .key li { counter-increment: k; display: grid; grid-template-columns: 1.5em 1fr; padding-block: 2px; }
+  .key li::before { content: counter(k) "."; color: var(--accent); font-weight: 700; }
+  .key li:target { background: rgba(168, 56, 42, 0.08); }
+
+  .print { border: 1px solid var(--rule); border-top-width: 3px; padding: var(--s-4) var(--s-4) var(--s-5); }
+  .print p { margin: 0 0 var(--s-3); font-size: 18px; color: var(--ink-2); }
+  .cta {
+    display: inline-block;
+    font-size: 32px; font-weight: 700; line-height: 1.1;
+    text-decoration: none;
+    border-bottom: 3px solid var(--accent);
+    padding-bottom: 2px;
+  }
+  .cta:hover { color: var(--accent); }
+
+  /* Related */
+  .section-head {
+    display: flex; justify-content: space-between; align-items: baseline; gap: var(--s-4);
+    border-top: 3px solid var(--rule);
+    padding-top: var(--s-3);
+    margin-bottom: var(--s-5);
+  }
+  .section-head h2 { margin: 0; font-size: 32px; line-height: 1.1; }
+  .section-head p { margin: 0; font-size: 18px; color: var(--ink-2); }
+  .related { padding-bottom: var(--s-6); }
+  .cards { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(4, 1fr); gap: 0; }
+  .card {
+    display: flex; flex-direction: column; gap: var(--s-2);
+    padding: 0 var(--s-4) var(--s-4);
+    border-left: 1px solid rgba(19, 26, 33, 0.35);
+    position: relative;
+  }
+  .card:first-child { border-left: 0; padding-left: 0; }
+  .card:last-child { padding-right: 0; }
+  .card svg { width: 100%; height: auto; display: block; margin-bottom: var(--s-1); }
+  .card .section { margin: 0; font-size: 15.2px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-2); }
+  .card h3 { margin: 0; font-size: 28px; line-height: 1.12; font-weight: 700; text-wrap: balance; }
+  .card h3 a { text-decoration: none; }
+  .card h3 a::after { content: ""; position: absolute; inset: 0; }
+  .card:hover h3 a { text-decoration: underline; text-decoration-color: var(--accent); text-decoration-thickness: 2px; }
+  .card p { margin: 0; font-size: 18px; line-height: 1.45; color: var(--ink-2); }
+  .card .meta { margin-top: auto; font-size: 15.2px; }
+
+  /* Subscribe */
+  .subscribe { padding-bottom: var(--s-6); }
+  .sub-grid { display: grid; grid-template-columns: 1.2fr 1fr; gap: var(--s-6); align-items: start; }
+  .sub-grid > div > p { margin: 0 0 var(--s-4); max-width: 46ch; }
+  .terms { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: var(--s-2) var(--s-5); font-size: 18px; border-top: 1px solid var(--rule); padding-top: var(--s-3); }
+  .terms dt { font-weight: 700; }
+  .terms dd { margin: 0; color: var(--ink-2); }
+  .fine { font-size: 15.2px; color: var(--ink-2); margin-top: var(--s-3) !important; }
+
+  footer.site-foot {
+    border-top: 1px solid var(--rule);
+    padding: var(--s-4) 0 var(--s-6);
+    display: flex; justify-content: space-between; flex-wrap: wrap; gap: var(--s-2) var(--s-5);
+    font-size: 15.2px; color: var(--ink-2);
+  }
+  footer.site-foot p { margin: 0; }
+
+  /* Responsive */
+  @media (max-width: 1080px) {
+    .article-body { grid-template-columns: 1fr 1fr; }
+    .aside-col { grid-column: 1 / -1; display: grid; grid-template-columns: 1fr 1fr; gap: var(--s-6); }
+    .cards { grid-template-columns: repeat(2, 1fr); row-gap: var(--s-6); }
+    .card:nth-child(3) { border-left: 0; padding-left: 0; }
+    .card:nth-child(2) { padding-right: 0; }
+  }
+  @media (max-width: 760px) {
+    body { font-size: 18px; }
+    .standfirst { font-size: 23px; }
+    .article-body, .aside-col, .sub-grid { grid-template-columns: 1fr; gap: var(--s-5); }
+    .article-body { gap: 0; }
+    .prose + .prose p:first-child { text-indent: 1.5em; }
+    .aside-col { margin-top: var(--s-6); }
+    .cards { grid-template-columns: 1fr; row-gap: var(--s-5); }
+    .card { border-left: 0; padding: 0 0 var(--s-5); border-bottom: 1px solid rgba(19, 26, 33, 0.35); }
+    .card:last-child { border-bottom: 0; }
+    .section-head { flex-direction: column; gap: var(--s-1); }
+    .section-head h2 { font-size: 28px; }
+    .cta { font-size: 28px; }
+    .plate .callout-text { font-size: 30px; }
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    html { scroll-behavior: smooth; }
+  }
+</style>
+</head>
+<body>
+<a class="skip" href="#story">Skip to the story</a>
+
+<div class="wrap">
+  <header class="masthead">
+    <div class="brand">
+      <a href="#top" id="top">Field Journal</a>
+      <span class="issue">Issue 08, autumn 2026</span>
+    </div>
+    <nav class="site-nav" aria-label="Primary">
+      <ul>
+        <li><a href="#story" aria-current="page">Feature</a></li>
+        <li><a href="#related">Dispatches</a></li>
+        <li><a href="#subscribe">Subscribe</a></li>
+        <li><a href="#about">About</a></li>
+      </ul>
+    </nav>
+  </header>
+
+  <main id="story">
+    <article aria-labelledby="headline">
+      <header class="feature-head">
+        <p class="kicker">Lead story · Reuse</p>
+        <h1 id="headline">The thick wall comes back</h1>
+        <div class="head-foot">
+          <p class="standfirst">In an old bathhouse on Mercer Row, mass and shade do the work machines used to.</p>
+          <p class="byline">
+            <span>Words by Adaeze Morrow</span>
+            <span>Drawing by Pell Hartigan</span>
+            <span><time datetime="PT9M">Nine minutes</time> to read</span>
+          </p>
+        </div>
+      </header>
+
+      <figure class="plate">
+        <svg viewBox="-6 -22 1192 300" role="img" aria-labelledby="sec-title sec-desc">
+          <title id="sec-title">Long section through the Mercer Row library</title>
+          <desc id="sec-desc">A shallow vaulted roof spans between two very thick masonry walls. Three round openings in the vault drop light onto long reading tables. Beneath the floor, the outline of the old swimming pool is shown dashed. Callouts mark the wall, the roof openings, the buried pool and a deep window reveal.</desc>
+          <defs>
+            <pattern id="hatch" patternUnits="userSpaceOnUse" width="9" height="9" patternTransform="rotate(45)">
+              <line x1="0" y1="0" x2="0" y2="9" stroke="#131a21" stroke-width="1.1"/>
+            </pattern>
+          </defs>
+          <g fill="none" stroke="#131a21" stroke-linejoin="round">
+            
+            <g stroke="#343e46" stroke-width="1" stroke-dasharray="2 6" opacity="0.7">
+              <path d="M360 46 L300 200 M360 46 L420 200"/>
+              <path d="M590 40 L540 200 M590 40 L640 200"/>
+              <path d="M820 46 L760 200 M820 46 L880 200"/>
+            </g>
+            
+            <path d="M40 60 Q590 -10 1140 60 L1140 76 Q590 6 40 76 Z" fill="#131a21" stroke-width="1"/>
+            
+            <g fill="#e1e6e9" stroke="none">
+              <rect x="353" y="24" width="14" height="28"/>
+              <rect x="583" y="18" width="14" height="28"/>
+              <rect x="813" y="24" width="14" height="28"/>
+            </g>
+            <g stroke-width="1.2">
+              <path d="M353 27 V50 M367 27 V50 M583 21 V44 M597 21 V44 M813 27 V50 M827 27 V50"/>
+            </g>
+            
+            <rect x="0" y="52" width="40" height="148" fill="url(#hatch)" stroke-width="3"/>
+            <rect x="1140" y="52" width="40" height="148" fill="url(#hatch)" stroke-width="3"/>
+            
+            <rect x="-2" y="108" width="44" height="44" fill="#e1e6e9" stroke="none"/>
+            <path d="M0 108 H40 M0 152 H40 M20 108 V152" stroke-width="1.4"/>
+            <rect x="1138" y="108" width="44" height="44" fill="#e1e6e9" stroke="none"/>
+            <path d="M1140 108 H1180 M1140 152 H1180 M1160 108 V152" stroke-width="1.4"/>
+            
+            <path d="M0 200 H1180" stroke-width="3.2"/>
+            <path d="M0 246 H1180" stroke-width="1"/>
+            
+            <path d="M300 200 V238 H880 V200" stroke-width="1.4" stroke-dasharray="7 5"/>
+            <path d="M300 214 H880" stroke-width="1" stroke-dasharray="2 5" opacity="0.6"/>
+            
+            <g stroke-width="1.3" stroke-dasharray="5 4">
+              <rect x="60" y="104" width="48" height="96"/>
+              <path d="M60 136 H108 M60 168 H108"/>
+              <rect x="1072" y="104" width="48" height="96"/>
+              <path d="M1072 136 H1120 M1072 168 H1120"/>
+              <path d="M270 168 H450 M280 168 V200 M440 168 V200"/>
+              <path d="M500 168 H680 M510 168 V200 M670 168 V200"/>
+              <path d="M730 168 H910 M740 168 V200 M900 168 V200"/>
+              <path d="M180 178 H210 M184 178 V200 M206 178 V200"/>
+              <path d="M960 178 H990 M964 178 V200 M986 178 V200"/>
+            </g>
+          </g>
+          
+          <g stroke="#a8382a" fill="none" stroke-width="1.3">
+            <path d="M1158 90 L1060 70"/>
+            <path d="M597 30 L662 -4"/>
+            <path d="M700 226 L930 226"/>
+            <path d="M22 130 L150 92"/>
+            <g fill="#e1e6e9">
+              <circle cx="1046" cy="67" r="15"/>
+              <circle cx="676" cy="-6" r="15"/>
+              <circle cx="946" cy="226" r="15"/>
+              <circle cx="166" cy="88" r="15"/>
+            </g>
+          </g>
+          <g fill="#a8382a">
+            <circle cx="1158" cy="90" r="3"/>
+            <circle cx="597" cy="30" r="3"/>
+            <circle cx="700" cy="226" r="3"/>
+            <circle cx="22" cy="130" r="3"/>
+          </g>
+          <g fill="#a8382a" font-family="EB Garamond, Garamond, Georgia, serif" font-size="19" font-weight="700" text-anchor="middle" class="callout-text">
+            <text x="1046" y="73">1</text>
+            <text x="676" y="0">2</text>
+            <text x="946" y="232">3</text>
+            <text x="166" y="94">4</text>
+          </g>
+          
+          <g stroke="#a8382a" stroke-width="1.2">
+            <path d="M0 266 H545 M635 266 H1180 M0 259 V273 M1180 259 V273"/>
+          </g>
+          <text x="590" y="272" fill="#a8382a" font-family="EB Garamond, Garamond, Georgia, serif" font-size="19" text-anchor="middle">112 feet</text>
+        </svg>
+        <figcaption>Long section through the Mercer Row library, looking north. What is cut is drawn heavy and hatched; what stays put is drawn fine; furniture and the buried 1911 pool are dashed.</figcaption>
+      </figure>
+
+      <div class="article-body">
+        <div class="prose">
+          <p class="lede">For eighty years the Mercer Row baths were cooled by nothing but their own walls. Three feet of brick, laid in lime, soaked up the afternoon and gave it back at night. When the city shut the pool in 1994 it fitted fans, then ducts, then a chiller the size of a van, and the building that had once been the coolest room in the district became one of its most expensive to run.</p>
+          <p>Nadia Ferrante's practice won the conversion with a proposal that read, to the committee, like a refusal. Keep the wall.<sup><a href="#key-1" aria-label="Note 1">1</a></sup> Take the machines out. Open the vault and let the room breathe the way it was drawn to.</p>
+        </div>
+        <div class="prose">
+          <p>The three round openings<sup><a href="#key-2" aria-label="Note 2">2</a></sup> in the roof were bricked up in the fifties. Reopened and glazed, they throw slow discs of light that cross the reading tables over the course of a day. The pool was not demolished but filled with sand and floored in larch,<sup><a href="#key-3" aria-label="Note 3">3</a></sup> so a later generation can dig it out again.</p>
+          <p>The windows sit at the back of reveals deep enough to sit in,<sup><a href="#key-4" aria-label="Note 4">4</a></sup> and on hot days most people do. Last August, with the street at 34&nbsp;degrees, the reading room held at 23 without a single fan running.</p>
+          <p class="continue"><a href="#related">The story continues in the print edition &rarr;</a></p>
+        </div>
+
+        <div class="aside-col">
+          <section class="key" aria-labelledby="key-title">
+            <h2 id="key-title">Key to the section</h2>
+            <ol>
+              <li id="key-1">The original wall: 900&nbsp;mm of lime-laid brick, kept whole.</li>
+              <li id="key-2">Three oculi in the vault, reopened and glazed.</li>
+              <li id="key-3">The 1911 pool, filled with sand under a larch floor.</li>
+              <li id="key-4">Window reveals deep enough for a seat.</li>
+            </ol>
+          </section>
+          <aside class="print" aria-labelledby="print-title">
+            <h2 id="print-title">The print edition</h2>
+            <p>Four issues a year, sewn by hand, on uncoated stock. This story runs to twelve pages in Issue&nbsp;08.</p>
+            <a class="cta" href="#subscribe">Subscribe for $38</a>
+          </aside>
+        </div>
+      </div>
+    </article>
+
+    <section class="related" id="related" aria-labelledby="related-title">
+      <div class="section-head">
+        <h2 id="related-title">Related stories</h2>
+        <p>More from Issue 08 and the dispatches desk</p>
+      </div>
+      <ul class="cards">
+        <li class="card">
+          <svg viewBox="0 0 260 120" aria-hidden="true" focusable="false">
+            <g fill="none" stroke="#131a21" stroke-width="1.6">
+              <path d="M10 110 H250"/>
+              <path d="M30 110 V50 L90 20 L150 50 V110"/>
+              <path d="M150 70 H230 V110"/>
+              <path d="M70 110 V80 H110 V110" stroke-dasharray="4 3"/>
+            </g>
+          </svg>
+          <p class="section">Reuse</p>
+          <h3><a href="#related">A grain store that kept its dust</a></h3>
+          <p>Why a cooperative in the river valley refused to sandblast its silos.</p>
+          <p class="meta">Words by Joon Halloran · 7 min</p>
+        </li>
+        <li class="card">
+          <svg viewBox="0 0 260 120" aria-hidden="true" focusable="false">
+            <g fill="none" stroke="#131a21" stroke-width="1.6">
+              <path d="M10 110 H250"/>
+              <path d="M40 110 V30 H220 V110"/>
+              <path d="M40 30 Q130 -4 220 30"/>
+              <path d="M70 60 H190 M70 85 H190" stroke-dasharray="4 3"/>
+            </g>
+          </svg>
+          <p class="section">Materials</p>
+          <h3><a href="#related">In praise of lime mortar</a></h3>
+          <p>The soft joint that lets old walls move, and why cement keeps cracking them.</p>
+          <p class="meta">Words by Ines Okoro · 11 min</p>
+        </li>
+        <li class="card">
+          <svg viewBox="0 0 260 120" aria-hidden="true" focusable="false">
+            <g fill="none" stroke="#131a21" stroke-width="1.6">
+              <path d="M10 110 H250"/>
+              <path d="M20 110 V60 L60 40 L100 60 L140 40 L180 60 L220 40 L240 50 V110"/>
+              <circle cx="130" cy="88" r="10" stroke-dasharray="3 3"/>
+            </g>
+          </svg>
+          <p class="section">Dispatch</p>
+          <h3><a href="#related">Twelve rooms, one courtyard</a></h3>
+          <p>A housing block in Porto where the shared yard is wider than any flat.</p>
+          <p class="meta">Words by Rui Mendes-Clare · 6 min</p>
+        </li>
+        <li class="card">
+          <svg viewBox="0 0 260 120" aria-hidden="true" focusable="false">
+            <g fill="none" stroke="#131a21" stroke-width="1.6">
+              <path d="M10 110 H250"/>
+              <rect x="60" y="20" width="140" height="90"/>
+              <path d="M60 50 H200 M60 80 H200 M130 20 V110" stroke-dasharray="4 3"/>
+            </g>
+          </svg>
+          <p class="section">Essay</p>
+          <h3><a href="#related">The case against the atrium</a></h3>
+          <p>Big voids cost heat, light and floor. Five buildings that did without.</p>
+          <p class="meta">Words by Adaeze Morrow · 9 min</p>
+        </li>
+      </ul>
+    </section>
+
+    <section class="subscribe" id="subscribe" aria-labelledby="subscribe-title">
+      <div class="section-head">
+        <h2 id="subscribe-title">Subscribe to the print edition</h2>
+        <p>Independent, reader-funded, no advertising</p>
+      </div>
+      <div class="sub-grid">
+        <div>
+          <p>Field Journal is written slowly and printed once a season. Each issue follows a handful of buildings for long enough to see how they are used, mended and changed.</p>
+          <a class="cta" href="mailto:subscriptions@fieldjournal.example?subject=Subscription%20for%20%2438">Subscribe for $38 a year</a>
+          <p class="fine">Opens your email app with the order ready to send. We reply with a payment link within two working days.</p>
+        </div>
+        <dl class="terms">
+          <dt>Issues</dt><dd>Four a year, starting with Issue 08</dd>
+          <dt>Format</dt><dd>176 pages, sewn binding, uncoated stock</dd>
+          <dt>Postage</dt><dd>Included worldwide</dd>
+          <dt>Cancel</dt><dd>Any time, by a one-line email</dd>
+        </dl>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-foot" id="about">
+    <p><strong>Field Journal</strong> is an independent quarterly on buildings that improve with use.</p>
+    <p>Issue 08, autumn 2026 · Drawings are original to the journal.</p>
+  </footer>
+</div>
+</body>
+</html>

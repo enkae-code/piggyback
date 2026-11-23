@@ -1,0 +1,341 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Maintenance overview · Northline Field Ops</title>
+<style>
+  :root{
+    --bg:#121a1a; --panel:#172120; --line:#2a3634; --line-soft:#223030;
+    --text:#e6ece9; --muted:#9fb0ab; --dim:#7d8f8a;
+    --green:#9fe0b4; --green-ink:#0f2418; --amber:#f2b45c; --red:#ef6b6b;
+    --mono: ui-monospace, "JetBrains Mono", "SFMono-Regular", "DejaVu Sans Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0;background:var(--bg);color:var(--text);font:15px/1.6 var(--mono)}
+  a{color:inherit}
+  .skip{position:absolute;left:-999px;top:0;background:var(--green);color:var(--green-ink);padding:.5rem 1rem;z-index:10}
+  .skip:focus{left:1rem}
+  :focus-visible{outline:2px solid var(--green);outline-offset:2px}
+
+  /* Header / nav */
+  .top{display:flex;align-items:stretch;gap:2rem;padding:0 24px;border-bottom:1px solid var(--line);min-height:48px;flex-wrap:wrap}
+  .brand{display:flex;align-items:center;font-weight:700;font-size:13px;letter-spacing:.08em;text-transform:uppercase;text-decoration:none}
+  .top nav ul{display:flex;gap:0;list-style:none;margin:0;padding:0;height:100%}
+  .top nav a{display:flex;align-items:center;height:48px;padding:0 16px;font-size:13px;color:var(--muted);text-decoration:none;border-bottom:2px solid transparent}
+  .top nav a:hover{color:var(--text)}
+  .top nav a[aria-current="page"]{color:var(--text);border-bottom-color:var(--green)}
+  .sync{margin-left:auto;display:flex;align-items:center;font-size:11.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+
+  main{padding:28px 24px 48px;max-width:1440px;margin:0 auto}
+  .eyebrow{margin:0;font-size:11.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+  h1{margin:4px 0 12px;font-size:clamp(28px,4vw,34px);line-height:1.2;font-weight:700;letter-spacing:-.01em}
+  .intro{display:flex;justify-content:space-between;align-items:flex-end;gap:2rem;flex-wrap:wrap;margin-bottom:28px}
+  .intro p.lead{margin:0;max-width:68ch;color:#cfd9d5;line-height:1.6}
+  .lead strong{color:var(--text)}
+  .lead .warn{color:var(--amber)}
+  .btn{display:inline-block;background:var(--green);color:var(--green-ink);font:700 13px/1 var(--mono);padding:14px 18px;text-decoration:none;border:0;cursor:pointer;white-space:nowrap}
+  .btn:hover{background:#b6ecc6}
+
+  /* Grid of panels */
+  .board{border:1px solid var(--line);background:var(--panel)}
+  .row{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(0,1fr)}
+  .row>section+section{border-left:1px solid var(--line)}
+  .board>section,.row{border-bottom:1px solid var(--line)}
+  .board>section:last-child{border-bottom:0}
+  .panel{padding:20px 22px 24px}
+  .panel-head{display:flex;justify-content:space-between;align-items:baseline;gap:1rem;margin-bottom:14px;flex-wrap:wrap}
+  h2{margin:0;font-size:15px;font-weight:700}
+  .meta{font-size:11.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+
+  /* Status cards (repeated items) */
+  .status-list{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px}
+  .card{border:1px solid var(--line-soft);border-left:3px solid var(--green);background:#141d1c;padding:14px 14px 12px}
+  .card.minor{border-left-color:var(--amber)}
+  .card.major{border-left-color:var(--red)}
+  .card h3{margin:0 0 2px;font-size:14px}
+  .card .state{font-size:12.5px;color:var(--green)}
+  .card.minor .state{color:var(--amber)}
+  .card.major .state{color:var(--red)}
+  .card p{margin:8px 0 0;font-size:12.5px;color:var(--muted);line-height:1.5}
+  .card dl{display:flex;gap:1.25rem;margin:10px 0 0;font-size:12px}
+  .card dt{color:var(--dim);text-transform:uppercase;letter-spacing:.06em;font-size:10.5px}
+  .card dd{margin:0}
+
+  /* Availability chart */
+  .chart{margin-top:22px}
+  .chart svg{width:100%;height:auto;display:block}
+  .legend{display:flex;gap:1.5rem;flex-wrap:wrap;margin:8px 0 0;padding:0;list-style:none;font-size:12.5px;color:var(--green)}
+  .legend li:nth-child(2){color:var(--amber)}
+  .legend span{display:inline-block;width:22px;border-top:2px solid currentColor;vertical-align:middle;margin-right:8px}
+  .legend li:nth-child(2) span{border-top-style:dashed}
+
+  /* Alerts */
+  .alerts{list-style:none;margin:0;padding:0}
+  .alert{border-left:2px solid var(--line);padding:14px 0 16px 16px;border-bottom:1px solid var(--line)}
+  .alert:last-child{border-bottom:0}
+  .alert.urgent{border-left-color:var(--red);background:linear-gradient(90deg,rgba(239,107,107,.08),transparent 60%)}
+  .alert.watch{border-left-color:var(--amber)}
+  .alert-top{display:flex;justify-content:space-between;gap:1rem}
+  .alert h3{margin:0;font-size:13.5px}
+  .alert time{font-size:12.5px;color:var(--muted);white-space:nowrap}
+  .alert p{margin:6px 0 0;font-size:12.5px;color:var(--muted)}
+  .tag{display:inline-block;margin-bottom:6px;font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;padding:2px 6px;border:1px solid currentColor}
+  .urgent .tag{color:var(--red)}
+  .watch .tag{color:var(--amber)}
+  .cleared .tag{color:var(--green)}
+  .alert .act{display:inline-block;margin-top:8px;font-size:12.5px;color:var(--green)}
+
+  /* Table */
+  .table-wrap{overflow-x:auto}
+  table{width:100%;border-collapse:collapse;font-size:13px;min-width:760px}
+  caption{text-align:left;position:absolute;left:-9999px}
+  th{text-align:left;font-weight:400;font-size:11.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);padding:10px 12px 10px 0;border-bottom:1px solid var(--line)}
+  td{padding:11px 12px 11px 0;border-bottom:1px solid var(--line);color:#cfe7d9}
+  tbody tr:last-child td{border-bottom:0}
+  td:first-child{font-weight:700;color:var(--text)}
+  .ok{color:var(--green)} .amb{color:var(--amber)} .bad{color:var(--red)}
+
+  /* Report form */
+  .report{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.4fr);gap:2rem}
+  .report p{margin:0;color:var(--muted);font-size:13px;max-width:52ch}
+  form{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  label{display:block;font-size:11.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-bottom:6px}
+  input,select,textarea{width:100%;background:var(--bg);color:var(--text);border:1px solid var(--line);font:13px/1.4 var(--mono);padding:10px}
+  textarea{min-height:90px;resize:vertical}
+  .full{grid-column:1/-1}
+  .form-foot{display:flex;align-items:center;gap:1rem;flex-wrap:wrap}
+  #confirm{font-size:12.5px;color:var(--green);margin:0}
+
+  footer{padding:20px 24px;border-top:1px solid var(--line);font-size:11.5px;color:var(--dim);letter-spacing:.04em}
+
+  .intro>div{min-width:0}
+  html,body{overflow-x:clip}
+  @media (max-width:900px){
+    .row{grid-template-columns:minmax(0,1fr)}
+    .row>section+section{border-left:0;border-top:1px solid var(--line)}
+    .report{grid-template-columns:1fr}
+    .sync{margin-left:0;padding-bottom:10px;width:100%}
+  }
+  @media (max-width:560px){
+    main{padding:20px 14px 40px}
+    .top{padding:0 14px;gap:.5rem}
+    .brand{padding-top:12px;width:100%}
+    .top nav a{padding:0 10px 0 0;margin-right:10px}
+    form{grid-template-columns:1fr}
+    .panel{padding:18px 14px}
+    .btn{width:100%;text-align:center}
+  }
+  /* Stack the route table into labelled rows on narrow screens */
+  @media (max-width:700px){
+    .table-wrap{overflow:visible}
+    table{min-width:0}
+    table,tbody,tr,td{display:block;width:100%}
+    thead{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+    tr{padding:12px 0;border-bottom:1px solid var(--line)}
+    tbody tr:last-child{border-bottom:0}
+    td{display:grid;grid-template-columns:9.5em minmax(0,1fr);gap:.75rem;padding:3px 0;border:0;overflow-wrap:anywhere}
+    td::before{content:attr(data-label);font-weight:400;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+    td:first-child{font-size:14px}
+  }
+  @media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
+</style>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="top">
+  <a class="brand" href="#main">North / Line Field Ops</a>
+  <nav aria-label="Primary">
+    <ul>
+      <li><a href="#status" aria-current="page">Status</a></li>
+      <li><a href="#alerts">Alerts</a></li>
+      <li><a href="#routes">Routes</a></li>
+      <li><a href="#report">Report</a></li>
+    </ul>
+  </nav>
+  <p class="sync">Depot snapshot · Last sync 07:42:10</p>
+</header>
+
+<main id="main">
+  <div class="intro">
+    <div>
+      <p class="eyebrow">Northline Transit maintenance · Sunday, 07:45 local</p>
+      <h1>Maintenance overview</h1>
+      <p class="lead"><strong>5 of 6</strong> routes are running a normal timetable. <strong>31</strong> of 34 buses are in service, 3 held at Harbor Depot for scheduled work. Fleet availability sits at <strong>91.2 %</strong>, 1.4 points above target. <span class="warn"><strong>1 urgent alert</strong></span> affects Route 4 until the Elm Street lift is cleared.</p>
+    </div>
+    <a class="btn" href="#report">Report an issue</a>
+  </div>
+
+  <div class="board">
+    <div class="row">
+      <section class="panel" id="status" aria-labelledby="status-h">
+        <div class="panel-head">
+          <h2 id="status-h">Service status</h2>
+          <span class="meta">5 normal · 1 disrupted</span>
+        </div>
+        <ul class="status-list">
+          <li class="card">
+            <h3>Buses</h3>
+            <span class="state">Good service</span>
+            <dl><div><dt>In service</dt><dd>31 / 34</dd></div><div><dt>On time</dt><dd>94 %</dd></div></dl>
+          </li>
+          <li class="card major">
+            <h3>Elm St. stop lift</h3>
+            <span class="state">Out of service</span>
+            <dl><div><dt>Since</dt><dd>06:58</dd></div><div><dt>ETA fix</dt><dd>11:30</dd></div></dl>
+          </li>
+          <li class="card minor">
+            <h3>Ticket machines</h3>
+            <span class="state">Partial — 2 faulty</span>
+            <dl><div><dt>Working</dt><dd>16 / 18</dd></div><div><dt>Crew</dt><dd>Assigned</dd></div></dl>
+          </li>
+          <li class="card">
+            <h3>Passenger info</h3>
+            <span class="state">All displays live</span>
+            <dl><div><dt>Displays</dt><dd>42 / 42</dd></div><div><dt>Feed lag</dt><dd>4 s</dd></div></dl>
+          </li>
+        </ul>
+
+        <figure class="chart">
+          <svg viewBox="0 0 820 230" role="img" aria-labelledby="chart-t chart-d">
+            <title id="chart-t">Fleet availability, last 7 days</title>
+            <desc id="chart-d">Availability rose from 86.5 percent on Monday to 91.2 percent today, above the 89.8 percent target since Thursday.</desc>
+            <g font-family="ui-monospace, DejaVu Sans Mono, monospace" font-size="12" fill="#9fb0ab">
+              <text x="0" y="24">95%</text><text x="0" y="94">90%</text><text x="0" y="164">85%</text>
+              <text x="44" y="222">Mon</text><text x="166" y="222">Tue</text><text x="288" y="222">Wed</text><text x="410" y="222">Thu</text><text x="532" y="222">Fri</text><text x="654" y="222">Sat</text><text x="770" y="222">Sun</text>
+            </g>
+            <g stroke="#2a3634" stroke-width="1">
+              <line x1="44" y1="20" x2="800" y2="20"/><line x1="44" y1="90" x2="800" y2="90"/><line x1="44" y1="160" x2="800" y2="160"/><line x1="44" y1="200" x2="800" y2="200"/>
+            </g>
+            <line x1="44" y1="93" x2="800" y2="93" stroke="#f2b45c" stroke-width="2" stroke-dasharray="7 6"/>
+            <text x="800" y="84" text-anchor="end" font-family="ui-monospace, DejaVu Sans Mono, monospace" font-size="12" fill="#f2b45c">89.8% target</text>
+            <polyline fill="none" stroke="#9fe0b4" stroke-width="2" points="58,139 180,125 302,111 424,87 546,96 668,80 790,78"/>
+            <g fill="#9fe0b4"><circle cx="790" cy="78" r="4"/></g>
+          </svg>
+          <figcaption>
+            <ul class="legend">
+              <li><span aria-hidden="true"></span>Fleet availability</li>
+              <li><span aria-hidden="true"></span>Target, 89.8 %</li>
+            </ul>
+          </figcaption>
+        </figure>
+      </section>
+
+      <section class="panel" id="alerts" aria-labelledby="alerts-h">
+        <div class="panel-head">
+          <h2 id="alerts-h">Alerts</h2>
+          <span class="meta">1 urgent · 1 watch · 1 cleared</span>
+        </div>
+        <ul class="alerts">
+          <li class="alert urgent">
+            <div role="alert">
+            <span class="tag">Urgent</span>
+            <div class="alert-top">
+              <h3>Elm Street lift out of service</h3>
+              <time datetime="PT47M">47 min</time>
+            </div>
+            <p>Step-free access closed on Route 4 at Elm St. Accessible shuttle running every 15 min from Market Square. Technician on site, part ordered.</p>
+            <a class="act" href="#routes">See Route 4 →</a>
+            </div>
+          </li>
+          <li class="alert watch">
+            <span class="tag">Watch</span>
+            <div class="alert-top">
+              <h3>Bus 2214 brake wear flagged</h3>
+              <time datetime="PT1H12M">1 h</time>
+            </div>
+            <p>Telemetry shows pad wear at 18 %. Swap scheduled after the morning peak.</p>
+          </li>
+          <li class="alert cleared">
+            <span class="tag">Cleared</span>
+            <div class="alert-top">
+              <h3>Depot charger B3 restored</h3>
+              <time datetime="PT2H">2 h</time>
+            </div>
+            <p>Charging stable across three cycles. No further action.</p>
+          </li>
+        </ul>
+      </section>
+    </div>
+
+    <section class="panel" id="routes" aria-labelledby="routes-h">
+      <div class="panel-head">
+        <h2 id="routes-h">Routes</h2>
+        <span class="meta">6 routes · 31 buses out</span>
+      </div>
+      <div class="table-wrap" tabindex="0" role="region" aria-labelledby="routes-h">
+        <table>
+          <caption>Route maintenance and service status</caption>
+          <thead>
+            <tr><th scope="col">Route</th><th scope="col">Corridor</th><th scope="col">Buses</th><th scope="col">On time</th><th scope="col">Next service check</th><th scope="col">Status</th></tr>
+          </thead>
+          <tbody>
+            <tr><td data-label="Route">1 Harbor</td><td data-label="Corridor">Harbor Depot · Old Town</td><td data-label="Buses">6 / 6</td><td data-label="On time">96 %</td><td data-label="Next check">Tue 22:00</td><td data-label="Status" class="ok">Good service</td></tr>
+            <tr><td data-label="Route">2 Northgate</td><td data-label="Corridor">Northgate · University</td><td data-label="Buses">7 / 7</td><td data-label="On time">93 %</td><td data-label="Next check">Wed 23:30</td><td data-label="Status" class="ok">Good service</td></tr>
+            <tr><td data-label="Route">3 Riverside</td><td data-label="Corridor">Riverside · Hospital</td><td data-label="Buses">5 / 6</td><td data-label="On time">91 %</td><td data-label="Next check">Today 19:00</td><td data-label="Status" class="amb">Reduced — 1 held</td></tr>
+            <tr><td data-label="Route">4 Elm Line</td><td data-label="Corridor">Market Sq · Elm St · Mill Park</td><td data-label="Buses">5 / 5</td><td data-label="On time">88 %</td><td data-label="Next check">Today 11:30</td><td data-label="Status" class="bad">Disrupted — no step-free at Elm St</td></tr>
+            <tr><td data-label="Route">5 Airport</td><td data-label="Corridor">Central · Airport</td><td data-label="Buses">4 / 5</td><td data-label="On time">97 %</td><td data-label="Next check">Thu 21:00</td><td data-label="Status" class="amb">Reduced — 1 held</td></tr>
+            <tr><td data-label="Route">6 Loop</td><td data-label="Corridor">City Centre circular</td><td data-label="Buses">4 / 5</td><td data-label="On time">95 %</td><td data-label="Next check">Fri 22:00</td><td data-label="Status" class="ok">Good service</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="panel" id="report" aria-labelledby="report-h">
+      <div class="report">
+        <div>
+          <div class="panel-head"><h2 id="report-h">Report an issue</h2></div>
+          <p>Spotted a broken lift, damaged stop, faulty ticket machine or a vehicle defect? Log it here and the duty supervisor will triage it. For emergencies, call 999 first.</p>
+        </div>
+        <form id="report-form" novalidate>
+          <div>
+            <label for="r-type">Issue type</label>
+            <select id="r-type" name="type" required>
+              <option>Vehicle defect</option><option>Stop or shelter</option><option>Lift or escalator</option><option>Ticket machine</option><option>Passenger display</option><option>Other</option>
+            </select>
+          </div>
+          <div>
+            <label for="r-route">Route</label>
+            <select id="r-route" name="route">
+              <option>1 Harbor</option><option>2 Northgate</option><option>3 Riverside</option><option>4 Elm Line</option><option>5 Airport</option><option>6 Loop</option><option>Not sure</option>
+            </select>
+          </div>
+          <div class="full">
+            <label for="r-where">Location or bus number</label>
+            <input id="r-where" name="where" required placeholder="e.g. Elm St stop, or bus 2214">
+          </div>
+          <div class="full">
+            <label for="r-desc">What happened?</label>
+            <textarea id="r-desc" name="desc" required></textarea>
+          </div>
+          <div class="full form-foot">
+            <button class="btn" type="submit">Submit report</button>
+            <p id="confirm" role="status" aria-live="polite"></p>
+          </div>
+        </form>
+      </div>
+    </section>
+  </div>
+</main>
+
+<footer>Northline Transit · Field Ops maintenance board · Data shown is a local snapshot.</footer>
+
+<script>
+  (function(){
+    var form=document.getElementById('report-form'), out=document.getElementById('confirm');
+    form.addEventListener('submit',function(e){
+      e.preventDefault();
+      var where=form.where.value.trim(), desc=form.desc.value.trim();
+      if(!where||!desc){out.style.color='var(--amber)';out.textContent='Add a location and a short description.';(where?form.desc:form.where).focus();return;}
+      var ref='NL-'+String(Date.now()).slice(-5);
+      out.style.color='';out.textContent='Logged as '+ref+' — saved on this device for the duty supervisor.';
+      form.reset();
+    });
+    var links=document.querySelectorAll('.top nav a');
+    links.forEach(function(a){a.addEventListener('click',function(){links.forEach(function(l){l.removeAttribute('aria-current')});a.setAttribute('aria-current','page');});});
+  })();
+</script>
+</body>
+</html>
