@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kit fixture: motion</title>
+<style>
+  body { margin: 0; font: 16px/1.5 sans-serif; color: #111; background: #fafafa; }
+  main { position: relative; min-height: 3200px; }
+  nav { position: sticky; top: 0; height: 48px; background: #222; color: #fff; }
+  .drift {
+    width: 200px; height: 80px; background: #36c;
+    animation: drift 1600ms ease 200ms infinite;
+  }
+  @keyframes drift { from { transform: translateX(0); } to { transform: translateX(120px); } }
+  aside {
+    position: absolute; top: 1100px; left: 40px; width: 300px; padding: 16px; background: #eee;
+    opacity: 0; transform: translateY(16px);
+    transition: opacity 600ms ease, transform 600ms ease;
+  }
+  aside.is-in { opacity: 1; transform: translateY(0); }
+  @media (prefers-reduced-motion: reduce) {
+    .drift { animation: none; }
+    aside { transition: none; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <nav>Fixture navigation</nav>
+  <section class="drift" aria-hidden="true"></section>
+  <p style="position:absolute; top: 500px; left: 40px;">Visible text <!-- kit-marker-7f3a9c --> kit-marker-7f3a9c</p>
+  <aside>Entry panel</aside>
+</main>
+<script>
+  addEventListener('scroll', function () {
+    if (scrollY > 300) document.querySelector('aside').classList.add('is-in');
+  }, { passive: true });
+</script>
+</body>
+</html>

@@ -82,6 +82,16 @@ piggyback measure-list pages.txt --out measured/
 
 Each URL gets a folder under `measured/` with `fingerprint.json` and `screenshot.png`. A folder whose `fingerprint.json` records the same URL is kept, not measured again; one that records another URL, or cannot be read, fails with a message. Folder names include the port. `measured/batch.json` lists every URL with its status (`measured`, `kept` or `failed`) and error. The command exits 1 if any URL failed; the other URLs are still measured. A symbolic link where a file or folder would be written fails that URL. It refuses the whole list up front on a duplicate URL, two URLs that give the same folder name, or more than 500 URLs.
 
+## Build kit
+
+`piggyback kit` makes one folder from one reference page, for an agent to build from:
+
+```sh
+piggyback kit https://example.com --out kit/ --request "a landing page for a boat studio"
+```
+
+The folder holds the screenshot, six scroll frames (`scroll/frame-0.png` to `frame-5.png`), `scroll-samples.json` (measured scroll and motion values), `BRIEF.md`, `DESIGN.md` and `BUILD-PROMPT.md`. `kit.json` is written last and lists a SHA-256 for every file; its presence means the kit is complete. The folder must be new or empty, and `--request` takes 1 to 500 characters. Motion from REA is not part of the kit yet.
+
 ## Use with your agent
 
 Piggyback can run as a read-only MCP server, so your agent can read the brief and re-check your build without you pasting numbers. You set the URLs in the MCP config. The agent cannot pass a URL, a path or any text that reaches the network or disk. The `get_design_md` tool returns the first reference as a `DESIGN.md` that works with Impeccable.

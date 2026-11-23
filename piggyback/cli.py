@@ -12,6 +12,7 @@ from . import defaults as defaults_mod
 from . import fingerprint as fingerprints
 from . import format as ref_format
 from . import gap as gap_mod
+from . import kit as kit_mod
 from .browser import BrowserUnavailable, launch
 from .measure import MeasureError, write_measure
 
@@ -66,6 +67,16 @@ def run_measure(url, out, viewport, allow_loopback):
         print(f"measure failed: {fingerprints.clean(exc, 200)}", file=sys.stderr)
         return 1
     print(f"wrote {fingerprint} and {shot}")
+    return 0
+
+
+def run_kit(url, out, request, allow_loopback):
+    try:
+        kit_path = kit_mod.make(url, out, request, allow_loopback=allow_loopback)
+    except (MeasureError, ValueError, OSError) as exc:
+        print(f"kit failed: {fingerprints.clean(exc, 200)}", file=sys.stderr)
+        return 1
+    print(f"wrote {kit_path}")
     return 0
 
 
@@ -197,6 +208,14 @@ def main(argv=None):
     ml.add_argument("--out", required=True, help="directory: one folder per URL, plus batch.json")
     ml.add_argument("--viewport", type=viewport_arg, default=(1440, 900), help="WIDTHxHEIGHT")
     ml.add_argument("--allow-loopback", action="store_true", help="allow 127.0.0.0/8 and ::1 only")
+    k = sub.add_parser(
+        "kit",
+        help="build kit from one URL: screenshot, scroll frames, BRIEF.md, DESIGN.md, prompt",
+    )
+    k.add_argument("url")
+    k.add_argument("--out", required=True, help="new or empty folder for the kit")
+    k.add_argument("--request", required=True, help="what to build (1 to 500 characters)")
+    k.add_argument("--allow-loopback", action="store_true", help="allow 127.0.0.0/8 and ::1 only")
     refs = sub.add_parser("check-refs", help="validate spec v1 reference files")
     refs.add_argument("directory")
     b = sub.add_parser("brief", help="write BRIEF.md from 1 to 3 reference fingerprints")
@@ -232,6 +251,8 @@ def main(argv=None):
         return run_measure(args.url, args.out, args.viewport, args.allow_loopback)
     if args.command == "measure-list":
         return run_measure_list(args.list, args.out, args.viewport, args.allow_loopback)
+    if args.command == "kit":
+        return run_kit(args.url, args.out, args.request, args.allow_loopback)
     if args.command == "check-refs":
         return check_refs(args.directory)
     if args.command == "brief":
