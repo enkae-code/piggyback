@@ -133,7 +133,7 @@ These are measurements of the reference pages, not a target. If you use a design
 
 Piggyback's wording was edited with [no-ai-slop](https://github.com/petergyang/no-ai-slop) (MIT).
 
-C3 compares Piggyback's brief with a screenshot on six public-domain starters, and separately tests a design skill with and without the brief: [C3 test](bench/c3/VOLUNTEER.md).
+Use the brief together with a screenshot of the reference, not instead of one. The brief carries the exact type, colour and spacing; it does not describe layout, and a screenshot does. In the C3 test the brief alone lost to a screenshot, while adding it to a screenshot and a design skill improved the match on 7 of 10 tasks: [C3 results](bench/c3/RESULTS.md).
 
 ## Principles
 

@@ -7,6 +7,8 @@ description: Use when comparing a UI build with a reference design or when asked
 
 Piggyback measures real pages. Use its MCP tools to compare your UI work with the reference design, instead of guessing from adjectives.
 
+The brief has no layout. Take the layout and structure from the reference itself (a screenshot the user gives you) and the exact values from the brief.
+
 These numbers are the target. If you use a design skill such as Impeccable, Hallmark or taste-skill, use it for the method and check its output against these numbers; when they conflict, the user's references win.
 
 - `get_brief`: the measured design of the reference pages (type scale, palette, radius, spacing, container width, fonts). Read it before you change UI styles. Pass `refresh: true` only when the user asks you to measure again.
