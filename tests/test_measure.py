@@ -1026,9 +1026,11 @@ class WorkerTimeoutTests(unittest.TestCase):
         self.assertLess(elapsed, 2 + measure_mod.WORKER_GRACE_S + 3)
 
     def test_the_timeout_path_needs_no_os_waitid(self):
-        saved = os.waitid
-        delattr(os, "waitid")
-        self.addCleanup(setattr, os, "waitid", saved)
+        # macOS Python before 3.13 has no os.waitid; take it away everywhere else too.
+        patcher = mock.patch.dict(os.__dict__)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        os.__dict__.pop("waitid", None)
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         pid_file = Path(tmp.name) / "tool.pid"
