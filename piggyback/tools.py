@@ -13,7 +13,6 @@ import os
 import queue
 import re
 import shutil
-import signal
 import subprocess
 import threading
 import time
@@ -22,7 +21,7 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 from . import __version__
-from .measure import _host, publish_json
+from .measure import _host, kill_tree, publish_json
 
 ENV_KEYS = ("PATH", "HOME")
 CRAFT_TIMEOUT_S = 60
@@ -95,8 +94,7 @@ def _reap(proc):
     """Kill the child's whole process group unless it was already reaped, then wait for it: no
     path leaves a child or anything it started behind. Unreaped, the group id is still ours."""
     if proc.returncode is None:
-        with contextlib.suppress(ProcessLookupError):
-            os.killpg(proc.pid, signal.SIGKILL)
+        kill_tree(proc)
     proc.wait()
 
 

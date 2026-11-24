@@ -224,6 +224,18 @@ def _path_or_none(path):
     return str(path) if path else None
 
 
+def kill_tree(proc):
+    """Kill a child started with start_new_session=True and everything it started: its process
+    group, or its process tree on Windows. Call it only before the child is reaped, while its id
+    is still ours."""
+    if os.name == "nt":
+        subprocess.run(["taskkill", "/T", "/F", "/PID", str(proc.pid)], capture_output=True)
+        proc.kill()
+    else:
+        with contextlib.suppress(ProcessLookupError):
+            os.killpg(proc.pid, signal.SIGKILL)
+
+
 def _run_worker(request):
     """One JSON request to a Chromium child process; its JSON result, or an error dict."""
     # Playwright's bypass switch would let Chromium skip the proxy for loopback.
@@ -245,8 +257,8 @@ def _run_worker(request):
         try:
             _, err = proc.communicate(json.dumps(request), timeout=timeout)
         except subprocess.TimeoutExpired:
-            # The whole group: a killed worker alone leaves Chromium holding stderr open.
-            os.killpg(proc.pid, signal.SIGKILL)
+            # The whole tree: a killed worker alone leaves Chromium holding stderr open.
+            kill_tree(proc)
             proc.communicate()
             raise MeasureError(f"measure timed out after {timeout}s") from None
         out_file.seek(0)

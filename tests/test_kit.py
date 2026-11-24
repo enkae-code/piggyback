@@ -567,7 +567,7 @@ class WorkerBudgetTests(unittest.TestCase):
         seen = []
 
         class FakeProc:
-            pid = -1  # invalid group id, and os.killpg is stubbed below anyway
+            pid = -1  # never signalled: kill_tree is stubbed below
 
             def __init__(self, *args, **kwargs):
                 pass
@@ -580,7 +580,7 @@ class WorkerBudgetTests(unittest.TestCase):
 
         with (
             mock.patch.object(measure_mod.subprocess, "Popen", FakeProc),
-            mock.patch.object(measure_mod.os, "killpg"),
+            mock.patch.object(measure_mod, "kill_tree"),
         ):
             for request, expected in (({"scroll_dir": "x"}, 240), ({"scroll_dir": None}, 90)):
                 with self.subTest(request=request), self.assertRaises(measure_mod.MeasureError):
