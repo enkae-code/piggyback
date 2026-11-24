@@ -4,12 +4,13 @@ import io
 import json
 import os
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
 from unittest import mock
 
-from piggyback import kit
+from piggyback import kit, tools
 from piggyback import measure as measure_mod
 from piggyback.cli import main
 
@@ -29,15 +30,22 @@ FAKE_FP = {
 }
 
 
-def fake_write_measure(url, out_dir, *, viewport=(1440, 900), allow_loopback=False, scroll=False):
+def fake_write_measure(
+    url, out_dir, *, viewport=(1440, 900), allow_loopback=False, scroll=False, rea_binary=None
+):
     out = Path(out_dir)
     (out / "screenshot.png").write_bytes(b"\x89PNG shot")
-    (out / "fingerprint.json").write_text(json.dumps(FAKE_FP), encoding="utf-8")
+    fp = dict(FAKE_FP)
+    if rea_binary:
+        fp["rea"] = tools.publish_rea(out, json.dumps(REA_HOSTILE).encode("utf-8"), "6.7.0", 6000)
+    (out / "fingerprint.json").write_text(json.dumps(fp), encoding="utf-8")
     (out / "scroll").mkdir()
     for i in range(6):
         (out / "scroll" / f"frame-{i}.png").write_bytes(b"\x89PNG frame %d" % i)
+        (out / "scroll" / f"frame-{i}-arrival.png").write_bytes(b"\x89PNG arrival %d" % i)
+    steps = [{"step": i, "target_scroll_y": 300 * i, "scroll_y": 300 * i} for i in range(6)]
     (out / "scroll-samples.json").write_text(
-        json.dumps({"coverage": {"scroll": "done"}, "steps": []}), encoding="utf-8"
+        json.dumps({"coverage": {"scroll": "done"}, "steps": steps}), encoding="utf-8"
     )
     return out / "fingerprint.json", out / "screenshot.png"
 
@@ -55,6 +63,16 @@ class KitCase(unittest.TestCase):
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         self.root = Path(tmp.name)
+        # Host tools never run in unit tests: a configured path that does not exist is "missing".
+        patcher = mock.patch.dict(
+            os.environ,
+            {
+                "PIGGYBACK_CRAFT": "/nonexistent/craft-anything-cli",
+                "PIGGYBACK_REA": "/nonexistent/rea",
+            },
+        )
+        patcher.start()
+        self.addCleanup(patcher.stop)
 
     def run_cli(self, *args):
         err = io.StringIO()
@@ -564,10 +582,450 @@ class WorkerBudgetTests(unittest.TestCase):
                 pass
 
         with mock.patch.object(measure_mod.subprocess, "Popen", FakeProc):
-            for request, expected in (({"scroll_dir": "x"}, 150), ({"scroll_dir": None}, 90)):
+            for request, expected in (({"scroll_dir": "x"}, 180), ({"scroll_dir": None}, 90)):
                 with self.subTest(request=request), self.assertRaises(measure_mod.MeasureError):
                     measure_mod._run_worker(request)
                 self.assertEqual(seen[-1], expected)
+
+
+def write_script(root, name, body):
+    path = Path(root) / name
+    path.write_text(f"#!{sys.executable}\n" + body, encoding="utf-8")
+    path.chmod(0o755)
+    return str(path)
+
+
+class ToolFindTests(KitCase):
+    def test_a_configured_path_that_does_not_exist_is_missing(self):
+        with mock.patch.dict(os.environ, {"PIGGYBACK_CRAFT": "/nonexistent/craft"}):
+            self.assertIsNone(tools.find("PIGGYBACK_CRAFT", "craft-anything-cli"))
+
+    def test_a_relative_configured_path_is_refused(self):
+        with mock.patch.dict(os.environ, {"PIGGYBACK_CRAFT": "craft-anything-cli"}):
+            self.assertIsNone(tools.find("PIGGYBACK_CRAFT", "craft-anything-cli"))
+
+    def test_an_existing_absolute_configured_path_wins(self):
+        path = write_script(self.root, "craft", "print('x')\n")
+        with mock.patch.dict(os.environ, {"PIGGYBACK_CRAFT": path}):
+            self.assertEqual(tools.find("PIGGYBACK_CRAFT", "craft-anything-cli"), path)
+
+    def test_without_config_the_tool_comes_from_path(self):
+        path = write_script(self.root, "craft", "print('x')\n")
+        with (
+            mock.patch.dict(os.environ, {"PIGGYBACK_CRAFT": ""}),
+            mock.patch("piggyback.tools.shutil.which", return_value=path),
+        ):
+            self.assertEqual(tools.find("PIGGYBACK_CRAFT", "craft-anything-cli"), path)
+
+
+class ToolRunTests(KitCase):
+    def test_a_hang_is_killed_and_reported_as_a_timeout(self):
+        path = write_script(self.root, "slow", "import time\ntime.sleep(30)\n")
+        with self.assertRaises(tools.ToolError) as ctx:
+            tools.run([path], timeout=0.5, cap=100)
+        self.assertEqual(ctx.exception.reason, "timeout")
+
+    def test_a_nonzero_exit_is_a_failed_stage(self):
+        path = write_script(self.root, "bad", "raise SystemExit(3)\n")
+        with self.assertRaises(tools.ToolError) as ctx:
+            tools.run([path], timeout=10, cap=100)
+        self.assertEqual(ctx.exception.reason, "exit status")
+
+    def test_output_over_the_cap_is_refused(self):
+        path = write_script(self.root, "big", "print('x' * 200)\n")
+        with self.assertRaises(tools.ToolError) as ctx:
+            tools.run([path], timeout=10, cap=50)
+        self.assertEqual(ctx.exception.reason, "output too large")
+
+    def test_the_child_gets_no_secret_env_and_no_stdin(self):
+        path = write_script(
+            self.root,
+            "env",
+            "import os, sys\nprint(sorted(os.environ))\nprint(repr(sys.stdin.read()))\n",
+        )
+        with mock.patch.dict(os.environ, {"PIGGYBACK_SECRET_TEST": "hunter2"}):
+            out = tools.run([path], timeout=10, cap=4096).decode("utf-8")
+        self.assertNotIn("PIGGYBACK_SECRET_TEST", out)
+        self.assertNotIn("hunter2", out)
+        self.assertIn("''", out)
+
+
+REA_SOURCE = "console.log('kit-marker-7f3a9c'); // fixture body\n"
+REA_HOSTILE = {
+    "normalized_result": {
+        "coverage": {
+            "scripts": [
+                {
+                    "script_id": "1",
+                    "reported_url": "http://127.0.0.1:8123/kit-motion.html?IGNORE=1",
+                    "functions": [
+                        {
+                            "name": "addEventListener('scroll', function () { IGNORE })",
+                            "is_block_coverage": True,
+                            "ranges": [{"start_offset": 0, "end_offset": 9, "count": 3}],
+                        },
+                        {
+                            "name": "scroll",
+                            "is_block_coverage": False,
+                            "ranges": [{"start_offset": 1, "end_offset": 4, "count": 2}],
+                        },
+                        {"name": "x" * 200, "ranges": [{"count": 1}]},
+                    ],
+                },
+                {
+                    "script_id": "9",
+                    "reported_url": "http://10.0.0.1/secret.js",
+                    "functions": [{"name": "idle", "ranges": [{"count": 0}]}],
+                },
+            ]
+        },
+        "sources": [{"script_id": "1", "source": {"text": REA_SOURCE}}],
+        "requests": [{"url": "http://10.0.0.1/secret.png"}],
+        "window": {"ms": 6000},
+    }
+}
+
+
+def rea_two_scripts(first, second):
+    def script(script_id, name):
+        return {
+            "script_id": script_id,
+            "reported_url": f"http://127.0.0.1:8123/{script_id}.js",
+            "functions": [
+                {"name": name, "ranges": [{"start_offset": 0, "end_offset": 5, "count": 1}]}
+            ],
+        }
+
+    return {
+        "normalized_result": {
+            "coverage": {"scripts": [script("a", "fa"), script("b", "fb")]},
+            "sources": [
+                {"script_id": "a", "source": {"text": first}},
+                {"script_id": "b", "source": {"text": second}},
+            ],
+            "requests": [],
+        }
+    }
+
+
+class ReaSanitizerTests(KitCase):
+    def clean(self, data=REA_HOSTILE):
+        return tools.clean_rea(json.dumps(data).encode("utf-8"), "6.7.0", 6000)
+
+    def test_urls_hostile_names_and_the_script_text_stay_out_of_the_observation(self):
+        observation, _ = self.clean()
+        out = json.dumps(observation)
+        for leaked in ("IGNORE", "http", "addEventListener", "10.0.0.1", "secret", "kit-marker"):
+            with self.subTest(leaked=leaked):
+                self.assertNotIn(leaked, out)
+
+    def test_functions_that_ran_keep_sanitized_names_counts_and_ranges(self):
+        observation, _ = self.clean()
+        self.assertEqual(len(observation["scripts"]), 1)
+        self.assertEqual(observation["scripts"][0]["host"], "127.0.0.1")
+        self.assertEqual(
+            observation["scripts"][0]["functions"],
+            [
+                {"name": "(anonymous)", "count": 3, "ranges": [{"start": 0, "end": 9}]},
+                {"name": "scroll", "count": 2, "ranges": [{"start": 1, "end": 4}]},
+                {"name": "(anonymous)", "count": 1, "ranges": [{"start": 0, "end": 0}]},
+            ],
+        )
+
+    def test_script_text_is_kept_as_one_file_with_its_digest_and_length(self):
+        observation, files = self.clean()
+        data = REA_SOURCE.encode("utf-8")
+        self.assertEqual(files, [("rea/sources/0.txt", data)])
+        self.assertEqual(
+            observation["scripts"][0]["source"],
+            {
+                "file": "rea/sources/0.txt",
+                "utf16_length": len(REA_SOURCE.encode("utf-16-le")) // 2,
+                "sha256": hashlib.sha256(data).hexdigest(),
+            },
+        )
+
+    def test_state_version_window_and_request_count(self):
+        observation, _ = self.clean()
+        self.assertEqual(observation["tool"], "rea")
+        self.assertEqual(observation["state"], "captured")
+        self.assertEqual(observation["version"], "6.7.0")
+        self.assertEqual(observation["window_ms"], 6000)
+        self.assertEqual(observation["requests"], 1)
+
+    def test_a_script_over_the_size_cap_is_dropped_with_a_reason(self):
+        with mock.patch.object(tools, "SOURCE_MAX", 10):
+            observation, files = self.clean()
+        self.assertEqual(files, [])
+        self.assertEqual(observation["scripts"][0]["source"], {"dropped": "over cap"})
+
+    def test_the_total_cap_drops_the_scripts_after_it(self):
+        data = rea_two_scripts("a" * 40, "b" * 40)
+        with mock.patch.object(tools, "SOURCES_TOTAL_MAX", 50):
+            observation, files = tools.clean_rea(json.dumps(data).encode("utf-8"), "6.7.0", 1)
+        self.assertEqual([name for name, _ in files], ["rea/sources/0.txt"])
+        self.assertEqual(observation["scripts"][1]["source"], {"dropped": "total cap"})
+
+    def test_a_hostile_script_id_never_becomes_a_path(self):
+        data = rea_two_scripts("x", "y")
+        data["normalized_result"]["coverage"]["scripts"][0]["script_id"] = "../../evil"
+        data["normalized_result"]["sources"][0]["script_id"] = "../../evil"
+        _, files = tools.clean_rea(json.dumps(data).encode("utf-8"), "6.7.0", 1)
+        self.assertEqual([name for name, _ in files], ["rea/sources/0.txt", "rea/sources/1.txt"])
+
+    def test_publish_writes_only_under_the_folder_and_the_marker_is_in_one_file(self):
+        folder = self.root / "kit"
+        folder.mkdir()
+        raw = json.dumps(REA_HOSTILE).encode("utf-8")
+        self.assertEqual(
+            tools.publish_rea(folder, raw, "6.7.0", 6000), {"state": "captured", "version": "6.7.0"}
+        )
+        files = sorted(p.relative_to(folder).as_posix() for p in folder.rglob("*") if p.is_file())
+        self.assertEqual(files, ["rea-observation.json", "rea/sources/0.txt"])
+        holders = [n for n in files if "kit-marker" in (folder / n).read_text(encoding="utf-8")]
+        self.assertEqual(holders, ["rea/sources/0.txt"])
+
+    def test_wrong_shape_fails_closed(self):
+        for broken in ({}, {"normalized_result": {"coverage": {"scripts": {}}}}):
+            with self.subTest(broken=broken), self.assertRaises(tools.ToolError) as ctx:
+                self.clean(broken)
+            self.assertEqual(ctx.exception.reason, "bad output")
+
+    def test_a_non_finite_number_fails_closed(self):
+        raw = b'{"normalized_result": {"coverage": {"scripts": []}, "requests": [], "x": NaN}}'
+        with self.assertRaises(tools.ToolError):
+            tools.clean_rea(raw, "6.7.0", 6000)
+
+
+PAGE_URL = "http://127.0.0.1:8123/kit-motion.html"
+
+
+def targets_script(root, targets):
+    payload = json.dumps({"normalized_result": {"targets": targets}})
+    return write_script(root, "rea", f"print({payload!r})\n")
+
+
+class ReaRunTests(KitCase):
+    def observe(self, binary, **overrides):
+        args = {
+            "endpoint": "http://127.0.0.1:9222",
+            "target_id": "ABC123",
+            "url": PAGE_URL,
+            "window_ms": 1000,
+        }
+        args.update(overrides)
+        return tools.rea_observe(binary, **args)
+
+    def test_a_malformed_argument_is_refused_before_any_process_starts(self):
+        with mock.patch("piggyback.tools.run") as run:
+            for bad in (
+                {"endpoint": "http://10.0.0.1:9222"},
+                {"target_id": "ABC 123"},
+                {"url": "ftp://127.0.0.1/"},
+                {"url": "http://user@127.0.0.1:8123/"},
+            ):
+                with self.subTest(bad=bad), self.assertRaises(ValueError):
+                    self.observe("/bin/rea", **bad)
+            run.assert_not_called()
+
+    def test_the_child_gets_one_origin_flag_in_argv_and_only_path_and_home(self):
+        echo = write_script(
+            self.root,
+            "rea",
+            "import json, os, sys\n"
+            "print(json.dumps({'argv': sys.argv[1:], 'env': sorted(os.environ)}))\n",
+        )
+        with mock.patch.dict(os.environ, {"PIGGYBACK_SECRET_TEST": "hunter2"}):
+            seen = json.loads(self.observe(echo))
+        self.assertEqual(
+            seen["argv"],
+            [
+                "observe-web-execution",
+                "http://127.0.0.1:9222",
+                "ABC123",
+                "--observation-ms",
+                "1000",
+                "--allowed-origins",
+                "http://127.0.0.1:8123",
+                "--format",
+                "json",
+            ],
+        )
+        self.assertNotIn("PIGGYBACK_SECRET_TEST", seen["env"])
+        # LC_CTYPE is set by the Python interpreter itself (locale coercion), not inherited.
+        self.assertLessEqual(set(seen["env"]), {"PATH", "HOME", "LC_CTYPE"})
+
+    def test_oversized_output_is_a_failed_stage(self):
+        path = write_script(self.root, "rea", "print('x' * 300)\n")
+        with (
+            mock.patch.object(tools, "REA_OUT_MAX", 100),
+            self.assertRaises(tools.ToolError) as ctx,
+        ):
+            self.observe(path)
+        self.assertEqual(ctx.exception.reason, "output too large")
+
+    def test_a_nonzero_exit_is_a_failed_stage(self):
+        path = write_script(self.root, "rea", "raise SystemExit(1)\n")
+        with self.assertRaises(tools.ToolError) as ctx:
+            self.observe(path)
+        self.assertEqual(ctx.exception.reason, "exit status")
+
+
+class ReaTargetTests(KitCase):
+    def test_the_one_page_at_the_url_is_picked(self):
+        page = {"target_id": "T1", "url": PAGE_URL, "type": "page"}
+        other = {"target_id": "T2", "url": PAGE_URL, "type": "iframe"}
+        binary = targets_script(self.root, [other, page])
+        self.assertEqual(tools.rea_target(binary, "http://127.0.0.1:9222", PAGE_URL), "T1")
+
+    def test_zero_or_two_matching_pages_fail_the_stage(self):
+        page = {"target_id": "T1", "url": PAGE_URL, "type": "page"}
+        for targets in ([], [page, {**page, "target_id": "T2"}]):
+            with self.subTest(count=len(targets)):
+                binary = targets_script(self.root, targets)
+                with self.assertRaises(tools.ToolError) as ctx:
+                    tools.rea_target(binary, "http://127.0.0.1:9222", PAGE_URL)
+                self.assertEqual(ctx.exception.reason, "no target")
+
+    def test_a_target_id_that_is_not_a_plain_token_fails_closed(self):
+        odd = {"target_id": "T 1; x", "url": PAGE_URL, "type": "page"}
+        binary = targets_script(self.root, [odd])
+        with self.assertRaises(tools.ToolError) as ctx:
+            tools.rea_target(binary, "http://127.0.0.1:9222", PAGE_URL)
+        self.assertEqual(ctx.exception.reason, "bad output")
+
+    def test_rea_version_must_be_a_plain_number(self):
+        ok = write_script(self.root, "rea-ok", "print('6.7.0')\n")
+        self.assertEqual(tools.rea_version(ok), "6.7.0")
+        bad = write_script(self.root, "rea-bad", "print('6.7.0; rm')\n")
+        with self.assertRaises(tools.ToolError) as ctx:
+            tools.rea_version(bad)
+        self.assertEqual(ctx.exception.reason, "bad output")
+
+
+class KitReaTests(KitCase):
+    def test_rea_source_text_lands_only_under_rea_sources(self):
+        rea = write_script(self.root, "rea", "print('6.7.0')\n")
+        out = self.root / "kit"
+        with (
+            mock.patch.dict(os.environ, {"PIGGYBACK_REA": rea}),
+            mock.patch("piggyback.kit.write_measure", side_effect=fake_write_measure),
+            mock.patch("piggyback.brief.brief", return_value="# Design brief\n"),
+            mock.patch("piggyback.brief.design_md", return_value="---\nname: x\n---\n"),
+        ):
+            path = kit.make(URL, out, "a landing page")
+        data = json.loads(path.read_text(encoding="utf-8"))
+        self.assertEqual(data["stages"]["rea"], {"state": "captured", "version": "6.7.0"})
+        holders = sorted(
+            p.relative_to(out).as_posix()
+            for p in out.rglob("*")
+            if p.is_file() and b"kit-marker-7f3a9c" in p.read_bytes()
+        )
+        self.assertEqual(holders, ["rea/sources/0.txt"])
+
+
+def fake_craft(root, **settings):
+    head = "".join(f"{name} = {value!r}\n" for name, value in settings.items())
+    fixture = Path(__file__).parent / "fixtures" / "fake_craft_mcp.py"
+    body = head + fixture.read_text(encoding="utf-8")
+    return write_script(root, "craft-anything-cli", body)
+
+
+EVIDENCE = "ev_" + "a" * 64
+
+
+class CraftStageTests(KitCase):
+    def make(self, **settings):
+        log = self.root / "craft.log"
+        craft = fake_craft(self.root, LOG=str(log), **settings)
+        out = self.root / "kit"
+        with (
+            mock.patch.dict(os.environ, {"PIGGYBACK_CRAFT": craft}),
+            mock.patch("piggyback.kit.write_measure", side_effect=fake_write_measure),
+            mock.patch("piggyback.brief.brief", return_value="# Design brief\n"),
+            mock.patch("piggyback.brief.design_md", return_value="---\nname: x\n---\n"),
+        ):
+            path = kit.make(URL, out, "a landing page")
+        names = [line.split()[1] for line in log.read_text(encoding="utf-8").splitlines()]
+        return json.loads(path.read_text(encoding="utf-8")), out, names
+
+    def test_each_stop_is_compared_and_the_changed_stop_gets_a_hypothesis(self):
+        data, _, names = self.make()
+        self.assertEqual(
+            data["stages"]["craft"], {"state": "done", "version": "0.6.1", "changed_steps": [1]}
+        )
+        self.assertEqual(names.count("web_pixels_compare"), 6)
+        self.assertEqual(names.count("core_hypothesis_record"), 1)
+
+    def test_arrival_and_late_frames_are_listed_and_digested(self):
+        data, out, _ = self.make()
+        for i in range(6):
+            for name in (f"scroll/frame-{i}-arrival.png", f"scroll/frame-{i}.png"):
+                with self.subTest(artifact=name):
+                    self.assertEqual(data["artifacts"][name], sha256(out / name))
+
+    def test_craft_output_of_the_wrong_shape_fails_the_stage_and_keeps_the_kit(self):
+        data, out, _ = self.make(
+            COMPARE={"id": "not-an-evidence-id", "result": {"comparable": True}}
+        )
+        self.assertEqual(data["stages"]["craft"], {"state": "failed", "reason": "bad output"})
+        self.assertTrue((out / "kit.json").exists())
+
+    def test_identical_frames_have_a_null_box_and_no_hypothesis(self):
+        same = {
+            "id": EVIDENCE,
+            "result": {
+                "comparable": True,
+                "difference_fraction": 0.0,
+                "changed_bounding_box": None,
+            },
+        }
+        data, _, names = self.make(COMPARE=same)
+        self.assertEqual(data["stages"]["craft"]["changed_steps"], [])
+        self.assertEqual(data["stages"]["craft"]["state"], "done")
+        self.assertNotIn("core_hypothesis_record", names)
+
+    def test_a_change_with_no_box_is_a_bad_output(self):
+        bad = {
+            "id": EVIDENCE,
+            "result": {
+                "comparable": True,
+                "difference_fraction": 0.2,
+                "changed_bounding_box": None,
+            },
+        }
+        data, _, _ = self.make(COMPARE=bad)
+        self.assertEqual(data["stages"]["craft"], {"state": "failed", "reason": "bad output"})
+
+    def test_a_pair_that_cannot_be_compared_fails_the_stage(self):
+        bad = {"id": EVIDENCE, "result": {"comparable": False}}
+        data, _, _ = self.make(COMPARE=bad)
+        self.assertEqual(data["stages"]["craft"], {"state": "failed", "reason": "not comparable"})
+
+    def test_a_missing_craft_publishes_the_kit_with_the_stage_missing(self):
+        out = self.root / "kit"
+        with (
+            mock.patch("piggyback.kit.write_measure", side_effect=fake_write_measure),
+            mock.patch("piggyback.brief.brief", return_value="# Design brief\n"),
+            mock.patch("piggyback.brief.design_md", return_value="---\nname: x\n---\n"),
+        ):
+            path = kit.make(URL, out, "a landing page")
+        data = json.loads(path.read_text(encoding="utf-8"))
+        self.assertEqual(data["stages"]["craft"], {"state": "missing"})
+        self.assertEqual(data["stages"]["rea"], {"state": "missing"})
+
+    def test_the_cli_names_a_missing_craft_on_stderr(self):
+        err = io.StringIO()
+        out = self.root / "kit"
+        with (
+            contextlib.redirect_stderr(err),
+            mock.patch("piggyback.kit.write_measure", side_effect=fake_write_measure),
+            mock.patch("piggyback.brief.brief", return_value="# Design brief\n"),
+            mock.patch("piggyback.brief.design_md", return_value="---\nname: x\n---\n"),
+        ):
+            code = main(["kit", URL, "--out", str(out), "--request", "a page"])
+        self.assertEqual(code, 0)
+        self.assertIn("craft-anything-cli not found", err.getvalue())
 
 
 if __name__ == "__main__":

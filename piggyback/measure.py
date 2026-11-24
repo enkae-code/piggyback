@@ -13,10 +13,12 @@ import os
 import platform
 import re
 import secrets
+import socket
 import stat
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 from contextlib import closing
 from datetime import datetime, timezone
@@ -30,7 +32,7 @@ from .proxy import EgressProxy
 SCRIPT = (Path(__file__).parent / "measure.js").read_text(encoding="utf-8").strip().rstrip(";")
 BYPASS_ENV = "PLAYWRIGHT_DISABLE_FORCED_CHROMIUM_PROXIED_LOOPBACK"
 TOTAL_S = 90  # whole run, browser start included
-SCROLL_TOTAL_S = 150  # a scroll run also wheels through six steps and samples each one
+SCROLL_TOTAL_S = 180  # a scroll run also wheels through six steps, samples each one and runs REA
 SCROLL_NUM_LIMIT = (
     1_000_000  # page numbers are clamped to this: no real px, ms or opacity is larger
 )
@@ -42,6 +44,9 @@ SCROLL_WAIT_MS = 3_000  # the scroll page settles before its first frame
 SCROLL_ARRIVE_MS = 1_000  # a wheel move that never scrolls is recorded as null, then carried on
 SCROLL_STEPS = 5  # six frames: the top, then five equal steps down to the bottom
 DENSE_MS = (0, 200, 500, 900)  # samples after each wheel move: the first second of motion
+REA_ARM_MS = 500  # REA attaches before the first wheel move
+REA_STEP_MS = 700  # pause after each wheel move, so REA sees the page's own work
+REA_WINDOW_MS = 6000  # REA's observation window; the wheel pass sits inside it
 # Numbers and fixed words only: no text, HTML, URLs or class names leave the page.
 SCROLL_SAMPLE = """(withAnimations) => {
   const EASES = ['linear', 'ease', 'ease-in', 'ease-out', 'ease-in-out', 'step-start', 'step-end'];
@@ -173,7 +178,9 @@ def publish_json(path, data):
         raise
 
 
-def write_measure(url, out_dir, *, viewport=(1440, 900), allow_loopback=False, scroll=False):
+def write_measure(
+    url, out_dir, *, viewport=(1440, 900), allow_loopback=False, scroll=False, rea_binary=None
+):
     """Measure one page into out_dir: fingerprint.json and screenshot.png. Raises MeasureError.
 
     scroll: also write scroll/frame-0..5.png and scroll-samples.json, the kit's motion evidence.
@@ -197,6 +204,7 @@ def write_measure(url, out_dir, *, viewport=(1440, 900), allow_loopback=False, s
         allow_loopback=allow_loopback,
         screenshot=shot,
         scroll_dir=scroll_dir if scroll else None,
+        rea_binary=rea_binary,
     )
     if "scroll" in result:
         publish_json(samples, result.pop("scroll"))
@@ -251,6 +259,7 @@ def measure(
     evidence=None,
     failure_screenshot=False,
     scroll_dir=None,
+    rea_binary=None,
 ):
     """Fingerprint one page. evidence: optional path for a DOM snapshot (Python API only).
 
@@ -267,6 +276,7 @@ def measure(
         "evidence": _path_or_none(evidence),
         "failure_screenshot": bool(failure_screenshot),
         "scroll_dir": _path_or_none(scroll_dir),
+        "rea": rea_binary if scroll_dir else None,
     }
     result = _run_worker(request)
     if "error" in result:
@@ -412,9 +422,7 @@ def _capture_page(req, tmp):
                 route.abort("blockedbyclient")
 
         proxy = {"server": f"http://127.0.0.1:{egress.port}"}  # loopback is proxied by Playwright
-        browser, label = launch(
-            p, proxy=proxy
-        )  # fresh temporary profile per launch, removed on close
+        browser, label, port = _launch_for(p, req, proxy)
         try:
             ctx = browser.new_context(
                 viewport={"width": width, "height": height},
@@ -447,7 +455,9 @@ def _capture_page(req, tmp):
                 "viewport": {"width": width, "height": height},
                 "captured_at": captured_at,
             }
-            scroll = _capture_scroll(ctx, req, page) if req.get("scroll_dir") else None
+            scroll, rea = (
+                _capture_scroll(ctx, req, page, port) if req.get("scroll_dir") else (None, None)
+            )
         finally:
             browser.close()
     result = {
@@ -462,7 +472,86 @@ def _capture_page(req, tmp):
     }
     if scroll is not None:
         result["scroll"] = scroll
+    if rea is not None:
+        result["rea"] = rea
     return result
+
+
+class _DebugPort:
+    """The Playwright object with --remote-debugging-port added to every launch. browser.py's
+    argument list is shared, so the switch is added here, and only for a run that uses REA."""
+
+    def __init__(self, playwright, port):
+        self._playwright = playwright
+        self._switch = f"--remote-debugging-port={port}"
+        self.chromium = self
+
+    def launch(self, **options):
+        options["args"] = [*options["args"], self._switch]
+        return self._playwright.chromium.launch(**options)
+
+
+def _launch_for(playwright, req, proxy):
+    """(browser, channel label, REA port or None). A port is picked only for a run that uses REA."""
+    port = _free_port() if req.get("rea") else None
+    browser, label = launch(
+        _DebugPort(playwright, port) if port else playwright, proxy=proxy
+    )  # fresh temporary profile per launch, removed on close
+    return browser, label, port
+
+
+def _free_port():
+    """A free loopback port for REA's debugging endpoint.
+    # ponytail: bind 0 then close: another process can take the port before Chromium binds it."""
+    with closing(socket.socket()) as sock:
+        sock.bind(("127.0.0.1", 0))
+        return sock.getsockname()[1]
+
+
+def _capture_rea(page, req, port, targets):
+    """REA observes the scroll page after the timing samples. A failure is a stage: the caller
+    still checks that the page was not replaced, and the kit is still published."""
+    from . import tools  # tools imports this module: a top-level import would be circular
+
+    binary = req["rea"]
+    endpoint = f"http://127.0.0.1:{port}"
+    version = None
+    try:
+        version = tools.rea_version(binary)
+        page.evaluate("scrollTo(0, 0)")
+        url = page.url  # read here: the observer thread must not call Playwright
+        target = tools.rea_target(binary, endpoint, url)
+        outcome = {}
+
+        def observe():  # only REA's subprocess runs in this thread
+            try:
+                outcome["raw"] = tools.rea_observe(
+                    binary,
+                    endpoint=endpoint,
+                    target_id=target,
+                    url=url,
+                    window_ms=REA_WINDOW_MS,
+                )
+            except Exception as exc:
+                outcome["error"] = exc
+
+        observer = threading.Thread(target=observe, daemon=True)
+        observer.start()
+        page.wait_for_timeout(REA_ARM_MS)
+        for k in range(1, SCROLL_STEPS + 1):
+            _scroll_to(page, targets[k] - targets[k - 1])
+            page.wait_for_timeout(REA_STEP_MS)
+        observer.join()
+        if "error" in outcome:
+            raise outcome["error"]
+        tools.publish_rea(Path(req["scroll_dir"]).parent, outcome["raw"], version, REA_WINDOW_MS)
+    except Exception as exc:
+        return {
+            "state": "failed",
+            "version": version,
+            "reason": getattr(exc, "reason", "page error"),
+        }
+    return {"state": "captured", "version": version}
 
 
 def _sample(page, with_animations):
@@ -490,9 +579,10 @@ def _scroll_to(page, delta):
     return _await_scroll(page, before)
 
 
-def _dense_samples(page, origin):
+def _dense_samples(page, origin, arrival):
     """Samples at DENSE_MS after origin. actual_ms is when Python requested the sample (Python's
-    monotonic clock), not when the browser painted it."""
+    monotonic clock), not when the browser painted it. The arrival frame is taken right after
+    the +0 sample; a screenshot that delays +200 shows in that sample's actual_ms."""
     dense = []
     for due in DENSE_MS:
         # The browser's timer can end a fraction early on our clock: wait until ours says due.
@@ -500,6 +590,8 @@ def _dense_samples(page, origin):
             page.wait_for_timeout(math.ceil(wait))
         actual = round((time.monotonic() - origin) * 1000, 1)
         dense.append({"due_ms": due, "actual_ms": actual, **_sample(page, False)})
+        if due == 0:
+            page.screenshot(path=arrival, type="png")
     return dense
 
 
@@ -529,7 +621,7 @@ def _refuse_if_replaced(page, origin, navigations, status, req):
     _refuse_if_moved(status, req, page)
 
 
-def _capture_scroll(ctx, req, first_page):
+def _capture_scroll(ctx, req, first_page, port=None):
     """Frames from the top to the bottom on a fresh page in the same context, with motion samples.
 
     The first page closes first. Each frame is written beside its final name and published only
@@ -558,7 +650,10 @@ def _capture_scroll(ctx, req, first_page):
         for step, target in enumerate(targets):
             onset = _scroll_to(page, target - previous)  # cumulative targets: no drift
             previous = target
-            dense = _dense_samples(page, time.monotonic())
+            arrival = frames_dir / f"frame-{step}-arrival.png"  # taken inside _dense_samples
+            arrival_tmp = _temp_beside(arrival)
+            pending.append((arrival_tmp, arrival))
+            dense = _dense_samples(page, time.monotonic(), arrival_tmp)
             settled = _sample(page, True)
             final = frames_dir / f"frame-{step}.png"
             tmp = _temp_beside(final)
@@ -575,6 +670,7 @@ def _capture_scroll(ctx, req, first_page):
                 }
             )
         scrollable_end = page.evaluate("document.documentElement.scrollHeight - innerHeight")
+        rea = _capture_rea(page, req, port, targets) if port else None
         _refuse_if_replaced(page, origin, navigations, status, req)
         for tmp, final in pending:
             os.replace(tmp, final)
@@ -599,7 +695,7 @@ def _capture_scroll(ctx, req, first_page):
         "final_host": urlsplit(page.url).hostname,
         "coverage": {"scroll": scroll_coverage(scrollable, scrollable_end, steps)},
         "steps": steps,
-    }
+    }, rea
 
 
 def scroll_coverage(scrollable, scrollable_end, steps):

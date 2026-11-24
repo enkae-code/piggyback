@@ -1,6 +1,7 @@
 """`piggyback` command line: measure, check-refs and doctor."""
 
 import argparse
+import json
 import os
 import re
 import sys
@@ -77,6 +78,11 @@ def run_kit(url, out, request, allow_loopback):
         print(f"kit failed: {fingerprints.clean(exc, 200)}", file=sys.stderr)
         return 1
     print(f"wrote {kit_path}")
+    if json.loads(kit_path.read_text(encoding="utf-8"))["stages"]["craft"]["state"] == "missing":
+        print(
+            "piggyback: craft-anything-cli not found; install it or set PIGGYBACK_CRAFT",
+            file=sys.stderr,
+        )
     return 0
 
 

@@ -7,6 +7,7 @@ from pathlib import Path
 if importlib.util.find_spec("playwright") is None:
     raise unittest.SkipTest("playwright not installed; run with the measure extra")
 
+from piggyback import kit, tools  # noqa: E402
 from piggyback.measure import MeasureError, write_measure  # noqa: E402
 from tests.test_measure_integration import serve  # noqa: E402
 
@@ -102,7 +103,7 @@ class KitScrollIntegration(unittest.TestCase):
     def test_same_document_url_changes_during_scroll_do_not_refuse(self):
         out, s = self.capture("kit-replacestate-on-scroll.html")
         self.assertEqual([step["step"] for step in s["steps"]], list(range(6)))
-        self.assertEqual(len(list(out.glob("scroll/frame-*.png"))), 6)
+        self.assertEqual(len(list(out.glob("scroll/frame-?.png"))), 6)
 
     def test_a_slow_same_host_replacement_during_scroll_refuses_and_publishes_nothing(self):
         tmp = tempfile.TemporaryDirectory()
@@ -144,6 +145,39 @@ class KitScrollIntegration(unittest.TestCase):
         )
         fingerprint = json.loads((out / "fingerprint.json").read_text(encoding="utf-8"))
         self.assertIn("http://10.0.0.1/kit-probe.png", fingerprint["blocked_requests"])
+
+    def test_craft_marks_the_stop_where_the_aside_animates_in(self):
+        if tools.find("PIGGYBACK_CRAFT", "craft-anything-cli") is None:
+            self.skipTest("craft-anything-cli is not installed")
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        out = Path(tmp.name) / "kit"
+        kit.make(f"{self.base}/kit-motion.html", out, "a landing page", allow_loopback=True)
+        data = json.loads((out / "kit.json").read_text(encoding="utf-8"))
+        self.assertEqual(data["stages"]["craft"]["state"], "done", data["stages"]["craft"])
+        samples = json.loads((out / "scroll-samples.json").read_text(encoding="utf-8"))
+        entry = next(step["step"] for step in samples["steps"] if step["scroll_y"] > 300)
+        self.assertIn(entry, data["stages"]["craft"]["changed_steps"])
+
+    def test_rea_observes_the_scroll_listener_and_keeps_its_source_under_rea_sources(self):
+        if tools.find("PIGGYBACK_REA", "rea") is None:
+            self.skipTest("rea is not installed")
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        out = Path(tmp.name) / "kit"
+        kit.make(f"{self.base}/kit-motion.html", out, "a landing page", allow_loopback=True)
+        data = json.loads((out / "kit.json").read_text(encoding="utf-8"))
+        self.assertEqual(data["stages"]["rea"]["state"], "captured", data["stages"]["rea"])
+        observed = json.loads((out / "rea-observation.json").read_text(encoding="utf-8"))
+        counted = [f for s in observed["scripts"] for f in s["functions"] if f["count"] > 0]
+        self.assertGreaterEqual(len(counted), 1)
+        holders = sorted(
+            p.relative_to(out).as_posix()
+            for p in out.rglob("*")
+            if p.is_file() and MARKER.encode() in p.read_bytes()
+        )
+        self.assertTrue(holders)
+        self.assertTrue(all(h.startswith("rea/sources/") and h.endswith(".txt") for h in holders))
 
     def test_samples_carry_no_page_text_html_or_urls(self):
         for name in ("kit-motion.html", "kit-static.html"):

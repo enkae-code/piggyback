@@ -3,12 +3,14 @@ import io
 import os
 import sys
 import tempfile
+import time
 import types
 import unittest
 from pathlib import Path
 from unittest import mock
 
 import piggyback.measure as measure_mod
+from piggyback import tools
 from piggyback.cli import main
 from piggyback.measure import MeasureError, check_url, measure, receipt_refusal
 
@@ -343,6 +345,47 @@ class PublishTests(unittest.TestCase):
                     measure_mod.publish_json(path, {"new": True})
             self.assertEqual(path.read_text(encoding="utf-8"), '{"old": true}')
             self.assertEqual([p.name for p in Path(tmp).iterdir()], ["fingerprint.json"])
+
+
+class DenseArrivalTests(unittest.TestCase):
+    def test_the_arrival_frame_is_taken_right_after_the_zero_sample(self):
+        events = []
+
+        class Page:
+            def evaluate(self, script, *_):
+                events.append("sample")
+                return {"scroll_y": 0}
+
+            def wait_for_timeout(self, ms):
+                time.sleep(ms / 1000)
+
+            def screenshot(self, path, type):
+                events.append("shot")
+
+        measure_mod._dense_samples(Page(), time.monotonic(), "arrival.tmp")
+        self.assertEqual(events, ["sample", "shot", "sample", "sample", "sample"])
+
+
+class DebugPortTests(unittest.TestCase):
+    def test_every_launch_gets_the_debugging_port_switch(self):
+        seen = {}
+        chromium = types.SimpleNamespace(launch=lambda **kw: seen.update(kw))
+        shim = measure_mod._DebugPort(types.SimpleNamespace(chromium=chromium), 9222)
+        shim.chromium.launch(channel=None, chromium_sandbox=True, args=["--a"])
+        self.assertEqual(seen["args"], ["--a", "--remote-debugging-port=9222"])
+
+
+class ReaStageTests(unittest.TestCase):
+    def test_a_rea_failure_is_a_failed_stage_and_nothing_is_observed(self):
+        req = {"rea": "/bin/rea", "scroll_dir": "/tmp/unused/scroll"}
+        with (
+            mock.patch("piggyback.tools.rea_version", return_value="6.7.0"),
+            mock.patch("piggyback.tools.rea_target", side_effect=tools.ToolError("no target")),
+            mock.patch("piggyback.tools.rea_observe") as observe,
+        ):
+            result = measure_mod._capture_rea(FakePage(lambda *_: None), req, 9222, [0, 300])
+        self.assertEqual(result, {"state": "failed", "version": "6.7.0", "reason": "no target"})
+        observe.assert_not_called()
 
 
 if __name__ == "__main__":
