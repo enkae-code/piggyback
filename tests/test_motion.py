@@ -3,12 +3,12 @@ import unittest
 from piggyback import motion
 
 
-def sample(scroll_y, *, animations=None, elements=None, dense=None):
+def sample(scroll_y, *, animations=None, elements=None, count=10):
     return {
         "scroll_y": scroll_y,
         "animations": animations,
         "elements": elements or [],
-        "dense": dense or [],
+        "count": count,
     }
 
 
@@ -45,13 +45,19 @@ def data(steps, coverage="done"):
     }
 
 
-def step(index, scroll_y, **kwargs):
+def step(index, scroll_y, *, dense=None, **kwargs):
+    """A step as measure.py records it: its dense samples first, then its settled sample."""
     return {
         "step": index,
         "target_scroll_y": scroll_y,
         "scroll_onset_ms": 12.0,
         **sample(scroll_y, **kwargs),
+        "dense": dense or [],
     }
+
+
+def rows_with(text, prop):
+    return [line for line in text.splitlines() if line.startswith("| M") and prop in line]
 
 
 class MotionTableTests(unittest.TestCase):
@@ -61,6 +67,10 @@ class MotionTableTests(unittest.TestCase):
         self.assertIn("300 ms (observed/runtime)", text)
         self.assertIn("50 ms (observed/runtime)", text)
         self.assertIn("ease-out (observed/runtime)", text)
+
+    def test_the_trigger_says_where_it_was_seen_and_claims_no_cause(self):
+        steps = [step(0, 0, animations=[anim()]), step(1, 200, animations=[anim()])]
+        self.assertIn("seen at steps 0-1 (observed/runtime)", motion.build(data(steps)))
 
     def test_an_animation_without_a_linked_element_has_its_role_not_measured(self):
         steps = [step(0, 0), step(1, 200, animations=[anim()])]
@@ -78,13 +88,6 @@ class MotionTableTests(unittest.TestCase):
         )
         self.assertIn(endpoints, text)
         self.assertIn("| not measured | not measured | not measured |", text)
-
-    def test_a_transform_entry_the_page_did_not_send_as_a_number_is_not_measured(self):
-        first = [element(transform=[1, 0, 0, 1, None, 0])]
-        last = [element(transform=[1, 0, 0, 1, 0, 40])]
-        steps = [step(0, 0, elements=first), step(1, 200, elements=last)]
-        text = motion.build(data(steps))
-        self.assertIn("matrix(1, 0, 0, 1, not measured, 0) (observed/runtime)", text)
 
     def test_an_unchanged_element_gets_no_row(self):
         steps = [step(0, 0, elements=[element(opacity=1.0)]), step(1, 200, elements=[element()])]
@@ -111,3 +114,70 @@ class MotionTableTests(unittest.TestCase):
         for line in motion.build(data(steps)).splitlines():
             if line.startswith("| M"):
                 self.assertEqual(line.replace("\\|", "").count("|"), 12)
+
+    def test_a_transform_entry_the_page_did_not_send_as_a_number_is_not_measured(self):
+        first = [element(transform=[1, 0, 0, 1, None, 0])]
+        last = [element(transform=[1, 0, 0, 1, 0, 40])]
+        steps = [step(0, 0, elements=first), step(1, 200, elements=last)]
+        text = motion.build(data(steps))
+        self.assertIn("matrix(1, 0, 0, 1, not measured, 0) (observed/runtime)", text)
+
+    def test_a_computed_transform_of_none_is_the_identity_matrix(self):
+        first = [element(transform=None)]
+        last = [element(transform=[1, 0, 0, 1, 0, 40])]
+        steps = [step(0, 0, elements=first), step(1, 9, elements=last)]
+        text = motion.build(data(steps))
+        self.assertIn("matrix(1, 0, 0, 1, 0, 0) (observed/runtime) → ", text)
+
+    def test_dense_samples_come_before_their_steps_settled_sample(self):
+        dense = [sample(100, elements=[element(opacity=0.5)])]
+        steps = [
+            step(0, 0, elements=[element(opacity=1.0)]),
+            step(1, 200, dense=dense, elements=[element(opacity=0.25)]),
+        ]
+        text = motion.build(data(steps))
+        self.assertIn("1 (observed/runtime) → 0.25 (observed/runtime)", text)
+
+    def test_the_same_index_with_another_tag_is_another_element(self):
+        steps = [
+            step(0, 0, elements=[element(index=0, tag="div", opacity=1.0)]),
+            step(1, 200, elements=[element(index=0, tag="span", opacity=0.5)]),
+        ]
+        self.assertEqual(rows_with(motion.build(data(steps)), "opacity"), [])
+
+    def test_samples_with_different_element_counts_are_not_paired(self):
+        steps = [
+            step(0, 0, count=10, elements=[element(opacity=1.0)]),
+            step(1, 200, count=11, elements=[element(opacity=0.5)]),
+        ]
+        self.assertEqual(rows_with(motion.build(data(steps)), "opacity"), [])
+
+    def test_a_duplicate_index_within_one_sample_is_ambiguous_and_skipped(self):
+        steps = [
+            step(0, 0, elements=[element(opacity=1.0), element(opacity=0.2)]),
+            step(1, 200, elements=[element(opacity=0.5)]),
+        ]
+        self.assertEqual(rows_with(motion.build(data(steps)), "opacity"), [])
+
+    def test_a_value_that_goes_and_comes_back_is_still_a_row(self):
+        steps = [
+            step(0, 0, elements=[element(opacity=1.0)]),
+            step(1, 200, elements=[element(opacity=0.5)]),
+            step(2, 400, elements=[element(opacity=1.0)]),
+        ]
+        text = motion.build(data(steps))
+        self.assertIn("1 (observed/runtime) → 1 (observed/runtime)", text)
+        self.assertIn("min 0.5, max 1", text)
+
+    def test_rows_over_the_cap_say_how_many_are_not_shown(self):
+        steps = [step(0, 0, animations=[anim(duration=d) for d in range(50)])]
+        self.assertIn("30 more rows not shown", motion.build(data(steps)))
+
+    def test_element_rows_are_not_crowded_out_by_animations(self):
+        first = [element(index=i, opacity=1.0) for i in range(30)]
+        last = [element(index=i, opacity=0.5) for i in range(30)]
+        steps = [
+            step(0, 0, animations=[anim(duration=d) for d in range(40)], elements=first),
+            step(1, 200, elements=last),
+        ]
+        self.assertTrue(rows_with(motion.build(data(steps)), "opacity"))

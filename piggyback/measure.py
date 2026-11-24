@@ -92,7 +92,7 @@ SCROLL_SAMPLE = """(withAnimations) => {
         ? s.position : 'other',
     });
   }
-  return {scroll_y: num(scrollY), animations, elements};
+  return {scroll_y: num(scrollY), animations, elements, count: nodes.length};
 }"""
 
 
@@ -150,38 +150,70 @@ def refuse_links(*paths):
             )
 
 
-def _temp_beside(path):
-    """Empty temp file beside path under a random name, created O_EXCL so it is never an existing
-    file or link. The umask sets its mode; an existing regular file at path only narrows it."""
+def _temp_fd(path):
+    """(fd, name) of a new empty file beside path, created O_EXCL: never an existing file or link.
+    The umask sets its mode."""
     path = Path(path)
     tmp = path.with_name(f".{path.name}.{secrets.token_hex(8)}.tmp")
-    os.close(
-        os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0), 0o666)
-    )
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0), 0o666)
+    return fd, str(tmp)
+
+
+def _match_mode(path, tmp):
+    """An existing regular file at path only narrows the new temp file's mode."""
     try:
-        try:
-            existing = os.lstat(path).st_mode
-        except FileNotFoundError:
-            existing = 0
-        if stat.S_ISREG(existing):
-            os.chmod(tmp, os.lstat(tmp).st_mode & existing & 0o777)
+        existing = os.lstat(path).st_mode
+    except FileNotFoundError:
+        existing = 0
+    if stat.S_ISREG(existing):
+        os.chmod(tmp, os.lstat(tmp).st_mode & existing & 0o777)
+
+
+def _temp_beside(path):
+    """Empty temp file beside path, for a writer that takes a file name (a screenshot)."""
+    fd, tmp = _temp_fd(path)
+    os.close(fd)
+    try:
+        _match_mode(path, tmp)
     except BaseException:
         os.unlink(tmp)
         raise
-    return str(tmp)
+    return tmp
 
 
 def publish_text(path, text):
-    """Replace path with text in one rename: a crash never leaves a partial file."""
-    tmp = _temp_beside(path)
+    """Replace path with text in one rename: a crash never leaves a partial file. The text goes
+    into the descriptor of the temp file this call created, so the name is never reopened."""
+    fd, tmp = _temp_fd(path)
     try:
-        with open(tmp, "w", encoding="utf-8") as handle:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
             handle.write(text)
+        _match_mode(path, tmp)
         os.replace(tmp, path)  # replaces a link at path, never writes through it
     except BaseException:
         with contextlib.suppress(OSError):
             os.unlink(tmp)
         raise
+
+
+def read_plain(path, cap):
+    """The bytes of a plain file, at most cap (ValueError beyond it), read through one descriptor.
+
+    None for a link, a special file, a FIFO or a file with another name: a FIFO is refused by its
+    type before any read can block. The descriptor is checked again after open, so a swap between
+    the two checks is caught too.
+    """
+    if not stat.S_ISREG(os.lstat(path).st_mode):
+        return None
+    flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0)
+    with os.fdopen(os.open(path, flags), "rb") as handle:
+        now = os.fstat(handle.fileno())
+        if not stat.S_ISREG(now.st_mode) or now.st_nlink != 1:
+            return None
+        data = handle.read(cap + 1)
+    if len(data) > cap:
+        raise ValueError(f"{Path(path).name}: larger than {cap} bytes")
+    return data
 
 
 def publish_json(path, data):
@@ -960,6 +992,7 @@ def _clean_sample(raw):
     animations = raw.get("animations")  # null when the sample skips animations
     return {
         "scroll_y": _num(raw.get("scroll_y")),
+        "count": _num(raw.get("count")),
         "animations": None if animations is None else _list(animations, 40, _animation),
         "elements": _list(raw.get("elements"), 40, _element),
     }

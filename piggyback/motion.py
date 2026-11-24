@@ -8,8 +8,10 @@ drives the build.
 from . import fingerprint as fp
 
 MAX_ROWS = 40
+ANIMATION_ROWS = MAX_ROWS // 2  # animations never take more than half the table
 NOT_MEASURED = "not measured"
 OBSERVED = "observed/runtime"
+IDENTITY = [1.0, 0.0, 0.0, 1.0, 0.0, 0.0]  # the computed transform of "none"
 HEADER = (
     "ID",
     "Role",
@@ -25,41 +27,45 @@ HEADER = (
 )
 
 
+def _num(value):
+    """Two decimals: opacity 0.25 must not read as 0.2."""
+    return f"{round(value, 2):g}"
+
+
 def _cell(value, unit=""):
     """One table cell: a value and its label, escaped. None is not measured."""
     if value is None:
         return NOT_MEASURED
-    text = fp.fmt(value) if isinstance(value, (int, float)) else fp.clean(value)
+    text = _num(value) if isinstance(value, (int, float)) else fp.clean(value)
     return f"{text}{unit} ({OBSERVED})"
 
 
 def _matrix(values):
-    return "matrix(" + ", ".join(NOT_MEASURED if v is None else fp.fmt(v) for v in values) + ")"
+    return "matrix(" + ", ".join(NOT_MEASURED if v is None else _num(v) for v in values) + ")"
 
 
 def _samples(data):
-    """(step index, sample) for every step and every dense sample under it, in order."""
+    """(step, sample) in capture order: a step's dense samples, then its settled sample."""
     for step in data.get("steps", []):
-        yield step["step"], step
         for dense in step.get("dense", []):
             yield step["step"], dense
+        yield step["step"], step
 
 
 def _trigger(steps):
-    low, high = min(steps), max(steps)
-    return f"scroll {low}" if low == high else f"scroll {low}-{high}"
+    """Where the page showed the motion. It names no cause: nothing observed says one."""
+    return f"seen at steps {min(steps)}-{max(steps)} ({OBSERVED})"
 
 
 def _scroll_range(scrolls):
     seen = [y for y in scrolls if isinstance(y, (int, float))]
     if not seen:
         return NOT_MEASURED
-    return f"{fp.fmt(min(seen))}-{fp.fmt(max(seen))} px ({OBSERVED})"
+    return f"{_num(min(seen))}-{_num(max(seen))} px ({OBSERVED})"
 
 
 def _receipt(steps, count):
-    low, high = min(steps), max(steps)
-    return f"steps {low}-{high}, {count} samples"
+    return f"steps {min(steps)}-{max(steps)}, {count} samples"
 
 
 def _animation_rows(samples):
@@ -89,35 +95,62 @@ def _animation_rows(samples):
     return rows
 
 
-def _element_rows(samples):
-    seen = {}  # (element index, property) -> [(step, scroll position, value, tag)]
+def _elements(samples):
+    """(element count, index, tag, property) -> [(step, scroll, value)] in capture order.
+
+    An element is matched across samples only by its index and tag, and only between samples
+    with the same element count. An index that repeats within one sample is ambiguous and skipped.
+    """
+    series = {}
     for step, sample in samples:
-        for element in sample.get("elements", []):
-            for prop in ("transform", "opacity"):
-                if element.get(prop) is not None:
-                    key = (element["index"], prop)
-                    seen.setdefault(key, []).append(
-                        (step, sample.get("scroll_y"), element[prop], element["tag"])
-                    )
+        by_index = {}
+        for element in sample.get("elements") or []:
+            by_index.setdefault(element["index"], []).append(element)
+        for index, found in by_index.items():
+            if len(found) != 1:
+                continue
+            element = found[0]
+            values = {
+                "transform": element["transform"] or IDENTITY,
+                "opacity": element["opacity"],
+            }
+            for prop, value in values.items():
+                if value is not None:
+                    key = (sample.get("count"), index, element["tag"], prop)
+                    series.setdefault(key, []).append((step, sample.get("scroll_y"), value))
+    return series
+
+
+def _spread(prop, values):
+    """What the endpoints leave out: the range of an opacity, or how many transforms there were."""
+    if prop == "opacity":
+        low, high = min(values), max(values)
+        return f"; min {_num(low)}, max {_num(high)}" if low != high else ""
+    distinct = len({tuple(v) for v in values})
+    return f"; {distinct} distinct transforms" if distinct > 2 else ""
+
+
+def _element_rows(samples):
     rows = []
-    for (_, prop), obs in seen.items():
-        first, last = obs[0][2], obs[-1][2]
-        if first == last:
+    for (_, _, tag, prop), obs in _elements(samples).items():
+        values = [value for _, _, value in obs]
+        if len(values) < 2 or all(value == values[0] for value in values):
             continue
-        show = _matrix if prop == "transform" else fp.fmt
-        steps = {step for step, _, _, _ in obs}
+        show = _matrix if prop == "transform" else _num
+        steps = {step for step, _, _ in obs}
+        endpoints = f"{_cell(show(values[0]))} → {_cell(show(values[-1]))}"
         rows.append(
             [
-                _cell(obs[0][3]),
+                _cell(tag),
                 _trigger(steps),
                 _cell(prop),
-                f"{_cell(show(first))} → {_cell(show(last))}",
+                endpoints + _spread(prop, values),
                 NOT_MEASURED,
                 NOT_MEASURED,
                 NOT_MEASURED,
-                _scroll_range([scroll for _, scroll, _, _ in obs]),
+                _scroll_range([scroll for _, scroll, _ in obs]),
                 _receipt(steps, len(obs)),
-                "element timing not measured; rows matched by element index",
+                "element timing not measured; matched by index and tag",
             ]
         )
     return rows
@@ -126,14 +159,17 @@ def _element_rows(samples):
 def build(data):
     """MOTION.md text from one cleaned scroll-samples.json."""
     samples = list(_samples(data))
-    rows = (_animation_rows(samples) + _element_rows(samples))[:MAX_ROWS]
+    animations = _animation_rows(samples)
+    shown = animations[:ANIMATION_ROWS]
+    rows = shown + _element_rows(samples)[: MAX_ROWS - len(shown)]
+    hidden = len(animations) + len(_element_rows(samples)) - len(rows)
     coverage = (data.get("coverage") or {}).get("scroll", "none")
     viewport = data.get("viewport") or {}
     lines = [
         "# Motion",
         "",
-        f"Coverage: {fp.clean(coverage)}. Viewport {fp.fmt(viewport.get('width', 0))}x"
-        f"{fp.fmt(viewport.get('height', 0))}. Samples: {len(samples)}.",
+        f"Coverage: {fp.clean(coverage)}. Viewport {_num(viewport.get('width', 0))}x"
+        f"{_num(viewport.get('height', 0))}. Samples: {len(samples)}.",
         "",
         f"Labels: {OBSERVED} (read from the page while it scrolled) or {NOT_MEASURED}. "
         "Nothing is guessed.",
@@ -144,6 +180,8 @@ def build(data):
     lines.append("| " + " | ".join(HEADER) + " |")
     lines.append("|" + "---|" * len(HEADER))
     lines += [f"| M{n} | " + " | ".join(row) + " |" for n, row in enumerate(rows, 1)]
+    if hidden:
+        lines += ["", f"{hidden} more rows not shown."]
     if not rows:
         lines += ["", "No motion observed in the samples."]
     return "\n".join(lines) + "\n"

@@ -321,7 +321,7 @@ class GapTests(unittest.TestCase):
 
         ref = {
             "motion": [signature("animation", "opacity", 2), signature("transition", "color", 1)],
-            "reduced_motion": {"still_running": 3},
+            "reduced_motion": {"still_running": 1},
         }
         build = {
             "motion": [
@@ -329,7 +329,7 @@ class GapTests(unittest.TestCase):
                 signature("animation", "transform", 1),
                 signature("animation", "width", 1),
             ],
-            "reduced_motion": {"still_running": 1},
+            "reduced_motion": {"still_running": 3},
         }
         pins = gap_mod.gap(ref, build)
         concepts = {
@@ -648,16 +648,20 @@ class ReceiptScopeMotionTests(unittest.TestCase):
             "0ms delay, ease, 6 → 5 elements",
         )
 
-    def test_reduced_motion_prints_two_facts(self):
+    def test_reduced_motion_pins_only_when_the_build_keeps_more_running(self):
         pins = gap_mod.gap(
-            {"reduced_motion": {"still_running": 3}}, {"reduced_motion": {"still_running": 1}}
+            {"reduced_motion": {"still_running": 1}}, {"reduced_motion": {"still_running": 3}}
         )
         details = [p.detail for p in pins if p.concept == "reduced_motion"]
         self.assertIn(
-            "animations still running with reduced motion requested — "
-            "build: 1, reference: 3 (whole document)",
+            "fix the build: more animations still running with reduced motion requested — "
+            "build: 3, reference: 1 (whole document)",
             details,
         )
+        fewer = gap_mod.gap(
+            {"reduced_motion": {"still_running": 3}}, {"reduced_motion": {"still_running": 1}}
+        )
+        self.assertEqual([p.concept for p in fewer if p.concept == "reduced_motion"], [])
 
 
 if __name__ == "__main__":

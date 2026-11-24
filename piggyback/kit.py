@@ -8,13 +8,14 @@ import contextlib
 import hashlib
 import json
 import os
+import re
 import shutil
 import stat
 import tempfile
 from pathlib import Path
 from urllib.parse import urlsplit
 
-from . import __version__, tools
+from . import __version__, glossary, tools
 from . import brief as brief_mod
 from . import fingerprint as fingerprints
 from . import gap as gap_mod
@@ -24,6 +25,7 @@ from .measure import (
     check_url,
     publish_json,
     publish_text,
+    read_plain,
     refuse_links,
     write_measure,
 )
@@ -35,8 +37,17 @@ CAP = 3  # correction attempts per build; the attempt that reaches it ends the h
 DETECT_MAX = 64  # findings listed per attempt
 DETECT_S = 120
 TEXT_MAX = 120  # one finding's name, file or snippet, in CHECK.md
-# ponytail: copies the whole workspace; skip folders like node_modules when it bites
-WORKSPACE_MAX = 50 * 1024 * 1024
+WORKSPACE_MAX = 50 * 1024 * 1024  # bytes read from the workspace in total
+WORKSPACE_ENTRIES = 5000  # files and folders
+WORKSPACE_DEPTH = 32
+SKIPPED_WORKSPACE = "skipped: workspace too large"
+DESIGN_MAX = 1024 * 1024
+KIT_JSON_MAX = 1024 * 1024
+CHECK_MAX = 4 * 1024 * 1024
+HISTORY_UNREADABLE = "Earlier history in CHECK.md could not be read; starting attempt 1."
+IDS = ("open", "fixed", "uncomparable")
+CONCEPTS = frozenset(glossary.TERMS)
+ABS_PATH = re.compile(r"(?<![\w.])(?:[A-Za-z]:\\|~/|/)[^\s\"'`<>()]+")
 MARKER = "<!-- piggyback-check "
 CHECK_NOT_RUN = (
     "# Check\n\nNot run. Measure your build against this kit's frozen reference:\n"
@@ -184,7 +195,7 @@ def _build(url, folder, text, allow_loopback):
         "artifacts": {
             path.relative_to(folder).as_posix(): _digest(path)
             for path in sorted(folder.rglob("*"))
-            if path.is_file()
+            if path.is_file() and path != folder / "CHECK.md"  # the one file a check rewrites
         },
     }
     publish_json(folder / "kit.json", kit)  # last: its presence marks the kit complete
@@ -222,90 +233,6 @@ def _viewport(ref):
     return width, height
 
 
-def _history(path, digest):
-    """This build's attempts so far, from CHECK.md's marker line. Another build, or no readable
-    marker, starts a new history."""
-    try:
-        lines = Path(path).read_text(encoding="utf-8").splitlines()
-    except (OSError, ValueError):
-        return []
-    if not (lines and lines[-1].startswith(MARKER) and lines[-1].endswith(" -->")):
-        return []
-    try:
-        state = json.loads(lines[-1][len(MARKER) : -len(" -->")])
-    except ValueError:
-        return []
-    attempts = state.get("attempts") if isinstance(state, dict) else None
-    if not isinstance(attempts, list) or state.get("build") != digest:
-        return []
-    return attempts
-
-
-def _copy_tree(source, target):
-    """Copy source's plain files into target. Links, special files and hard links are skipped;
-    os.walk does not follow a folder link. A name already in target (DESIGN.md) is kept."""
-    if not stat.S_ISDIR(os.lstat(source).st_mode):
-        raise ValueError("the workspace must be a real folder")
-    total = 0
-    for dirpath, _, filenames in os.walk(source):
-        rel = Path(dirpath).relative_to(source)
-        (target / rel).mkdir(parents=True, exist_ok=True)
-        for name in filenames:
-            path = Path(dirpath) / name
-            if tools.unsafe_entry(path) or os.path.lexists(target / rel / name):
-                continue
-            total += path.stat().st_size
-            if total > WORKSPACE_MAX:
-                raise ValueError("the workspace is too large to check")
-            tools.write_new_bytes(target / rel / name, path.read_bytes())
-
-
-def _text(value, limit=TEXT_MAX):
-    """A finding's text: markdown-escaped and capped, or ? when the tool sent no text."""
-    return fingerprints.clean(value if isinstance(value, str) else "?", limit)
-
-
-def _finding(item, stage):
-    """One finding as a CHECK.md line. Its file is shown relative to the staged workspace."""
-    if not isinstance(item, dict):
-        return "unreadable finding"
-    rel = "?"
-    if isinstance(item.get("file"), str):
-        try:
-            rel = Path(item["file"]).resolve().relative_to(stage.resolve()).as_posix()
-        except (OSError, ValueError):
-            rel = "?"
-    return (
-        f"{_text(item.get('name'))} ({_text(item.get('severity'), 20)}) at {_text(rel)}: "
-        f"{_text(item.get('snippet'))}"
-    )
-
-
-def _detect(folder, workspace):
-    """Impeccable's findings for the workspace, with the kit's DESIGN.md beside them."""
-    if workspace is None:
-        return {"impeccable": "not run: no --workspace", "warnings": []}
-    binary = tools.find("PIGGYBACK_IMPECCABLE", "impeccable")
-    if binary is None:
-        return {"impeccable": "not run: impeccable not found", "warnings": []}
-    with tempfile.TemporaryDirectory() as tmp:
-        stage = Path(tmp) / "site"
-        stage.mkdir()
-        tools.write_new_bytes(stage / "DESIGN.md", (folder / "DESIGN.md").read_bytes())
-        _copy_tree(Path(workspace), stage)
-        try:
-            raw = tools.run(
-                [binary, "detect", "--json", str(stage)],
-                timeout=DETECT_S,
-                cap=tools.IMPECCABLE_OUT_MAX,
-                ok=(0, 2),  # 2: primary findings; 1: a target could not be scanned
-            )
-            items = tools.json_list(raw)[:DETECT_MAX]
-        except tools.ToolError as exc:
-            return {"impeccable": f"failed: {exc.reason}", "warnings": []}
-        return {"impeccable": "ran", "warnings": [_finding(i, stage) for i in items]}
-
-
 def _measure_build(url, viewport, allow_loopback):
     with tempfile.TemporaryDirectory() as tmp:
         path, _ = write_measure(
@@ -314,65 +241,289 @@ def _measure_build(url, viewport, allow_loopback):
         return fingerprints.load(path)
 
 
+def _read(folder, name, cap):
+    """A kit file's bytes. A link, a special file or a file with another name refuses the check."""
+    data = read_plain(folder / name, cap)
+    if data is None:
+        raise ValueError(f"{name} is not a plain file: this kit can't be checked")
+    return data
+
+
+def _fingerprint(raw):
+    """The reference fingerprint from checked bytes, with the rules of fingerprints.load."""
+    try:
+        data = json.loads(raw.decode("utf-8"))
+    except (ValueError, RecursionError):
+        raise ValueError("fingerprint.json is not valid JSON: this kit can't be checked") from None
+    if not isinstance(data, dict):
+        raise ValueError("fingerprint.json is not an object: this kit can't be checked")
+    return data
+
+
+def _kit_json(raw):
+    try:
+        data = json.loads(raw.decode("utf-8"))
+    except (ValueError, RecursionError):
+        raise ValueError("kit.json is not valid JSON: this kit can't be checked") from None
+    if not isinstance(data, dict):
+        raise ValueError("kit.json is not an object: this kit can't be checked")
+    return data
+
+
+def _frozen(kit_data, files):
+    """Refuse unless each file still has the digest kit.json recorded when the kit was made.
+
+    ponytail: kit.json sits in the folder the agent writes, so a rewrite of kit.json together with
+    the reference passes. Upgrade: keep the digests in operator state outside the kit.
+    """
+    artifacts = kit_data.get("artifacts")
+    for name, raw in files.items():
+        digest = hashlib.sha256(raw).hexdigest()
+        if not isinstance(artifacts, dict) or artifacts.get(name) != digest:
+            raise ValueError(f"{name} changed since the kit was made: this kit can't be checked")
+
+
+class WorkspaceTooLarge(ValueError):
+    """Over a workspace bound: Impeccable is skipped and the gap check still runs."""
+
+
+def _copy_tree(source, target):
+    """Copy the workspace's plain files into target. Every byte comes from a checked descriptor.
+
+    Links, special files and hard links are skipped, and os.walk never follows a folder link.
+    ponytail: a folder swapped for a link during the walk is not caught. Upgrade: os.fwalk with
+    directory descriptors.
+    """
+    if not stat.S_ISDIR(os.lstat(source).st_mode):
+        raise ValueError("the workspace must be a real folder, not a link")
+    total = entries = 0
+    for dirpath, dirnames, filenames in os.walk(source):
+        rel = Path(dirpath).relative_to(source)
+        entries += len(dirnames) + len(filenames)
+        if entries > WORKSPACE_ENTRIES or len(rel.parts) > WORKSPACE_DEPTH:
+            raise WorkspaceTooLarge(SKIPPED_WORKSPACE)
+        (target / rel).mkdir(parents=True, exist_ok=True)
+        for name in filenames:
+            try:
+                data = read_plain(Path(dirpath) / name, WORKSPACE_MAX - total)
+            except ValueError:
+                raise WorkspaceTooLarge(SKIPPED_WORKSPACE) from None
+            if data is None:
+                continue
+            total += len(data)
+            tools.write_new_bytes(target / rel / name, data)
+
+
+def _text(value, limit=TEXT_MAX):
+    """Detector text as one safe cell: absolute paths removed, markdown escaped, length capped."""
+    text = value if isinstance(value, str) else "?"
+    return fingerprints.clean(ABS_PATH.sub("[path]", text), limit)
+
+
+def _relative(path, stage):
+    if not isinstance(path, str):
+        return "?"
+    try:
+        return Path(path).resolve().relative_to(stage.resolve()).as_posix()
+    except (OSError, ValueError):
+        return "?"
+
+
+def _finding(item, stage):
+    """One finding as a CHECK.md line; its file is shown relative to the staged site."""
+    if not isinstance(item, dict):
+        return "unreadable finding"
+    where = _text(_relative(item.get("file"), stage))
+    name, severity = _text(item.get("name")), _text(item.get("severity"), 20)
+    return f"{name} ({severity}) at {where}: {_text(item.get('snippet'))}"
+
+
+def _detect(stage, workspace, skipped):
+    """Impeccable's findings for the staged site, with the kit's DESIGN.md beside the copy."""
+    if workspace is None:
+        return {"impeccable": "not run: no --workspace", "warnings": []}
+    if skipped:
+        return {"impeccable": skipped, "warnings": []}
+    binary = tools.find("PIGGYBACK_IMPECCABLE", "impeccable")
+    if binary is None:
+        return {"impeccable": "not run: impeccable not found", "warnings": []}
+    try:
+        raw = tools.run(
+            [binary, "detect", "--json", str(stage)],
+            timeout=DETECT_S,
+            cap=tools.IMPECCABLE_OUT_MAX,
+            ok=(0, 2),  # 2: primary findings; 1: a target could not be scanned
+        )
+        items = tools.json_list(raw)[:DETECT_MAX]
+    except tools.ToolError as exc:
+        return {"impeccable": f"failed: {exc.reason}", "warnings": []}
+    return {"impeccable": "ran", "warnings": [_finding(item, stage) for item in items]}
+
+
+def _ids(value):
+    return (
+        isinstance(value, list)
+        and len(value) <= len(CONCEPTS)
+        and all(isinstance(item, str) and item in CONCEPTS for item in value)
+    )
+
+
+def _stored_attempt(item, number):
+    """One stored attempt rebuilt from its known fields, or None if any field is not well formed."""
+    if not isinstance(item, dict) or type(item.get("n")) is not int or item["n"] != number:
+        return None
+    warnings = item.get("warnings")
+    if not all(_ids(item.get(key)) for key in IDS):
+        return None
+    if type(warnings) is not int or not 0 <= warnings <= DETECT_MAX:
+        return None
+    return {"n": number, **{key: item[key] for key in IDS}, "warnings": warnings}
+
+
+def _attempts(raw):
+    """The stored attempts, or None unless the list is at most CAP long and every item is well
+    formed: numbered 1, 2, ... in order, concept ids the glossary knows, and a warning count."""
+    if not isinstance(raw, list) or len(raw) > CAP:
+        return None
+    clean = [_stored_attempt(item, number) for number, item in enumerate(raw, 1)]
+    return None if None in clean else clean
+
+
+def _state(folder):
+    """CHECK.md's marker as a dict. None when there is no marker; False when it cannot be read."""
+    try:
+        raw = read_plain(folder / "CHECK.md", CHECK_MAX)
+    except (OSError, ValueError):
+        return False
+    if raw is None:
+        return False
+    lines = raw.decode("utf-8", "replace").splitlines()
+    if not (lines and lines[-1].startswith(MARKER) and lines[-1].endswith(" -->")):
+        return None
+    try:
+        state = json.loads(lines[-1][len(MARKER) : -len(" -->")])
+    except (ValueError, RecursionError):
+        return False
+    return state if isinstance(state, dict) else False
+
+
+def _history(folder, digest):
+    """(stored attempts, note) for this build. No history, or another build's, starts attempt 1
+    silently. A malformed or unreadable one starts it with a note, and nothing from it is shown.
+    ponytail: two checks at once on one kit can interleave attempts. Upgrade: a kit lock file.
+    """
+    if not os.path.lexists(folder / "CHECK.md"):
+        return [], ""
+    state = _state(folder)
+    if state is None or (state is not False and state.get("build") != digest):
+        return [], ""
+    if state is False:
+        return [], HISTORY_UNREADABLE
+    attempts = _attempts(state.get("attempts"))
+    return (attempts, "") if attempts is not None else ([], HISTORY_UNREADABLE)
+
+
+def _names(ids):
+    return ", ".join(ids) or "none"
+
+
+def _summary(attempt):
+    return (
+        f"open: {_names(attempt['open'])}; fixed: {_names(attempt['fixed'])}; "
+        f"uncomparable: {_names(attempt['uncomparable'])}"
+    )
+
+
 def _stop_line(attempt):
-    if not attempt["open"]:
+    if not attempt["open"] and not attempt["uncomparable"]:
         return "Stop: no actionable gaps remain."
     if attempt["n"] >= CAP:
         return f"Stop: correction cap reached ({CAP} attempts). Review the build by hand."
-    return "Next: fix the open differences, then rerun this check against the same kit."
+    if attempt["open"]:
+        return "Next: fix the open differences, then rerun this check against the same kit."
+    return "Stop: nothing open, but some items could not be compared. Check them by hand."
 
 
 def _attempt_text(attempt):
     lines = [
         f"## Attempt {attempt['n']}",
         "",
-        f"Fixed: {', '.join(attempt['fixed']) or 'none'}",
-        f"Still open: {', '.join(attempt['open']) or 'none'}",
+        f"Fixed: {_names(attempt['fixed'])}",
+        f"Still open: {_names(attempt['open'])}",
+        f"Uncomparable: {_names(attempt['uncomparable'])}",
         "",
         attempt["diffs"],
         f"Impeccable: {attempt['impeccable']}",
         *[f"- {line}" for line in attempt["warnings"]],
         "",
     ]
-    return "\n".join(lines)
+    return "\n".join(lines) + "\n"
 
 
-def _check_text(attempts, host):
+def _stored(attempt):
+    """What a later check needs from an attempt: ids and counts, never page or tool text."""
+    return {**{key: attempt[key] for key in ("n", *IDS)}, "warnings": len(attempt["warnings"])}
+
+
+def _check_text(digest, earlier, current, note, host):
+    past = [f"Attempt {a['n']} (earlier): {_summary(a)}" for a in earlier]
     head = (
         f"# Check\n\nBuild: {fingerprints.clean(host, 60)}. Frozen reference: "
         "fingerprint.json (checks never refresh it).\n\n"
     )
-    state = {"build": attempts[0]["digest"], "attempts": attempts}
-    body = head + "\n".join(_attempt_text(a) for a in attempts) + _stop_line(attempts[-1]) + "\n"
+    body = head + "".join(f"{line}\n" for line in past) + ("\n" if past else "")
+    body += (f"{note}\n\n" if note else "") + _attempt_text(current) + _stop_line(current) + "\n"
+    state = {"build": digest, "attempts": [*earlier, _stored(current)]}
     return body + MARKER + json.dumps(state) + " -->\n"
 
 
 def check(kit_dir, build_url, *, workspace=None, allow_loopback=False):
     """Measure a build against the kit's frozen fingerprint, run Impeccable on the workspace and
     write CHECK.md (atomically). Returns CHECK.md's path. Operator-only: a build URL and a
-    workspace path come from the person running it, never from a page or an agent."""
+    workspace path come from the person running it, never from a page or an agent.
+
+    Every kit file is read through a checked descriptor and must match kit.json's digest. The
+    workspace is copied and bounded before the build is measured.
+    """
     folder = Path(kit_dir)
-    for name in ("CHECK.md", "DESIGN.md", "fingerprint.json"):
-        refuse_links(folder / name)
-    ref = fingerprints.load(folder / "fingerprint.json")
+    if not stat.S_ISDIR(os.lstat(folder).st_mode):
+        raise ValueError("the kit must be a real folder, not a link")
+    ref_raw = _read(folder, "fingerprint.json", fingerprints.MAX_BYTES)
+    design = _read(folder, "DESIGN.md", DESIGN_MAX)
+    _frozen(
+        _kit_json(_read(folder, "kit.json", KIT_JSON_MAX)),
+        {"fingerprint.json": ref_raw, "DESIGN.md": design},
+    )
+    ref = _fingerprint(ref_raw)
     viewport = _viewport(ref)
     url = check_url(build_url, allow_loopback)
     digest = hashlib.sha256(url.encode("utf-8")).hexdigest()
-    attempts = _history(folder / "CHECK.md", digest)
-    if len(attempts) >= CAP:
+    earlier, note = _history(folder, digest)
+    if len(earlier) >= CAP:
         raise ValueError(f"correction cap reached ({CAP} attempts): start a new build URL")
-    build = _measure_build(url, viewport, allow_loopback)
-    pins = gap_mod.gap(ref, build)
-    now = gap_mod.differing(pins)
-    before = set(attempts[-1]["open"]) if attempts else set()
-    attempt = {
-        "n": len(attempts) + 1,
-        "digest": digest,
-        "fixed": sorted(gap_mod.fixed(before, now, ref, build)),
-        "open": sorted(now),
-        "diffs": gap_mod.render(pins),
-        **_detect(folder, workspace),
-    }
-    text = _check_text([*attempts, attempt], urlsplit(url).hostname or "")
+    with tempfile.TemporaryDirectory() as tmp:
+        stage = Path(tmp) / "site"
+        stage.mkdir()
+        tools.write_new_bytes(stage / "DESIGN.md", design)
+        skipped = None
+        if workspace is not None:
+            try:
+                _copy_tree(Path(workspace), stage)
+            except WorkspaceTooLarge as exc:
+                skipped = str(exc)
+        build = _measure_build(url, viewport, allow_loopback)
+        pins = gap_mod.gap(ref, build)
+        now = gap_mod.differing(pins)
+        before = set(earlier[-1]["open"]) if earlier else set()
+        current = {
+            "n": len(earlier) + 1,
+            "open": sorted(now),
+            "fixed": sorted(gap_mod.fixed(before, now, ref, build)),
+            # An open difference is actionable even when another metric of it is missing.
+            "uncomparable": sorted(gap_mod.compared(ref, ref) - gap_mod.compared(ref, build) - now),
+            "diffs": gap_mod.render(pins),
+            **_detect(stage, workspace, skipped),
+        }
+    text = _check_text(digest, earlier, current, note, urlsplit(url).hostname or "")
     publish_text(folder / "CHECK.md", text)
     return folder / "CHECK.md"

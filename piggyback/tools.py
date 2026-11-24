@@ -133,6 +133,9 @@ def run(argv, *, timeout, cap, ok=(0,)):
             code = proc.wait(timeout=max(deadline - time.monotonic(), 0))
         except subprocess.TimeoutExpired:
             raise ToolError("timeout") from None
+        # ponytail: the leader's pid can be reused once reaped. A group that still has members keeps
+        # the id, and an empty one answers ESRCH. Upgrade: pidfd or a job object.
+        kill_tree(proc)
     finally:
         _reap(proc)
     if code not in ok:

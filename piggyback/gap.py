@@ -190,13 +190,13 @@ def _still(page):
 
 
 def _still_rows(ref, build):
-    """Animations still running under reduced motion, when both pages report a count."""
+    """Animations still running under reduced motion; only more than the reference is a fix."""
     ref_still, build_still = _still(ref), _still(build)
-    if ref_still is not None and build_still is not None and ref_still != build_still:
+    if ref_still is not None and build_still is not None and build_still > ref_still:
         return [
             (
                 "reduced_motion",
-                "animations still running with reduced motion requested — "
+                "fix the build: more animations still running with reduced motion requested — "
                 f"build: {fp.fmt(build_still)}, reference: {fp.fmt(ref_still)} (whole document)",
             )
         ]
@@ -264,12 +264,23 @@ def _motion_compared(ref, build):
     return found
 
 
+def _kept(ref, build, name):
+    """Every line-height and letter-spacing the reference reports is still reported by the build.
+    A metric that went missing is not comparable, so a difference it hid is never counted fixed."""
+    ref_anchor, build_anchor = fp.anchor(ref, name), fp.anchor(build, name)
+    return all(
+        fp.px(build_anchor.get(metric)) is not None
+        for metric in ("line_height", "letter_spacing")
+        if fp.px(ref_anchor.get(metric)) is not None
+    )
+
+
 def compared(ref, build):
     """Concepts both pages can be compared on, whether or not they differ."""
     found = {
         concept
         for name, (_, concept) in ANCHORS.items()
-        if _sized(ref, name) and _sized(build, name)
+        if _sized(ref, name) and _sized(build, name) and _kept(ref, build, name)
     }
     if fp.share(fp.get(ref, "palette", "accent_share")) is not None:
         if fp.share(fp.get(build, "palette", "accent_share")) is not None:

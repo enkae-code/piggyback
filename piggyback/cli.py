@@ -254,6 +254,8 @@ def _main(argv):
     k = sub.add_parser(
         "kit",
         help="build kit from one URL: screenshot, scroll frames, BRIEF.md, DESIGN.md, prompt",
+        description="Build a kit. `piggyback kit check --kit DIR --build URL` measures your build "
+        "against a kit (see `piggyback kit check --help`).",
     )
     k.add_argument("url")
     k.add_argument("--out", required=True, help="new or empty folder for the kit")

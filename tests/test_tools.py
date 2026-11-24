@@ -12,7 +12,7 @@ import urllib.error
 from pathlib import Path
 from unittest import mock
 
-from piggyback import tools
+from piggyback import measure, tools
 
 FAKE = Path(__file__).parent / "fixtures" / "fake_craft_mcp.py"
 # Stop 1 is the changed one: its hypothesis follows its own compare, before stop 2.
@@ -594,6 +594,74 @@ class ImpeccableToolTests(unittest.TestCase):
         with mock.patch.dict(os.environ, {}, clear=False):
             os.environ.pop("PIGGYBACK_SKILL_T", None)
             self.assertIsNone(tools.configured_file("PIGGYBACK_SKILL_T"))
+
+
+@unittest.skipUnless(os.name == "posix", "POSIX only: symlinks, FIFOs, process groups")
+class SafeReadTests(unittest.TestCase):
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.root = Path(tmp.name)
+
+    def test_a_regular_file_is_read_within_the_cap(self):
+        path = self.root / "f.json"
+        path.write_bytes(b"abc")
+        self.assertEqual(measure.read_plain(path, 3), b"abc")
+
+    def test_a_file_over_the_cap_is_refused(self):
+        path = self.root / "f.json"
+        path.write_bytes(b"abcd")
+        with self.assertRaises(ValueError):
+            measure.read_plain(path, 3)
+
+    def test_a_symbolic_link_reads_as_unsafe(self):
+        target = self.root / "target"
+        target.write_bytes(b"x")
+        (self.root / "link").symlink_to(target)
+        self.assertIsNone(measure.read_plain(self.root / "link", 10))
+
+    def test_a_hard_link_reads_as_unsafe(self):
+        target = self.root / "target"
+        target.write_bytes(b"x")
+        os.link(target, self.root / "alias")
+        self.assertIsNone(measure.read_plain(self.root / "alias", 10))
+
+    def test_a_fifo_reads_as_unsafe_without_blocking(self):
+        path = self.root / "fifo"
+        os.mkfifo(path)
+        result = {}
+        reader = threading.Thread(
+            target=lambda: result.update(data=measure.read_plain(path, 10)), daemon=True
+        )
+        reader.start()
+        reader.join(5)
+        self.assertFalse(reader.is_alive())
+        self.assertIsNone(result.get("data"))
+
+    def test_publish_text_replaces_a_link_and_never_writes_through_it(self):
+        outside = self.root / "outside"
+        outside.write_text("keep", encoding="utf-8")
+        path = self.root / "CHECK.md"
+        path.symlink_to(outside)
+        measure.publish_text(path, "new")
+        self.assertFalse(path.is_symlink())
+        self.assertEqual(path.read_text(encoding="utf-8"), "new")
+        self.assertEqual(outside.read_text(encoding="utf-8"), "keep")
+
+
+@unittest.skipUnless(os.name == "posix", "POSIX only: process groups and background children")
+class ProcessCleanupTests(unittest.TestCase):
+    def test_a_child_left_in_the_group_after_a_normal_exit_is_killed(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            pidfile = Path(tmp) / "pid"
+            body = 'sleep 30 >/dev/null 2>&1 </dev/null & echo $! > "$1"; exit 0'
+            argv = ["/bin/sh", "-c", body, "sh", str(pidfile)]
+            tools.run(argv, timeout=20, cap=4096)
+            pid = int(pidfile.read_text())
+            deadline = time.monotonic() + 3
+            while alive(pid) and time.monotonic() < deadline:
+                time.sleep(0.05)
+            self.assertFalse(alive(pid))
 
 
 if __name__ == "__main__":
