@@ -503,6 +503,32 @@ def _dense_samples(page, origin):
     return dense
 
 
+def _document_origin(page):
+    """The current document's timeOrigin; a failed read counts as a navigation."""
+    try:
+        return page.evaluate("performance.timeOrigin")
+    except Exception as exc:
+        raise MeasureError(NAVIGATED) from exc
+
+
+def _replaced(page, origin, navigations):
+    """True if the scroll page is no longer the document it loaded (an unreadable one counts)."""
+    # A new document may commit without DOMContentLoaded: its timeOrigin still differs.
+    if navigations:
+        return True
+    try:
+        return page.evaluate("performance.timeOrigin") != origin
+    except Exception:
+        return True
+
+
+def _refuse_if_replaced(page, origin, navigations, status, req):
+    """MeasureError if the scroll page is no longer the document it loaded."""
+    if _replaced(page, origin, navigations):
+        raise MeasureError(NAVIGATED)
+    _refuse_if_moved(status, req, page)
+
+
 def _capture_scroll(ctx, req, first_page):
     """Frames from the top to the bottom on a fresh page in the same context, with motion samples.
 
@@ -522,6 +548,7 @@ def _capture_scroll(ctx, req, first_page):
     page.on("domcontentloaded", lambda _page: navigations.append(True))
     page.wait_for_timeout(SCROLL_WAIT_MS)
     _refuse_if_moved(status, req, page)
+    origin = _document_origin(page)
     scrollable = page.evaluate("document.documentElement.scrollHeight - innerHeight")
     targets = [round(scrollable * k / SCROLL_STEPS) for k in range(SCROLL_STEPS + 1)]
     page.mouse.move(width / 2, height / 2)
@@ -548,9 +575,7 @@ def _capture_scroll(ctx, req, first_page):
                 }
             )
         scrollable_end = page.evaluate("document.documentElement.scrollHeight - innerHeight")
-        if navigations:
-            raise MeasureError(NAVIGATED)
-        _refuse_if_moved(status, req, page)
+        _refuse_if_replaced(page, origin, navigations, status, req)
         for tmp, final in pending:
             os.replace(tmp, final)
     except Exception as exc:
@@ -558,7 +583,7 @@ def _capture_scroll(ctx, req, first_page):
         if not isinstance(exc, MeasureError):
             with contextlib.suppress(Exception):
                 page.wait_for_timeout(250)
-            if navigations:
+            if _replaced(page, origin, navigations):
                 raise MeasureError(NAVIGATED) from exc
         raise
     finally:
@@ -650,9 +675,12 @@ def _host(value):
     if HOST.fullmatch(value):
         return value
     try:
-        return str(ipaddress.ip_address(value))
+        address = ipaddress.ip_address(value)
     except ValueError:
         return "other"
+    if getattr(address, "scope_id", None):  # a zone id is not a host we vetted
+        return "other"
+    return str(address)
 
 
 def _box(value, count):

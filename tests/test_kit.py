@@ -508,6 +508,11 @@ class FinalHostTests(unittest.TestCase):
             with self.subTest(host=host):
                 self.assertEqual(self.host_of(host), host)
 
+    def test_ipv6_scope_ids_become_other(self):
+        for host in ("::1%IGNORE", "::1%" + "a" * 5000):
+            with self.subTest(host=host[:12]):
+                self.assertEqual(self.host_of(host), "other")
+
     def test_anything_else_is_other(self):
         for host in ("bad host", "[::1]", "::1/evil", "%s" % HOSTILE, 5):
             with self.subTest(host=host):

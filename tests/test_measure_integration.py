@@ -8,6 +8,7 @@ import os
 import socket
 import tempfile
 import threading
+import time
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -35,6 +36,14 @@ def serve(hits=None, host="127.0.0.1", port=0):
                 self.send_response(302)
                 self.send_header("Location", "http://10.0.0.1/")
                 self.end_headers()
+                return
+            if self.path == "/slow-document":  # first bytes, then no end: the parser never finishes
+                self.send_response(200)
+                self.send_header("Content-Type", "text/html; charset=utf-8")
+                self.end_headers()
+                self.wfile.write(b"<!doctype html><title>x</title>")
+                self.wfile.flush()
+                time.sleep(20)
                 return
             super().do_GET()
 

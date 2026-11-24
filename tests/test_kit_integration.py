@@ -104,6 +104,20 @@ class KitScrollIntegration(unittest.TestCase):
         self.assertEqual([step["step"] for step in s["steps"]], list(range(6)))
         self.assertEqual(len(list(out.glob("scroll/frame-*.png"))), 6)
 
+    def test_a_slow_same_host_replacement_during_scroll_refuses_and_publishes_nothing(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        out = Path(tmp.name) / "kit"
+        with self.assertRaisesRegex(MeasureError, "navigated during its capture"):
+            write_measure(
+                f"{self.base}/kit-slow-replace-on-scroll.html",
+                out,
+                allow_loopback=True,
+                scroll=True,
+            )
+        self.assertFalse((out / "scroll-samples.json").exists())
+        self.assertEqual(list((out / "scroll").glob("frame-*.png")), [])
+
     def test_a_denied_request_during_scroll_is_recorded_as_blocked(self):
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)

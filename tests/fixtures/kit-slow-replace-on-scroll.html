@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Kit fixture: slow same-host replacement on scroll</title>
+</head>
+<body style="margin: 0">
+<main style="min-height: 3200px">
+  <h1>Slow replacement on scroll fixture</h1>
+</main>
+<!-- On the first scroll the page moves to a same-host document that starts answering and never
+     finishes. Its DOMContentLoaded cannot fire before capture ends, so only the origin check sees it. -->
+<script>
+  addEventListener('scroll', function () {
+    location.href = '/slow-document';
+  }, { once: true });
+</script>
+</body>
+</html>
