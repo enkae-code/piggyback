@@ -33,7 +33,9 @@ from .proxy import EgressProxy
 SCRIPT = (Path(__file__).parent / "measure.js").read_text(encoding="utf-8").strip().rstrip(";")
 BYPASS_ENV = "PLAYWRIGHT_DISABLE_FORCED_CHROMIUM_PROXIED_LOOPBACK"
 TOTAL_S = 90  # whole run, browser start included
-SCROLL_TOTAL_S = 240  # a scroll run: six wheel steps with samples, then REA in its own browser
+SCROLL_TOTAL_S = 240  # a scroll run: six wheel steps with samples
+WORKER_GRACE_S = 5  # after SIGTERM, a worker still running gets this long before its tree is killed
+REA_SLACK_S = 5  # the REA worker's start-up and teardown, on top of REA_STAGE_S
 SCROLL_NUM_LIMIT = (
     1_000_000  # page numbers are clamped to this: no real px, ms or opacity is larger
 )
@@ -229,18 +231,42 @@ def kill_tree(proc):
     group, or its process tree on Windows. Call it only before the child is reaped, while its id
     is still ours."""
     if os.name == "nt":
-        subprocess.run(["taskkill", "/T", "/F", "/PID", str(proc.pid)], capture_output=True)
-        proc.kill()
+        try:
+            with contextlib.suppress(OSError, subprocess.TimeoutExpired):
+                subprocess.run(
+                    ["taskkill", "/T", "/F", "/PID", str(proc.pid)], capture_output=True, timeout=10
+                )
+        finally:
+            with contextlib.suppress(OSError):
+                proc.kill()
     else:
         with contextlib.suppress(ProcessLookupError):
             os.killpg(proc.pid, signal.SIGKILL)
 
 
-def _run_worker(request):
+def _stop_worker(proc):
+    """SIGTERM first, so the worker's own cleanup closes its browsers and reaps its tools. Then its
+    whole tree is killed, even after a clean exit: a browser helper left in the group keeps stderr
+    open. The worker is reaped only after that (by the caller), so its group id is still ours.
+    Windows: taskkill walks the tree at once."""
+    if os.name != "nt":
+        proc.terminate()
+        end = time.monotonic() + WORKER_GRACE_S
+        # WNOWAIT: see the exit without reaping, so the group id stays reserved.
+        while time.monotonic() < end and not _exited(proc.pid):
+            time.sleep(0.05)
+    kill_tree(proc)
+
+
+def _exited(pid):
+    return os.waitid(os.P_PID, pid, os.WEXITED | os.WNOHANG | os.WNOWAIT) is not None
+
+
+def _run_worker(request, timeout=None):
     """One JSON request to a Chromium child process; its JSON result, or an error dict."""
     # Playwright's bypass switch would let Chromium skip the proxy for loopback.
     env = {k: v for k, v in os.environ.items() if k != BYPASS_ENV}
-    timeout = SCROLL_TOTAL_S if request.get("scroll_dir") else TOTAL_S
+    timeout = timeout or (SCROLL_TOTAL_S if request.get("scroll_dir") else TOTAL_S)
     # stdout goes to a file: the parent reads at most WORKER_OUTPUT_MAX + 1 bytes of it.
     # ponytail: one giant page.evaluate result inside the worker is bounded only by the deadline.
     with tempfile.TemporaryFile() as out_file:
@@ -257,8 +283,7 @@ def _run_worker(request):
         try:
             _, err = proc.communicate(json.dumps(request), timeout=timeout)
         except subprocess.TimeoutExpired:
-            # The whole tree: a killed worker alone leaves Chromium holding stderr open.
-            kill_tree(proc)
+            _stop_worker(proc)  # a worker alone left open would leave Chromium holding stderr
             proc.communicate()
             raise MeasureError(f"measure timed out after {timeout}s") from None
         out_file.seek(0)
@@ -312,7 +337,21 @@ def measure(
         result["scroll"] = clean_scroll(
             result["scroll"]
         )  # the page's own output: rebuilt before publish
+        if request["rea"]:
+            result["rea"] = _rea_worker(request)
     return result
+
+
+def _rea_worker(request):
+    """REA in its own worker after the capture's: a hung REA call costs only that worker, and the
+    capture is kept. A timeout is the rea stage; an error from the page refuses the kit."""
+    try:
+        result = _run_worker({**request, "mode": "rea"}, timeout=REA_STAGE_S + REA_SLACK_S)
+    except MeasureError as exc:
+        return {"state": "failed", "reason": "timeout" if "timed out" in str(exc) else "page error"}
+    if "error" in result:
+        raise MeasureError(result["error"])
+    return result["rea"]
 
 
 EVIDENCE_STYLES = [
@@ -488,7 +527,6 @@ def _capture_page(req, tmp):
         finally:
             browser.close()
         captured_blocked = list(egress.blocked)  # the capture's own blocks, before REA's pass
-        rea = _rea_pass(p, req, egress) if scroll is not None and req.get("rea") else None
     result = {
         **fingerprint,
         "url": req["url"],
@@ -501,9 +539,15 @@ def _capture_page(req, tmp):
     }
     if scroll is not None:
         result["scroll"] = scroll
-    if rea is not None:
-        result["rea"] = rea
     return result
+
+
+def _capture_rea(req):
+    """The REA worker: a fresh load in its own browser, after the capture worker has returned."""
+    from playwright.sync_api import sync_playwright
+
+    with closing(EgressProxy(req["allow_loopback"])) as egress, sync_playwright() as p:
+        return {"rea": _rea_pass(p, req, egress)}
 
 
 def _ms(deadline):
@@ -558,6 +602,8 @@ def _rea_pass(p, req, egress):
     debugging port. One deadline covers the whole stage, started before the launch. A REA or browser
     failure is the rea stage; a page that was replaced or moved refuses the kit (MeasureError).
     The profile is removed on every path. blocked counts the requests this pass alone refused."""
+    from . import tools  # tools imports this module: a top-level import would be circular
+
     profile = Path(tempfile.mkdtemp(prefix="piggyback-rea-"))  # mkdtemp makes it owner-only
     deadline = time.monotonic() + REA_STAGE_S
     before = len(egress.blocked)
@@ -565,9 +611,11 @@ def _rea_pass(p, req, egress):
     try:
         ctx = _launch_rea(p, profile, egress, req, deadline)
         try:
-            _rea_observe(ctx, req, profile, result, deadline)
+            raw = _rea_observe(ctx, req, profile, result, deadline)
         finally:
             ctx.close()
+        _ms(deadline)  # closing takes time too: an expired pass publishes nothing
+        tools.publish_rea(Path(req["scroll_dir"]).parent, raw, result["version"], REA_WINDOW_MS)
     except MeasureError:
         raise
     except Exception as exc:  # a REA or browser failure is a stage, never a failed kit
@@ -631,10 +679,7 @@ def _rea_observe(ctx, req, profile, result, deadline):
     if "error" in outcome:
         raise outcome["error"]
     _refuse_if_replaced(page, origin, navigations, status, req)
-    _ms(deadline)  # an expired pass publishes nothing
-    tools.publish_rea(
-        Path(req["scroll_dir"]).parent, outcome["raw"], result["version"], REA_WINDOW_MS
-    )
+    return outcome["raw"]
 
 
 def _sample(page, with_animations):
@@ -955,10 +1000,16 @@ def clean_scroll(raw):
     }
 
 
+def _stop(_signum, _frame):
+    """SIGTERM from the parent: with and finally blocks run, so browsers close and tools reap."""
+    raise SystemExit(1)
+
+
 def _worker():
     req = json.loads(sys.stdin.read())
+    signal.signal(signal.SIGTERM, _stop)
     try:
-        result = _capture(req)
+        result = _capture_rea(req) if req.get("mode") == "rea" else _capture(req)
     except Exception as exc:  # Playwright and launch errors
         text = str(exc).strip()
         out: dict = {"error": text or repr(exc)}

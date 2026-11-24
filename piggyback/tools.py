@@ -397,8 +397,10 @@ def verify_browser(endpoint, path, deadline):
     try:
         with opener.open(f"{endpoint}/json/version", timeout=min(5, left)) as reply:
             data = json.loads(reply.read(65536), parse_constant=_no_constant)
-    except (OSError, ValueError, RecursionError):
-        raise ToolError("not our browser") from None
+    except (OSError, ValueError, RecursionError) as exc:
+        reason = getattr(exc, "reason", None)  # a URLError wraps the socket's timeout
+        timed_out = isinstance(exc, TimeoutError) or isinstance(reason, TimeoutError)
+        raise ToolError("timeout" if timed_out else "not our browser") from None
     url = data.get("webSocketDebuggerUrl") if isinstance(data, dict) else None
     port = endpoint.rsplit(":", 1)[1]
     if url != f"ws://127.0.0.1:{port}{path}":

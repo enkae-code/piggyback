@@ -1,6 +1,7 @@
 import contextlib
 import io
 import os
+import subprocess
 import sys
 import tempfile
 import time
@@ -81,7 +82,7 @@ class FakeSyncPlaywright:
         return False
 
 
-def run_capture(shot, on_shot, proxy=FakeProxy, **extra):
+def run_capture(shot, on_shot):
     """Run the real _capture with Playwright, the proxy and the browser faked."""
     api = types.SimpleNamespace(sync_playwright=FakeSyncPlaywright)
     fake_modules = {"playwright": types.ModuleType("playwright"), "playwright.sync_api": api}
@@ -90,12 +91,11 @@ def run_capture(shot, on_shot, proxy=FakeProxy, **extra):
         "viewport": [1440, 900],
         "allow_loopback": False,
         "screenshot": str(shot),
-        **extra,
     }
     browser = FakeBrowser(FakePage(on_shot))
     with (
         mock.patch.dict(sys.modules, fake_modules),
-        mock.patch("piggyback.measure.EgressProxy", proxy),
+        mock.patch("piggyback.measure.EgressProxy", FakeProxy),
         mock.patch("piggyback.measure.launch", return_value=(browser, "fake")),
     ):
         return measure_mod._capture(req)
@@ -191,6 +191,9 @@ class ReceiptAndLoopbackTests(unittest.TestCase):
 
 
 class LinkGuardTests(unittest.TestCase):
+    @unittest.skipUnless(
+        os.name == "posix", "POSIX only: fake #! scripts, sleep, signals, symlinks"
+    )
     def test_write_measure_refuses_a_linked_fingerprint_before_the_browser_runs(self):
         with tempfile.TemporaryDirectory() as tmp, mock.patch("piggyback.measure.measure") as m:
             target = Path(tmp) / "external.json"
@@ -211,6 +214,9 @@ class ScreenshotPublishTests(unittest.TestCase):
         self.out = Path(self.tmp.name)
         self.shot = self.out / "screenshot.png"
 
+    @unittest.skipUnless(
+        os.name == "posix", "POSIX only: fake #! scripts, sleep, signals, symlinks"
+    )
     def test_a_link_planted_after_the_early_check_is_never_written_through(self):
         external = self.out / "external.png"
         external.write_bytes(b"EXTERNAL")
@@ -759,7 +765,7 @@ class ReaBudgetTests(unittest.TestCase):
         page.wait_for_timeout.side_effect = self.wait
         return page
 
-    def rea(self, page, launch_cost=0.0, devtools=True, real_verify=False):
+    def rea(self, page, launch_cost=0.0, devtools=True, real_verify=False, close_cost=0.0):
         """One REA pass. Returns (result, publish_rea mock)."""
 
         def launch(profile, *, timeout, **_):
@@ -768,7 +774,9 @@ class ReaBudgetTests(unittest.TestCase):
                     "9\n/devtools/browser/x\n", encoding="utf-8"
                 )
             self.spend(launch_cost, timeout)
-            return rea_context(page)
+            ctx = rea_context(page)
+            ctx.close.side_effect = lambda: self.spend(close_cost, 0)
+            return ctx
 
         p = mock.Mock()
         p.chromium.launch_persistent_context.side_effect = launch
@@ -823,6 +831,13 @@ class ReaBudgetTests(unittest.TestCase):
             result, _ = self.rea(self.page(), launch_cost=38.5, real_verify=True)
         self.assert_budget(result, started)
 
+    def test_a_close_that_runs_past_the_deadline_publishes_nothing(self):
+        # Playwright's close has no timeout of its own: only the worker's timeout bounds it.
+        result, publish = self.rea(self.page(), close_cost=measure_mod.REA_STAGE_S + 0.5)
+        self.assertEqual(result["state"], "failed")
+        self.assertEqual(result["reason"], "timeout")
+        publish.assert_not_called()
+
     def test_the_last_wheel_step_cannot_publish_after_the_deadline(self):
         pre = (
             measure_mod.SCROLL_WAIT_MS
@@ -837,45 +852,142 @@ class ReaBudgetTests(unittest.TestCase):
         publish.assert_not_called()
 
 
-class FakeBlockingProxy:
-    port = 1
+class WorkerSignalTests(unittest.TestCase):
+    def test_the_worker_installs_a_sigterm_handler_before_it_captures(self):
+        with (
+            mock.patch.object(sys, "stdin", io.StringIO("{}")),
+            mock.patch.object(measure_mod, "_capture", return_value={}),
+            mock.patch.object(measure_mod.signal, "signal") as install,
+            contextlib.redirect_stdout(io.StringIO()),
+        ):
+            measure_mod._worker()
+        install.assert_called_once_with(measure_mod.signal.SIGTERM, mock.ANY)
 
-    def __init__(self):
-        self.blocked = ["http://10.0.0.1/capture"]
 
-    def close(self):
-        pass
+CAPTURE = {"scroll": {"steps": []}}
+CAPTURED = {"state": "captured", "version": "6.7.0", "blocked": 0}
 
 
-class BlockedSnapshotTests(unittest.TestCase):
-    """The fingerprint's blocked_requests are the capture's own blocks, taken before REA's pass."""
+class ReaWorkerTests(unittest.TestCase):
+    """REA runs in its own worker after the capture's: a timeout is the REA stage, a refusal is
+    the kit's."""
 
-    def test_a_block_made_during_the_rea_pass_stays_out_of_the_fingerprint(self):
+    def measure_with(self, *outcomes):
+        calls = []
+
+        def run_worker(request, timeout=None):
+            calls.append(request)
+            outcome = outcomes[len(calls) - 1]
+            if isinstance(outcome, Exception):
+                raise outcome
+            return outcome
+
+        with (
+            mock.patch.object(measure_mod, "_run_worker", side_effect=run_worker),
+            mock.patch.object(measure_mod, "clean_scroll", side_effect=lambda raw: raw),
+        ):
+            result = measure_mod.measure(
+                "http://127.0.0.1:1/",
+                allow_loopback=True,
+                scroll_dir="scroll",
+                rea_binary="rea",
+            )
+        return result, calls
+
+    def test_the_rea_pass_runs_in_its_own_worker_after_the_capture(self):
+        result, calls = self.measure_with(CAPTURE, {"rea": CAPTURED})
+        self.assertEqual(len(calls), 2)
+        self.assertEqual(calls[1]["mode"], "rea")
+        self.assertEqual(result["rea"], CAPTURED)
+
+    def test_a_timed_out_rea_worker_fails_the_rea_stage_and_keeps_the_capture(self):
+        result, _ = self.measure_with(
+            CAPTURE, measure_mod.MeasureError("measure timed out after 45s")
+        )
+        self.assertEqual(result["rea"], {"state": "failed", "reason": "timeout"})
+        self.assertEqual(result["scroll"], CAPTURE["scroll"])
+
+    def test_a_refusal_from_the_rea_worker_refuses_the_kit(self):
+        with self.assertRaises(measure_mod.MeasureError):
+            self.measure_with(CAPTURE, {"error": "page moved"})
+
+
+class KillTreeTests(unittest.TestCase):
+    def kill_on_windows(self, run_effect=None):
+        proc = mock.Mock(pid=4242)
+        with (
+            mock.patch.object(measure_mod.os, "name", "nt"),
+            mock.patch.object(measure_mod.subprocess, "run", side_effect=run_effect) as run,
+        ):
+            measure_mod.kill_tree(proc)
+        return proc, run
+
+    def test_a_failing_taskkill_still_kills_the_worker(self):
+        proc, _ = self.kill_on_windows(FileNotFoundError("taskkill"))
+        proc.kill.assert_called_once_with()
+
+    def test_a_hung_taskkill_is_stopped_and_the_worker_is_still_killed(self):
+        proc, _ = self.kill_on_windows(subprocess.TimeoutExpired("taskkill", 10))
+        proc.kill.assert_called_once_with()
+
+    def test_taskkill_has_a_timeout(self):
+        _, run = self.kill_on_windows()
+        self.assertLessEqual(run.call_args.kwargs["timeout"], 10)
+
+
+FAKE_WORKER = """import signal, subprocess, sys, time
+sys.path.insert(0, {repo!r})
+from piggyback import tools
+
+
+def stop(_signum, _frame):
+    raise SystemExit(1)
+
+
+signal.signal(signal.SIGTERM, stop)
+proc = tools._spawn(["sleep", "30"], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL)
+open({pid!r}, "w").write(str(proc.pid))
+try:
+    time.sleep(30)
+finally:
+    tools._reap(proc)
+"""
+
+
+def alive(pid):
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    return True
+
+
+@unittest.skipUnless(
+    os.name == "posix", "the fake worker is a #! script and the tool is a POSIX process"
+)
+class WorkerTimeoutTests(unittest.TestCase):
+    def test_a_timed_out_worker_leaves_no_tool_running(self):
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         root = Path(tmp.name)
-        shot = root / "screenshot.png"
+        pid_file = root / "tool.pid"
+        script = root / "fake-worker"
+        body = FAKE_WORKER.format(repo=str(Path(__file__).resolve().parents[1]), pid=str(pid_file))
+        script.write_text(f"#!{sys.executable}\n" + body, encoding="utf-8")
+        script.chmod(0o755)
+        self.addCleanup(lambda: pid_file.exists() and _kill_quietly(int(pid_file.read_text())))
+        with mock.patch.object(sys, "executable", str(script)):
+            started = time.monotonic()
+            with self.assertRaises(measure_mod.MeasureError):
+                measure_mod._run_worker({"scroll_dir": None}, timeout=2)
+            elapsed = time.monotonic() - started
+        self.assertFalse(alive(int(pid_file.read_text())))
+        self.assertLess(elapsed, 2 + measure_mod.WORKER_GRACE_S + 3)
 
-        def rea_pass(_p, _req, egress):
-            egress.blocked.append("http://10.0.0.1/rea")
-            return {"state": "captured", "version": "6.7.0", "blocked": 1}
 
-        def on_shot(_page, path):
-            Path(path).write_bytes(b"PNG")
-
-        with (
-            mock.patch.object(measure_mod, "_rea_pass", side_effect=rea_pass),
-            mock.patch.object(measure_mod, "_capture_scroll", return_value={"steps": []}),
-        ):
-            result = run_capture(
-                shot,
-                on_shot,
-                lambda _allow: FakeBlockingProxy(),
-                scroll_dir=str(root / "scroll"),
-                rea=True,
-            )
-        self.assertEqual(result["blocked_requests"], ["http://10.0.0.1/capture"])
-        self.assertEqual(result["rea"]["state"], "captured")
+def _kill_quietly(pid):
+    with contextlib.suppress(OSError):
+        os.kill(pid, 9)
 
 
 if __name__ == "__main__":

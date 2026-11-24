@@ -8,6 +8,7 @@ import tempfile
 import threading
 import time
 import unittest
+import urllib.error
 from pathlib import Path
 from unittest import mock
 
@@ -23,7 +24,8 @@ ORDER = [
     "web_pixels_compare",
     "core_handoff_write",
 ]
-ENV_OK = {"PATH", "HOME", "LC_CTYPE"}  # LC_CTYPE is set by the Python interpreter itself
+# Python sets LC_CTYPE itself; macOS adds __CF_USER_TEXT_ENCODING to every process it starts.
+ENV_OK = {"PATH", "HOME", "LC_CTYPE", "__CF_USER_TEXT_ENCODING"}
 
 
 def fake(root, **settings):
@@ -71,6 +73,9 @@ class McpSessionTests(unittest.TestCase):
         ]
         return tools.craft_steps(binary, self.folder / "craft", "happyrobot.ai", stops)
 
+    @unittest.skipUnless(
+        os.name == "posix", "POSIX only: fake #! scripts, sleep, signals, symlinks"
+    )
     def test_one_session_runs_every_step_and_reports_the_changed_stop(self):
         log = self.root / "log.txt"
         self.assertEqual(self.steps(fake(self.root, LOG=str(log))), [1])
@@ -79,16 +84,28 @@ class McpSessionTests(unittest.TestCase):
         self.assertEqual([name for _, name, _ in rows], ORDER)
         self.assertTrue((self.folder / "craft" / "HANDOFF.md").exists())
 
+    @unittest.skipUnless(
+        os.name == "posix", "POSIX only: fake #! scripts, sleep, signals, symlinks"
+    )
     def test_the_journal_is_removed_before_publish_because_it_records_absolute_paths(self):
         self.assertEqual(self.steps(fake(self.root, JOURNAL=True)), [1])
         self.assertFalse((self.folder / "craft" / "recon.cany" / "journal").exists())
 
+    @unittest.skipUnless(
+        os.name == "posix", "POSIX only: fake #! scripts, sleep, signals, symlinks"
+    )
     def test_text_content_is_parsed_when_structured_content_is_missing(self):
         self.assertEqual(self.steps(fake(self.root, MODE="text")), [1])
 
+    @unittest.skipUnless(
+        os.name == "posix", "POSIX only: fake #! scripts, sleep, signals, symlinks"
+    )
     def test_a_reply_for_another_id_is_skipped(self):
         self.assertEqual(self.steps(fake(self.root, MODE="wrongid")), [1])
 
+    @unittest.skipUnless(
+        os.name == "posix", "POSIX only: fake #! scripts, sleep, signals, symlinks"
+    )
     def test_a_hung_craft_is_killed_at_the_deadline(self):
         with (
             mock.patch.object(tools, "MCP_DEADLINE_S", 1),
@@ -98,6 +115,9 @@ class McpSessionTests(unittest.TestCase):
         self.assertEqual(ctx.exception.reason, "timeout")
         self.assertFalse(alive(int(self.pid_file.read_text())))
 
+    @unittest.skipUnless(
+        os.name == "posix", "POSIX only: fake #! scripts, sleep, signals, symlinks"
+    )
     def test_a_child_that_hangs_before_initialize_is_failed_and_reaped(self):
         with (
             mock.patch.object(tools, "MCP_DEADLINE_S", 1),
@@ -107,6 +127,9 @@ class McpSessionTests(unittest.TestCase):
         self.assertEqual(ctx.exception.reason, "timeout")
         self.assertFalse(alive(int(self.pid_file.read_text())))
 
+    @unittest.skipUnless(
+        os.name == "posix", "POSIX only: fake #! scripts, sleep, signals, symlinks"
+    )
     def test_an_unterminated_200_mib_line_fails_fast_and_the_child_is_reaped(self):
         started = time.monotonic()
         with self.assertRaises(tools.ToolError) as ctx:
@@ -115,6 +138,9 @@ class McpSessionTests(unittest.TestCase):
         self.assertLess(time.monotonic() - started, 30)
         self.assertFalse(alive(int(self.pid_file.read_text())))
 
+    @unittest.skipUnless(
+        os.name == "posix", "POSIX only: fake #! scripts, sleep, signals, symlinks"
+    )
     def test_a_child_that_stops_reading_stdin_hits_the_deadline_on_write(self):
         with (
             mock.patch.object(tools, "MCP_DEADLINE_S", 1),
@@ -127,6 +153,9 @@ class McpSessionTests(unittest.TestCase):
         self.assertEqual(ctx.exception.reason, "timeout")
         self.assertFalse(alive(int(self.pid_file.read_text())))
 
+    @unittest.skipUnless(
+        os.name == "posix", "POSIX only: fake #! scripts, sleep, signals, symlinks"
+    )
     def test_a_boolean_id_never_matches_a_request(self):
         with (
             mock.patch.object(tools, "MCP_DEADLINE_S", 1),
@@ -135,16 +164,25 @@ class McpSessionTests(unittest.TestCase):
             self.steps(fake(self.root, MODE="boolid"))
         self.assertEqual(ctx.exception.reason, "timeout")
 
+    @unittest.skipUnless(
+        os.name == "posix", "POSIX only: fake #! scripts, sleep, signals, symlinks"
+    )
     def test_an_error_result_fails_the_stage(self):
         with self.assertRaises(tools.ToolError) as ctx:
             self.steps(fake(self.root, MODE="isError"))
         self.assertEqual(ctx.exception.reason, "craft error")
 
+    @unittest.skipUnless(
+        os.name == "posix", "POSIX only: fake #! scripts, sleep, signals, symlinks"
+    )
     def test_a_json_rpc_error_fails_the_stage(self):
         with self.assertRaises(tools.ToolError) as ctx:
             self.steps(fake(self.root, MODE="rpcError"))
         self.assertEqual(ctx.exception.reason, "craft error")
 
+    @unittest.skipUnless(
+        os.name == "posix", "POSIX only: fake #! scripts, sleep, signals, symlinks"
+    )
     def test_an_oversized_line_fails_the_stage(self):
         with (
             mock.patch.object(tools, "MCP_LINE_MAX", 1000),
@@ -153,6 +191,9 @@ class McpSessionTests(unittest.TestCase):
             self.steps(fake(self.root, MODE="bigline"))
         self.assertEqual(ctx.exception.reason, "output too large")
 
+    @unittest.skipUnless(
+        os.name == "posix", "POSIX only: fake #! scripts, sleep, signals, symlinks"
+    )
     def test_total_output_is_charged_as_it_arrives(self):
         with (
             mock.patch.object(tools, "MCP_TOTAL_MAX", 100),
@@ -161,17 +202,26 @@ class McpSessionTests(unittest.TestCase):
             self.steps(fake(self.root))
         self.assertEqual(ctx.exception.reason, "output too large")
 
+    @unittest.skipUnless(
+        os.name == "posix", "POSIX only: fake #! scripts, sleep, signals, symlinks"
+    )
     def test_a_deeply_nested_reply_is_bad_output(self):
         with self.assertRaises(tools.ToolError) as ctx:
             self.steps(fake(self.root, MODE="deep"))
         self.assertEqual(ctx.exception.reason, "bad output")
 
+    @unittest.skipUnless(
+        os.name == "posix", "POSIX only: fake #! scripts, sleep, signals, symlinks"
+    )
     def test_text_that_is_not_a_string_is_bad_output(self):
         for mode in ("text5", "textdict"):
             with self.subTest(mode=mode), self.assertRaises(tools.ToolError) as ctx:
                 self.steps(fake(self.root, MODE=mode))
             self.assertEqual(ctx.exception.reason, "bad output")
 
+    @unittest.skipUnless(
+        os.name == "posix", "POSIX only: fake #! scripts, sleep, signals, symlinks"
+    )
     def test_the_child_gets_path_and_home_only(self):
         env_log = self.root / "env.json"
         with mock.patch.dict(os.environ, {"PIGGYBACK_SECRET_TEST": "hunter2"}):
@@ -180,11 +230,17 @@ class McpSessionTests(unittest.TestCase):
         self.assertNotIn("PIGGYBACK_SECRET_TEST", keys)
         self.assertLessEqual(keys, ENV_OK)
 
+    @unittest.skipUnless(
+        os.name == "posix", "POSIX only: fake #! scripts, sleep, signals, symlinks"
+    )
     def test_the_child_stdout_is_closed_after_the_session(self):
         with tools._McpSession(fake(self.root), self.root / "p") as mcp:
             mcp.tool("core_brief_write", {"text": "x"})
         self.assertTrue(mcp.proc.stdout.closed)
 
+    @unittest.skipUnless(
+        os.name == "posix", "POSIX only: fake #! scripts, sleep, signals, symlinks"
+    )
     def test_only_the_allowlisted_tools_can_be_called(self):
         with (
             tools._McpSession(fake(self.root), self.root / "p") as mcp,
@@ -199,6 +255,9 @@ class RunTests(unittest.TestCase):
         self.addCleanup(tmp.cleanup)
         self.root = Path(tmp.name)
 
+    @unittest.skipUnless(
+        os.name == "posix", "POSIX only: fake #! scripts, sleep, signals, symlinks"
+    )
     def test_a_hang_is_killed_and_reaped(self):
         pid_file = self.root / "pid"
         body = (
@@ -211,6 +270,9 @@ class RunTests(unittest.TestCase):
         self.assertEqual(ctx.exception.reason, "timeout")
         self.assertFalse(alive(int(pid_file.read_text())))
 
+    @unittest.skipUnless(
+        os.name == "posix", "POSIX only: fake #! scripts, sleep, signals, symlinks"
+    )
     def test_a_killed_tool_takes_the_processes_it_started_with_it(self):
         pid_file = self.root / "pid"
         body = (
@@ -228,6 +290,9 @@ class RunTests(unittest.TestCase):
             time.sleep(0.05)
         self.assertFalse(alive(grandchild))
 
+    @unittest.skipUnless(
+        os.name == "posix", "POSIX only: fake #! scripts, sleep, signals, symlinks"
+    )
     def test_output_over_the_cap_is_refused_while_the_child_writes(self):
         pid_file = self.root / "pid"
         body = (
@@ -242,6 +307,9 @@ class RunTests(unittest.TestCase):
         self.assertLess(time.monotonic() - started, 10)
         self.assertFalse(alive(int(pid_file.read_text())))
 
+    @unittest.skipUnless(
+        os.name == "posix", "POSIX only: fake #! scripts, sleep, signals, symlinks"
+    )
     def test_a_missing_binary_cannot_start(self):
         with self.assertRaises(tools.ToolError) as ctx:
             tools.run([str(self.root / "no-such-tool")], timeout=5, cap=10)
@@ -276,6 +344,9 @@ class DevToolsEndpointTests(unittest.TestCase):
                     tools.devtools_endpoint(self.profile, time.monotonic() + 5)
                 self.assertEqual(ctx.exception.reason, "bad output")
 
+    @unittest.skipUnless(
+        os.name == "posix", "POSIX only: fake #! scripts, sleep, signals, symlinks"
+    )
     def test_a_missing_file_is_a_timeout_at_the_stage_deadline(self):
         clock = [1000.0]
         with (
@@ -313,6 +384,22 @@ class _Version(http.server.BaseHTTPRequestHandler):
 
     def log_message(self, *_):
         pass
+
+
+class VerifyTimeoutTests(unittest.TestCase):
+    def test_a_listener_that_stops_answering_is_a_timeout(self):
+        for raised in (TimeoutError(), urllib.error.URLError(TimeoutError())):
+            with self.subTest(raised=repr(raised)):
+                opener = mock.Mock()
+                opener.open.side_effect = raised
+                with (
+                    mock.patch("piggyback.tools.urllib.request.build_opener", return_value=opener),
+                    self.assertRaises(tools.ToolError) as ctx,
+                ):
+                    tools.verify_browser(
+                        "http://127.0.0.1:9", "/devtools/browser/x", time.monotonic() + 5
+                    )
+                self.assertEqual(ctx.exception.reason, "timeout")
 
 
 class VerifyBrowserTests(unittest.TestCase):
@@ -380,6 +467,9 @@ class CraftTreeSafetyTests(unittest.TestCase):
         ]
         return tools.craft_steps(binary, folder / "craft", "happyrobot.ai", stops)
 
+    @unittest.skipUnless(
+        os.name == "posix", "POSIX only: fake #! scripts, sleep, signals, symlinks"
+    )
     def test_a_handoff_symlink_left_by_craft_never_redirects_the_write(self):
         folder = self.root / "kit"
         folder.mkdir()
@@ -388,6 +478,9 @@ class CraftTreeSafetyTests(unittest.TestCase):
             self.steps_into(folder, binary)
         self.assertEqual(self.outside.read_bytes(), b"outside original\n")
 
+    @unittest.skipUnless(
+        os.name == "posix", "POSIX only: fake #! scripts, sleep, signals, symlinks"
+    )
     def test_a_symlinked_project_parent_never_lets_the_journal_removal_escape(self):
         folder = self.root / "kit"
         folder.mkdir()
@@ -397,6 +490,9 @@ class CraftTreeSafetyTests(unittest.TestCase):
         self.assertEqual(self.outside.read_bytes(), b"outside original\n")
         self.assertTrue(self.outside.exists())
 
+    @unittest.skipUnless(
+        os.name == "posix", "POSIX only: fake #! scripts, sleep, signals, symlinks"
+    )
     def test_a_hardlink_inside_craft_is_refused(self):
         folder = self.root / "kit"
         folder.mkdir()
@@ -406,6 +502,9 @@ class CraftTreeSafetyTests(unittest.TestCase):
         self.assertEqual(ctx.exception.reason, "unsafe output")
         self.assertEqual(self.outside.read_bytes(), b"outside original\n")
 
+    @unittest.skipUnless(
+        os.name == "posix", "POSIX only: fake #! scripts, sleep, signals, symlinks"
+    )
     def test_a_clean_run_writes_handoff_exclusively_with_mode_0600(self):
         folder = self.root / "kit"
         folder.mkdir()
@@ -418,6 +517,9 @@ class CraftTreeSafetyTests(unittest.TestCase):
 class McpBoundedWriteTests(unittest.TestCase):
     """MINOR 10: a child that stops reading stdin fails within the deadline, by measured time."""
 
+    @unittest.skipUnless(
+        os.name == "posix", "POSIX only: fake #! scripts, sleep, signals, symlinks"
+    )
     def test_a_stalled_write_fails_within_a_short_deadline(self):
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
@@ -436,6 +538,9 @@ class McpBoundedWriteTests(unittest.TestCase):
 class RemoveUnsafeRootTests(unittest.TestCase):
     """MINOR 3: an unsafe stage root is unlinked, never followed."""
 
+    @unittest.skipUnless(
+        os.name == "posix", "POSIX only: fake #! scripts, sleep, signals, symlinks"
+    )
     def test_a_symlink_where_a_folder_should_be_is_unlinked_not_followed(self):
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)

@@ -14,6 +14,7 @@ from unittest import mock
 from piggyback import kit, tools
 from piggyback import measure as measure_mod
 from piggyback.cli import main
+from tests.test_tools import ENV_OK
 
 URL = "https://93.184.216.34/"
 FAKE_FP = {
@@ -110,6 +111,9 @@ class CliRefusalTests(KitCase):
         self.assertEqual(code, 1)
         m.assert_not_called()
 
+    @unittest.skipUnless(
+        os.name == "posix", "POSIX only: fake #! scripts, sleep, signals, symlinks"
+    )
     def test_a_symlinked_out_folder_is_refused(self):
         target = self.root / "elsewhere"
         target.mkdir()
@@ -567,7 +571,7 @@ class WorkerBudgetTests(unittest.TestCase):
         seen = []
 
         class FakeProc:
-            pid = -1  # never signalled: kill_tree is stubbed below
+            pid = -1  # never signalled: _stop_worker is stubbed below
 
             def __init__(self, *args, **kwargs):
                 pass
@@ -580,13 +584,16 @@ class WorkerBudgetTests(unittest.TestCase):
 
         with (
             mock.patch.object(measure_mod.subprocess, "Popen", FakeProc),
-            mock.patch.object(measure_mod, "kill_tree"),
+            mock.patch.object(measure_mod, "_stop_worker"),
         ):
             for request, expected in (({"scroll_dir": "x"}, 240), ({"scroll_dir": None}, 90)):
                 with self.subTest(request=request), self.assertRaises(measure_mod.MeasureError):
                     measure_mod._run_worker(request)
                 self.assertEqual(seen[-1], expected)
 
+    @unittest.skipUnless(
+        os.name == "posix", "POSIX only: fake #! scripts, sleep, signals, symlinks"
+    )
     def test_a_timed_out_worker_takes_its_browser_with_it(self):
         # A grandchild holding the worker's stderr stands in for Chromium.
         tmp = tempfile.TemporaryDirectory()
@@ -629,6 +636,9 @@ class ToolFindTests(KitCase):
         with mock.patch.dict(os.environ, {"PIGGYBACK_CRAFT": "/nonexistent/craft"}):
             self.assertIsNone(tools.find("PIGGYBACK_CRAFT", "craft-anything-cli"))
 
+    @unittest.skipUnless(
+        os.name == "posix", "POSIX only: fake #! scripts, sleep, signals, symlinks"
+    )
     def test_a_configured_file_that_is_not_executable_is_missing(self):
         path = self.root / "craft-not-runnable"
         path.write_text("x", encoding="utf-8")
@@ -640,11 +650,17 @@ class ToolFindTests(KitCase):
         with mock.patch.dict(os.environ, {"PIGGYBACK_CRAFT": "craft-anything-cli"}):
             self.assertIsNone(tools.find("PIGGYBACK_CRAFT", "craft-anything-cli"))
 
+    @unittest.skipUnless(
+        os.name == "posix", "POSIX only: fake #! scripts, sleep, signals, symlinks"
+    )
     def test_an_existing_absolute_configured_path_wins(self):
         path = write_script(self.root, "craft", "print('x')\n")
         with mock.patch.dict(os.environ, {"PIGGYBACK_CRAFT": path}):
             self.assertEqual(tools.find("PIGGYBACK_CRAFT", "craft-anything-cli"), path)
 
+    @unittest.skipUnless(
+        os.name == "posix", "POSIX only: fake #! scripts, sleep, signals, symlinks"
+    )
     def test_without_config_the_tool_comes_from_path(self):
         path = write_script(self.root, "craft", "print('x')\n")
         with (
@@ -655,24 +671,36 @@ class ToolFindTests(KitCase):
 
 
 class ToolRunTests(KitCase):
+    @unittest.skipUnless(
+        os.name == "posix", "POSIX only: fake #! scripts, sleep, signals, symlinks"
+    )
     def test_a_hang_is_killed_and_reported_as_a_timeout(self):
         path = write_script(self.root, "slow", "import time\ntime.sleep(30)\n")
         with self.assertRaises(tools.ToolError) as ctx:
             tools.run([path], timeout=0.5, cap=100)
         self.assertEqual(ctx.exception.reason, "timeout")
 
+    @unittest.skipUnless(
+        os.name == "posix", "POSIX only: fake #! scripts, sleep, signals, symlinks"
+    )
     def test_a_nonzero_exit_is_a_failed_stage(self):
         path = write_script(self.root, "bad", "raise SystemExit(3)\n")
         with self.assertRaises(tools.ToolError) as ctx:
             tools.run([path], timeout=10, cap=100)
         self.assertEqual(ctx.exception.reason, "exit status")
 
+    @unittest.skipUnless(
+        os.name == "posix", "POSIX only: fake #! scripts, sleep, signals, symlinks"
+    )
     def test_output_over_the_cap_is_refused(self):
         path = write_script(self.root, "big", "print('x' * 200)\n")
         with self.assertRaises(tools.ToolError) as ctx:
             tools.run([path], timeout=10, cap=50)
         self.assertEqual(ctx.exception.reason, "output too large")
 
+    @unittest.skipUnless(
+        os.name == "posix", "POSIX only: fake #! scripts, sleep, signals, symlinks"
+    )
     def test_the_child_gets_no_secret_env_and_no_stdin(self):
         path = write_script(
             self.root,
@@ -896,6 +924,9 @@ class ReaRunTests(KitCase):
                     self.observe("/bin/rea", **bad)
             run.assert_not_called()
 
+    @unittest.skipUnless(
+        os.name == "posix", "POSIX only: fake #! scripts, sleep, signals, symlinks"
+    )
     def test_the_child_gets_one_origin_flag_in_argv_and_only_path_and_home(self):
         echo = write_script(
             self.root,
@@ -921,8 +952,11 @@ class ReaRunTests(KitCase):
         )
         self.assertNotIn("PIGGYBACK_SECRET_TEST", seen["env"])
         # LC_CTYPE is set by the Python interpreter itself (locale coercion), not inherited.
-        self.assertLessEqual(set(seen["env"]), {"PATH", "HOME", "LC_CTYPE"})
+        self.assertLessEqual(set(seen["env"]), ENV_OK)
 
+    @unittest.skipUnless(
+        os.name == "posix", "POSIX only: fake #! scripts, sleep, signals, symlinks"
+    )
     def test_oversized_output_is_a_failed_stage(self):
         path = write_script(self.root, "rea", "print('x' * 300)\n")
         with (
@@ -932,6 +966,9 @@ class ReaRunTests(KitCase):
             self.observe(path)
         self.assertEqual(ctx.exception.reason, "output too large")
 
+    @unittest.skipUnless(
+        os.name == "posix", "POSIX only: fake #! scripts, sleep, signals, symlinks"
+    )
     def test_a_nonzero_exit_is_a_failed_stage(self):
         path = write_script(self.root, "rea", "raise SystemExit(1)\n")
         with self.assertRaises(tools.ToolError) as ctx:
@@ -940,12 +977,18 @@ class ReaRunTests(KitCase):
 
 
 class ReaTargetTests(KitCase):
+    @unittest.skipUnless(
+        os.name == "posix", "POSIX only: fake #! scripts, sleep, signals, symlinks"
+    )
     def test_the_one_page_at_the_url_is_picked(self):
         page = {"target_id": "T1", "url": PAGE_URL, "type": "page"}
         other = {"target_id": "T2", "url": PAGE_URL, "type": "iframe"}
         binary = targets_script(self.root, [other, page])
         self.assertEqual(tools.rea_target(binary, "http://127.0.0.1:9222", PAGE_URL, 5), "T1")
 
+    @unittest.skipUnless(
+        os.name == "posix", "POSIX only: fake #! scripts, sleep, signals, symlinks"
+    )
     def test_zero_or_two_matching_pages_fail_the_stage(self):
         page = {"target_id": "T1", "url": PAGE_URL, "type": "page"}
         for targets in ([], [page, {**page, "target_id": "T2"}]):
@@ -955,6 +998,9 @@ class ReaTargetTests(KitCase):
                     tools.rea_target(binary, "http://127.0.0.1:9222", PAGE_URL, 5)
                 self.assertEqual(ctx.exception.reason, "no target")
 
+    @unittest.skipUnless(
+        os.name == "posix", "POSIX only: fake #! scripts, sleep, signals, symlinks"
+    )
     def test_a_target_id_that_is_not_a_plain_token_fails_closed(self):
         odd = {"target_id": "T 1; x", "url": PAGE_URL, "type": "page"}
         binary = targets_script(self.root, [odd])
@@ -962,6 +1008,9 @@ class ReaTargetTests(KitCase):
             tools.rea_target(binary, "http://127.0.0.1:9222", PAGE_URL, 5)
         self.assertEqual(ctx.exception.reason, "bad output")
 
+    @unittest.skipUnless(
+        os.name == "posix", "POSIX only: fake #! scripts, sleep, signals, symlinks"
+    )
     def test_rea_version_must_be_a_plain_number(self):
         ok = write_script(self.root, "rea-ok", "print('6.7.0')\n")
         self.assertEqual(tools.rea_version(ok, 5), "6.7.0")
@@ -972,6 +1021,9 @@ class ReaTargetTests(KitCase):
 
 
 class KitReaTests(KitCase):
+    @unittest.skipUnless(
+        os.name == "posix", "POSIX only: fake #! scripts, sleep, signals, symlinks"
+    )
     def test_rea_source_text_lands_only_under_rea_sources(self):
         rea = write_script(self.root, "rea", "print('6.7.0')\n")
         out = self.root / "kit"
@@ -1025,6 +1077,9 @@ class CraftStageTests(KitCase):
         calls = calls_of(log) if log.exists() else []
         return json.loads(path.read_text(encoding="utf-8")), out, calls
 
+    @unittest.skipUnless(
+        os.name == "posix", "POSIX only: fake #! scripts, sleep, signals, symlinks"
+    )
     def test_each_stop_is_compared_and_the_changed_stop_gets_a_hypothesis(self):
         data, _, calls = self.make()
         self.assertEqual(
@@ -1034,6 +1089,9 @@ class CraftStageTests(KitCase):
         self.assertEqual(names.count("web_pixels_compare"), 6)
         self.assertEqual(names.count("core_hypothesis_record"), 1)
 
+    @unittest.skipUnless(
+        os.name == "posix", "POSIX only: fake #! scripts, sleep, signals, symlinks"
+    )
     def test_the_frames_are_compared_arrival_first_then_late(self):
         data, _, calls = self.make()
         self.assertEqual(data["stages"]["craft"]["state"], "done")
@@ -1043,6 +1101,9 @@ class CraftStageTests(KitCase):
                 self.assertTrue(args["before"]["path"].endswith(f"frame-{k}-arrival.png"))
                 self.assertTrue(args["after"]["path"].endswith(f"frame-{k}.png"))
 
+    @unittest.skipUnless(
+        os.name == "posix", "POSIX only: fake #! scripts, sleep, signals, symlinks"
+    )
     def test_arrival_and_late_frames_are_listed_and_digested(self):
         data, out, _ = self.make()
         for i in range(6):
@@ -1050,6 +1111,9 @@ class CraftStageTests(KitCase):
                 with self.subTest(artifact=name):
                     self.assertEqual(data["artifacts"][name], sha256(out / name))
 
+    @unittest.skipUnless(
+        os.name == "posix", "POSIX only: fake #! scripts, sleep, signals, symlinks"
+    )
     def test_craft_output_of_the_wrong_shape_fails_the_stage_and_keeps_the_kit(self):
         data, out, _ = self.make(
             COMPARE={"id": "not-an-evidence-id", "result": {"comparable": True}}
@@ -1057,6 +1121,9 @@ class CraftStageTests(KitCase):
         self.assertEqual(data["stages"]["craft"], {"state": "failed", "reason": "bad output"})
         self.assertTrue((out / "kit.json").exists())
 
+    @unittest.skipUnless(
+        os.name == "posix", "POSIX only: fake #! scripts, sleep, signals, symlinks"
+    )
     def test_identical_frames_have_a_null_box_and_no_hypothesis(self):
         same = {
             "id": EVIDENCE,
@@ -1071,6 +1138,9 @@ class CraftStageTests(KitCase):
         self.assertEqual(data["stages"]["craft"]["state"], "done")
         self.assertNotIn("core_hypothesis_record", [name for name, _ in calls])
 
+    @unittest.skipUnless(
+        os.name == "posix", "POSIX only: fake #! scripts, sleep, signals, symlinks"
+    )
     def test_a_change_with_no_box_is_a_bad_output(self):
         bad = {
             "id": EVIDENCE,
@@ -1083,16 +1153,25 @@ class CraftStageTests(KitCase):
         data, _, _ = self.make(COMPARE=bad)
         self.assertEqual(data["stages"]["craft"], {"state": "failed", "reason": "bad output"})
 
+    @unittest.skipUnless(
+        os.name == "posix", "POSIX only: fake #! scripts, sleep, signals, symlinks"
+    )
     def test_a_pair_that_cannot_be_compared_fails_the_stage(self):
         bad = {"id": EVIDENCE, "result": {"comparable": False}}
         data, _, _ = self.make(COMPARE=bad)
         self.assertEqual(data["stages"]["craft"], {"state": "failed", "reason": "not comparable"})
 
+    @unittest.skipUnless(
+        os.name == "posix", "POSIX only: fake #! scripts, sleep, signals, symlinks"
+    )
     def test_a_deep_reply_publishes_the_kit_with_craft_failed(self):
         data, out, _ = self.make(MODE="deep")
         self.assertEqual(data["stages"]["craft"], {"state": "failed", "reason": "bad output"})
         self.assertTrue((out / "kit.json").exists())
 
+    @unittest.skipUnless(
+        os.name == "posix", "POSIX only: fake #! scripts, sleep, signals, symlinks"
+    )
     def test_text_that_is_not_a_string_publishes_the_kit_with_craft_failed(self):
         for mode in ("text5", "textdict"):
             with self.subTest(mode=mode):
@@ -1102,6 +1181,9 @@ class CraftStageTests(KitCase):
                 )
                 self.assertTrue((out / "kit.json").exists())
 
+    @unittest.skipUnless(
+        os.name == "posix", "POSIX only: fake #! scripts, sleep, signals, symlinks"
+    )
     def test_a_craft_that_is_not_executable_is_missing_and_the_kit_publishes(self):
         bad = self.root / "craft-not-runnable"
         bad.write_text("x", encoding="utf-8")
@@ -1109,6 +1191,9 @@ class CraftStageTests(KitCase):
         self.assertEqual(data["stages"]["craft"], {"state": "missing"})
         self.assertTrue((out / "kit.json").exists())
 
+    @unittest.skipUnless(
+        os.name == "posix", "POSIX only: fake #! scripts, sleep, signals, symlinks"
+    )
     def test_a_symlink_left_by_a_failed_craft_is_removed_and_the_kit_publishes(self):
         data, out, _ = self.make(MODE="link")
         self.assertEqual(data["stages"]["craft"], {"state": "failed", "reason": "craft error"})
@@ -1116,12 +1201,18 @@ class CraftStageTests(KitCase):
         self.assertFalse(any(p.is_symlink() for p in out.rglob("*")))
         self.assertFalse(any(name.startswith("craft/") for name in data["artifacts"]))
 
+    @unittest.skipUnless(
+        os.name == "posix", "POSIX only: fake #! scripts, sleep, signals, symlinks"
+    )
     def test_a_symlink_left_by_a_successful_craft_fails_the_craft_stage(self):
         data, out, _ = self.make(MODE="linkok")
         self.assertEqual(data["stages"]["craft"], {"state": "failed", "reason": "unsafe output"})
         self.assertFalse((out / "craft").exists())
         self.assertFalse(any(p.is_symlink() for p in out.rglob("*")))
 
+    @unittest.skipUnless(
+        os.name == "posix", "POSIX only: fake #! scripts, sleep, signals, symlinks"
+    )
     def test_the_absolute_paths_in_craft_journal_never_reach_the_kit(self):
         data, out, _ = self.make(JOURNAL=True)
         self.assertEqual(data["stages"]["craft"]["state"], "done")
@@ -1201,6 +1292,9 @@ class KitStageCleanupTests(KitCase):
         record = json.loads((out / "rea-observation.json").read_text(encoding="utf-8"))
         self.assertEqual(record, {"tool": "rea", "state": "failed", "reason": "no target"})
 
+    @unittest.skipUnless(
+        os.name == "posix", "POSIX only: fake #! scripts, sleep, signals, symlinks"
+    )
     def test_a_symlink_inside_the_rea_folder_fails_the_rea_stage(self):
         def extra(out):
             (out / "rea").mkdir()
@@ -1214,6 +1308,9 @@ class KitStageCleanupTests(KitCase):
         self.assertFalse((out / "rea").exists())
         self.assertFalse(any(p.is_symlink() for p in out.rglob("*")))
 
+    @unittest.skipUnless(
+        os.name == "posix", "POSIX only: fake #! scripts, sleep, signals, symlinks"
+    )
     def test_a_symlink_anywhere_else_in_the_kit_fails_the_kit(self):
         def extra(out):
             os.symlink("/etc/hostname", out / "stray")
@@ -1247,6 +1344,9 @@ class KitUnsafeStageTests(KitCase):
             path = kit.make(URL, out, "a landing page")
         return json.loads(path.read_text(encoding="utf-8")), out
 
+    @unittest.skipUnless(
+        os.name == "posix", "POSIX only: fake #! scripts, sleep, signals, symlinks"
+    )
     def test_a_handoff_symlink_left_by_craft_fails_the_stage_and_leaves_the_outside_file_alone(
         self,
     ):
@@ -1259,6 +1359,9 @@ class KitUnsafeStageTests(KitCase):
         self.assertFalse((out / "craft").exists())
         self.assertFalse(any(p.is_symlink() for p in out.rglob("*")))
 
+    @unittest.skipUnless(
+        os.name == "posix", "POSIX only: fake #! scripts, sleep, signals, symlinks"
+    )
     def test_a_plain_file_at_the_rea_root_fails_the_rea_stage_and_is_removed(self):
         def write(url, out_dir, *, scroll=False, **_):
             out = Path(out_dir)
@@ -1276,6 +1379,9 @@ class KitUnsafeStageTests(KitCase):
         )
         self.assertFalse(os.path.lexists(out / "rea"))
 
+    @unittest.skipUnless(
+        os.name == "posix", "POSIX only: fake #! scripts, sleep, signals, symlinks"
+    )
     def test_a_link_already_at_the_craft_root_fails_only_the_craft_stage(self):
         target = self.root / "elsewhere"
         target.mkdir()
@@ -1292,6 +1398,9 @@ class KitUnsafeStageTests(KitCase):
         self.assertFalse(os.path.lexists(out / "craft"))
         self.assertEqual((target / "keep.txt").read_text(encoding="utf-8"), "keep")
 
+    @unittest.skipUnless(
+        os.name == "posix", "POSIX only: fake #! scripts, sleep, signals, symlinks"
+    )
     def test_a_rea_folder_that_is_a_symlink_is_removed_and_the_kit_publishes(self):
         target = self.root / "elsewhere"
         target.mkdir()
