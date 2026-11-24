@@ -2,6 +2,7 @@
 
 import contextlib
 import json
+import os
 import struct
 import subprocess
 import tempfile
@@ -11,6 +12,9 @@ from unittest import mock
 
 from bench.c1 import manifest as c1_manifest
 from bench.c3 import manifest, prompts
+
+# macOS puts the temp folder under a symlink (/var -> /private/var), which the store guard refuses.
+tempfile.tempdir = os.path.realpath(tempfile.gettempdir())
 
 COMMIT = "a" * 40
 CLI = "2.1.325 (Claude Code)"

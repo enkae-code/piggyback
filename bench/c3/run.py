@@ -13,7 +13,6 @@ Usage: python -m bench.c3.run --store STORE --run RUN_ID TASK ARM
 
 import argparse
 import contextlib
-import fcntl
 import json
 import os
 import re
@@ -43,6 +42,11 @@ from bench.c3.manifest import (
     starter_hashes,
 )
 from piggyback.measure import publish_json
+
+if os.name == "nt":
+    import msvcrt
+else:
+    import fcntl
 
 ARM_FILES = {
     "piggyback-brief": ("BRIEF.md",),
@@ -436,8 +440,11 @@ def run_lock(run):
     fd = os.open(run / ".runner.lock", os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW, 0o600)
     try:
         try:
-            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except BlockingIOError:
+            if os.name == "nt":
+                msvcrt.locking(fd, msvcrt.LK_NBLCK, 1)
+            else:
+                fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError:
             raise SystemExit(
                 f"refusing: run {run.name} is active in another process; wait for it to finish"
             ) from None

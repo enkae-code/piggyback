@@ -21,6 +21,9 @@ from bench.c3 import checklist, prompts
 from bench.c3 import manifest as mf
 from bench.c3 import run as runner
 
+# macOS puts the temp folder under a symlink (/var -> /private/var), which the store guard refuses.
+tempfile.tempdir = os.path.realpath(tempfile.gettempdir())
+
 COMMIT = "b" * 40
 MODEL = "claude-opus-5-5"
 CLI = "2.1.325 (Claude Code)"
