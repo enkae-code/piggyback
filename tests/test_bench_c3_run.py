@@ -1,6 +1,7 @@
 """C3 per-page runner, without a browser or a model: the agent call and checklist are stubbed."""
 
 import contextlib
+import errno
 import hashlib
 import io
 import json
@@ -903,12 +904,12 @@ class RunLock(unittest.TestCase):
     @unittest.skipUnless(os.name == "posix", "flock is POSIX")
     def test_a_lock_fault_that_is_not_contention_is_not_reported_as_a_busy_run(self):
         with tempfile.TemporaryDirectory() as tmp:
-            fault = OSError(37, "No locks available")
+            fault = OSError(errno.ENOLCK, "No locks available")
             with mock.patch.object(runner.fcntl, "flock", side_effect=fault):
                 with self.assertRaises(OSError) as caught, runner.run_lock(Path(tmp)):
                     pass
             self.assertNotIsInstance(caught.exception, SystemExit)
-            self.assertEqual(caught.exception.errno, 37)
+            self.assertEqual(caught.exception.errno, errno.ENOLCK)
 
     @unittest.skipUnless(os.name == "posix", "needs os.symlink without privileges")
     def test_without_o_nofollow_a_lock_swapped_for_a_link_after_the_check_is_refused(self):
