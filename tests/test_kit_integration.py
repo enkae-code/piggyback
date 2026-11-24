@@ -1,6 +1,10 @@
+import contextlib
 import importlib.util
 import json
+import os
 import tempfile
+import threading
+import time
 import unittest
 from pathlib import Path
 
@@ -10,6 +14,26 @@ if importlib.util.find_spec("playwright") is None:
 from piggyback import kit, tools  # noqa: E402
 from piggyback.measure import MeasureError, write_measure  # noqa: E402
 from tests.test_measure_integration import serve  # noqa: E402
+
+
+def browser_processes(root):
+    """Command lines of Chromium browser processes (no renderers or helpers) under pid root."""
+    procs = {}
+    for entry in Path("/proc").iterdir():
+        if entry.name.isdigit():
+            with contextlib.suppress(OSError):
+                ppid = int((entry / "stat").read_text().rsplit(")", 1)[1].split()[1])
+                procs[int(entry.name)] = (ppid, (entry / "cmdline").read_bytes())
+    seen, frontier = set(), {root}
+    while frontier:
+        frontier = {pid for pid, (ppid, _) in procs.items() if ppid in frontier} - seen
+        seen |= frontier
+    return [
+        procs[pid][1]
+        for pid in seen
+        if pid in procs and b"chrom" in procs[pid][1].lower() and b"--type=" not in procs[pid][1]
+    ]
+
 
 MARKER = "kit-marker-7f3a9c"  # in both fixtures' visible text and an HTML comment
 
@@ -31,6 +55,8 @@ class KitScrollIntegration(unittest.TestCase):
         out = Path(tmp.name) / "kit"
         write_measure(f"{self.base}/{name}", out, allow_loopback=True, scroll=True)
         samples = json.loads((out / "scroll-samples.json").read_text(encoding="utf-8"))
+        fingerprint = json.loads((out / "fingerprint.json").read_text(encoding="utf-8"))
+        self.assertEqual(fingerprint["screenshot"], "screenshot.png")  # no local path in the kit
         return out, samples
 
     def test_motion_page_gives_six_frames_and_the_known_animation(self):
@@ -159,7 +185,7 @@ class KitScrollIntegration(unittest.TestCase):
         entry = next(step["step"] for step in samples["steps"] if step["scroll_y"] > 300)
         self.assertIn(entry, data["stages"]["craft"]["changed_steps"])
 
-    def test_rea_observes_the_scroll_listener_and_keeps_its_source_under_rea_sources(self):
+    def test_rea_counts_the_scroll_callback_in_the_script_that_carries_the_marker(self):
         if tools.find("PIGGYBACK_REA", "rea") is None:
             self.skipTest("rea is not installed")
         tmp = tempfile.TemporaryDirectory()
@@ -169,15 +195,49 @@ class KitScrollIntegration(unittest.TestCase):
         data = json.loads((out / "kit.json").read_text(encoding="utf-8"))
         self.assertEqual(data["stages"]["rea"]["state"], "captured", data["stages"]["rea"])
         observed = json.loads((out / "rea-observation.json").read_text(encoding="utf-8"))
-        counted = [f for s in observed["scripts"] for f in s["functions"] if f["count"] > 0]
-        self.assertGreaterEqual(len(counted), 1)
-        holders = sorted(
-            p.relative_to(out).as_posix()
-            for p in out.rglob("*")
-            if p.is_file() and MARKER.encode() in p.read_bytes()
+        self.assertFalse(observed["truncated"])
+        holders = [
+            s
+            for s in observed["scripts"]
+            if MARKER in (out / s["source"]["file"]).read_text(encoding="utf-8")
+        ]
+        self.assertEqual(len(holders), 1)
+        text = (out / holders[0]["source"]["file"]).read_text(encoding="utf-8")
+        callback = text.index("scrollY > 300")  # the fixture's scroll listener body
+        self.assertTrue(
+            any(
+                f["count"] > 0 and any(r["start"] <= callback < r["end"] for r in f["ranges"])
+                for f in holders[0]["functions"]
+            ),
+            "no executed function covers the scroll callback",
         )
-        self.assertTrue(holders)
-        self.assertTrue(all(h.startswith("rea/sources/") and h.endswith(".txt") for h in holders))
+
+    def test_the_main_browser_has_no_debugging_port_during_the_dense_pass(self):
+        if tools.find("PIGGYBACK_REA", "rea") is None:
+            self.skipTest("rea is not installed")
+        # The capture runs in a worker process, so watch the real browser processes from outside.
+        seen, done = [], threading.Event()
+
+        def watch():
+            while not done.is_set():
+                seen.extend(browser_processes(os.getpid()))
+                time.sleep(0.05)
+
+        watcher = threading.Thread(target=watch)
+        watcher.start()
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        out = Path(tmp.name) / "kit"
+        try:
+            kit.make(f"{self.base}/kit-motion.html", out, "a landing page", allow_loopback=True)
+        finally:
+            done.set()
+            watcher.join()
+        debug = [cmd for cmd in seen if b"--remote-debugging-port=" in cmd]
+        self.assertTrue([cmd for cmd in seen if cmd not in debug], "the capture browser was seen")
+        self.assertTrue(debug, "the REA browser was seen")
+        # Only the REA browser, with its own private profile, ever has a debugging port.
+        self.assertEqual([cmd for cmd in debug if b"piggyback-rea-" not in cmd], [])
 
     def test_samples_carry_no_page_text_html_or_urls(self):
         for name in ("kit-motion.html", "kit-static.html"):

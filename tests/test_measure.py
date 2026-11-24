@@ -366,26 +366,122 @@ class DenseArrivalTests(unittest.TestCase):
         self.assertEqual(events, ["sample", "shot", "sample", "sample", "sample"])
 
 
-class DebugPortTests(unittest.TestCase):
-    def test_every_launch_gets_the_debugging_port_switch(self):
-        seen = {}
-        chromium = types.SimpleNamespace(launch=lambda **kw: seen.update(kw))
-        shim = measure_mod._DebugPort(types.SimpleNamespace(chromium=chromium), 9222)
-        shim.chromium.launch(channel=None, chromium_sandbox=True, args=["--a"])
-        self.assertEqual(seen["args"], ["--a", "--remote-debugging-port=9222"])
+REA_REQ = {
+    "rea": "/bin/rea",
+    "url": "http://127.0.0.1:8123/kit-motion.html",
+    "viewport": (100, 100),
+    "scroll_dir": "/tmp/unused/scroll",
+    "allow_loopback": True,
+}
 
 
-class ReaStageTests(unittest.TestCase):
-    def test_a_rea_failure_is_a_failed_stage_and_nothing_is_observed(self):
-        req = {"rea": "/bin/rea", "scroll_dir": "/tmp/unused/scroll"}
-        with (
-            mock.patch("piggyback.tools.rea_version", return_value="6.7.0"),
-            mock.patch("piggyback.tools.rea_target", side_effect=tools.ToolError("no target")),
-            mock.patch("piggyback.tools.rea_observe") as observe,
-        ):
-            result = measure_mod._capture_rea(FakePage(lambda *_: None), req, 9222, [0, 300])
+def rea_tools(target="T1", observed=b"{}"):
+    """Patches that stand in for the tools and the browser checks of one REA pass."""
+    return [
+        mock.patch.object(
+            tools, "devtools_endpoint", return_value=("http://127.0.0.1:9", "/devtools/browser/x")
+        ),
+        mock.patch.object(tools, "verify_browser"),
+        mock.patch.object(tools, "rea_version", return_value="6.7.0"),
+        mock.patch.object(
+            tools,
+            "rea_target",
+            return_value=target,
+            side_effect=None if target else tools.ToolError("no target"),
+        ),
+        mock.patch.object(tools, "rea_observe", return_value=observed),
+        mock.patch.object(measure_mod, "_refuse_if_moved"),
+        mock.patch.object(measure_mod, "_document_origin", return_value="origin"),
+        mock.patch.object(measure_mod, "_scroll_to"),
+        mock.patch.object(measure_mod, "_refuse_if_replaced"),
+    ]
+
+
+def rea_context(page):
+    ctx = mock.Mock()
+    ctx.new_page.return_value = page
+    return ctx
+
+
+def rea_page():
+    page = mock.Mock(url=REA_REQ["url"])
+    page.goto.return_value = types.SimpleNamespace(status=200)
+    page.evaluate.return_value = 900
+    return page
+
+
+class ReaPassTests(unittest.TestCase):
+    def run_pass(self, patches, ctx):
+        with contextlib.ExitStack() as stack:
+            for patcher in patches:
+                stack.enter_context(patcher)
+            stack.enter_context(mock.patch.object(measure_mod, "_launch_rea", return_value=ctx))
+            return measure_mod._rea_pass(mock.Mock(), REA_REQ, mock.Mock(port=1))
+
+    def test_a_missing_target_is_a_failed_stage_and_nothing_is_observed(self):
+        patches = rea_tools(target=None)
+        with contextlib.ExitStack() as stack:
+            for patcher in patches:
+                stack.enter_context(patcher)
+            stack.enter_context(
+                mock.patch.object(measure_mod, "_launch_rea", return_value=rea_context(rea_page()))
+            )
+            observe = tools.rea_observe
+            result = measure_mod._rea_pass(mock.Mock(), REA_REQ, mock.Mock(port=1))
+            observe.assert_not_called()
         self.assertEqual(result, {"state": "failed", "version": "6.7.0", "reason": "no target"})
-        observe.assert_not_called()
+
+    def test_a_replaced_rea_page_refuses_the_kit_and_publishes_nothing(self):
+        patches = rea_tools()
+        checks = [None, measure_mod.MeasureError("the scroll page navigated")]
+        patches.append(mock.patch.object(measure_mod, "_refuse_if_replaced", side_effect=checks))
+        publish = mock.patch.object(tools, "publish_rea")
+        with publish as published:
+            with self.assertRaises(measure_mod.MeasureError):
+                self.run_pass([*patches], rea_context(rea_page()))
+        published.assert_not_called()
+
+    def test_a_captured_pass_publishes_the_observation_under_the_rea_stage(self):
+        patches = rea_tools(observed=b'{"normalized_result": {}}')
+        patches.append(mock.patch.object(measure_mod, "_refuse_if_replaced"))
+        with mock.patch.object(tools, "publish_rea") as published:
+            result = self.run_pass([*patches], rea_context(rea_page()))
+        self.assertEqual(result, {"state": "captured", "version": "6.7.0"})
+        published.assert_called_once()
+
+
+class ReaBrowserTests(unittest.TestCase):
+    def test_the_rea_browser_has_a_loopback_debugging_port_and_the_capture_sandbox(self):
+        ctx = mock.Mock()
+        p = mock.Mock()
+        p.chromium.launch_persistent_context.return_value = ctx
+        measure_mod._launch_rea(
+            p, Path("/tmp/profile"), {"server": "http://127.0.0.1:9"}, (100, 100)
+        )
+        kwargs = p.chromium.launch_persistent_context.call_args.kwargs
+        self.assertTrue(kwargs["chromium_sandbox"])
+        self.assertIn("--remote-debugging-port=0", kwargs["args"])
+        self.assertIn("--remote-debugging-address=127.0.0.1", kwargs["args"])
+        self.assertNotIn("--no-sandbox", kwargs["args"])
+        ctx.add_init_script.assert_called_once()
+
+    def test_a_rea_browser_that_cannot_start_is_a_stage_error(self):
+        p = mock.Mock()
+        p.chromium.launch_persistent_context.side_effect = RuntimeError("no browser")
+        with self.assertRaises(tools.ToolError) as ctx:
+            measure_mod._launch_rea(
+                p, Path("/tmp/profile"), {"server": "http://127.0.0.1:9"}, (100, 100)
+            )
+        self.assertEqual(ctx.exception.reason, "browser unavailable")
+
+
+class ReaWindowTests(unittest.TestCase):
+    def test_the_observation_window_covers_the_slowest_wheel_pass(self):
+        worst = measure_mod.REA_ARM_MS + measure_mod.SCROLL_STEPS * (
+            measure_mod.SCROLL_ARRIVE_MS + measure_mod.REA_STEP_MS
+        )
+        self.assertGreaterEqual(measure_mod.REA_WINDOW_MS, worst)
+        self.assertLess(measure_mod.REA_STAGE_S * 1000, measure_mod.SCROLL_TOTAL_S * 1000)
 
 
 if __name__ == "__main__":

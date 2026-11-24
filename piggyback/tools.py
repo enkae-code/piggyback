@@ -1,11 +1,12 @@
 """External tools for `piggyback kit`: REA observation and Craft Anything evidence.
 
-Each tool is a child process: argv list, no shell, stdin closed, a minimal environment, a timeout
-and capped stdout. Tool output is untrusted. It is validated here. Only fixed fields, numbers and
-the text of scripts REA saw running leave this module; that text is kept as inert files and is
-never executed or rendered.
+Each tool is a child process: argv list, no shell, stdin closed, a minimal environment, a deadline
+and capped stdout, killed and reaped on every path. Tool output is untrusted and is validated here.
+Only fixed fields, numbers and the text of scripts REA saw running leave this module; that text is
+kept as inert files and is never executed or rendered.
 """
 
+import contextlib
 import hashlib
 import json
 import os
@@ -13,9 +14,9 @@ import queue
 import re
 import shutil
 import subprocess
-import tempfile
 import threading
 import time
+import urllib.request
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -26,7 +27,6 @@ ENV_KEYS = ("PATH", "HOME")
 CRAFT_TIMEOUT_S = 60
 CRAFT_OUT_MAX = 1024 * 1024
 REA_OUT_MAX = 32 * 1024 * 1024  # REA may return 32 MiB of sources; over the cap fails the stage
-REA_EXTRA_TIMEOUT_S = 30
 SOURCE_DIR = "rea/sources"
 SOURCE_MAX = 1024 * 1024  # one script's text; a larger script is dropped with a reason
 SOURCES_TOTAL_MAX = 8 * 1024 * 1024  # all kept script text together
@@ -36,9 +36,12 @@ MAX_RANGES = 40
 MAX_COUNT = 10**9
 CHANGE = 0.01  # ponytail: 1% of pixels, a fixed threshold; tune on fixtures before trusting it.
 TOLERANCE = 8
+DEVTOOLS_WAIT_S = 10  # Chromium writes DevToolsActivePort shortly after it starts
 FUNCTION_NAME = re.compile(r"[A-Za-z_$][A-Za-z0-9_$.]{0,80}")
 EVIDENCE_ID = re.compile(r"ev_[0-9a-f]{64}")
 ENDPOINT = re.compile(r"http://127\.0\.0\.1:\d{1,5}")
+PORT = re.compile(r"\d{1,5}")
+BROWSER_PATH = re.compile(r"/devtools/browser/[A-Za-z0-9_-]{1,128}")
 TARGET_ID = re.compile(r"[A-Za-z0-9]{1,128}")
 ORIGIN = re.compile(r"https?://[A-Za-z0-9.-]{1,253}(:\d{1,5})?")
 CRAFT_VERSION = re.compile(r"craft-anything-cli (\d+\.\d+\.\d+)")
@@ -62,34 +65,69 @@ class ToolError(RuntimeError):
 
 
 def find(env_name, name):
-    """The tool's absolute path: env_name if set (must be an existing absolute file), else PATH."""
+    """The tool's absolute path: env_name if set (an executable file), else PATH."""
     configured = os.environ.get(env_name, "")
     if configured:
-        return configured if os.path.isabs(configured) and os.path.isfile(configured) else None
+        usable = os.path.isabs(configured) and os.path.isfile(configured)
+        return configured if usable and os.access(configured, os.X_OK) else None
     found = shutil.which(name)
     return os.path.abspath(found) if found else None
 
 
-def run(argv, *, timeout, cap):
-    """Stdout of one child process. ToolError on timeout, nonzero exit or output over cap."""
+def _spawn(argv, *, stdin, stdout):
+    """A child with PATH and HOME only and stderr discarded. A start failure is a stage error."""
     env = {key: os.environ[key] for key in ENV_KEYS if key in os.environ}
-    with tempfile.TemporaryFile() as out:
-        proc = subprocess.Popen(
-            argv, stdin=subprocess.DEVNULL, stdout=out, stderr=subprocess.DEVNULL, env=env
+    try:
+        return subprocess.Popen(
+            argv, stdin=stdin, stdout=stdout, stderr=subprocess.DEVNULL, env=env
         )
+    except OSError:
+        raise ToolError("cannot start") from None
+
+
+def _reap(proc):
+    """Kill the child if it still runs, then wait for it: no path leaves a child behind."""
+    if proc.poll() is None:
+        proc.kill()
+    proc.wait()
+
+
+def run(argv, *, timeout, cap):
+    """Stdout of one child process, read while it runs. ToolError on timeout, on output over cap
+    (the child is killed as soon as the cap is passed), on a nonzero exit or a start failure."""
+    proc = _spawn(argv, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE)
+    deadline = time.monotonic() + timeout
+    out = bytearray()
+    done = threading.Event()
+
+    def pump():
         try:
-            code = proc.wait(timeout=timeout)
+            while len(out) <= cap:
+                chunk = os.read(proc.stdout.fileno(), 65536)
+                if not chunk:
+                    break
+                out.extend(chunk)
+        except OSError:
+            pass
+        finally:
+            proc.stdout.close()
+            done.set()
+
+    threading.Thread(target=pump, daemon=True).start()
+    try:
+        if not done.wait(max(deadline - time.monotonic(), 0)):
+            raise ToolError("timeout")
+        if len(out) > cap:
+            raise ToolError("output too large")
+        try:
+            code = proc.wait(timeout=max(deadline - time.monotonic(), 0))
         except subprocess.TimeoutExpired:
-            proc.kill()
-            proc.wait()
             raise ToolError("timeout") from None
-        out.seek(0)
-        raw = out.read(cap + 1)
+    finally:
+        _reap(proc)
     if code != 0:
         raise ToolError("exit status")
-    if len(raw) > cap:
-        raise ToolError("output too large")
-    return raw
+    return bytes(out)
 
 
 def _no_constant(name):
@@ -99,7 +137,7 @@ def _no_constant(name):
 def _json(raw):
     try:
         data = json.loads(raw, parse_constant=_no_constant)
-    except ValueError:  # includes UnicodeDecodeError
+    except (ValueError, RecursionError):  # bad text, non-finite numbers, nesting too deep
         raise ToolError("bad output") from None
     return _dict(data)
 
@@ -163,6 +201,7 @@ def _script(raw):
         "script_id": _script_id(raw),
         "host": _host_of(raw.get("reported_url")),
         "functions": ran[:MAX_FUNCTIONS],
+        "truncated": len(ran) > MAX_FUNCTIONS,
     }
 
 
@@ -200,19 +239,21 @@ def clean_rea(raw, version, window_ms):
 
     Kept per script: host, sanitized function names with counts and clamped offset ranges, and
     the text of every script that ran. Dropped: request URLs, URL paths and every other REA string.
+    truncated is true when a cap cut any entry.
     """
     normalized = _dict(_json(raw).get("normalized_result"))
     texts = _texts_by_script(normalized)
     scripts = [_script(s) for s in _list(_dict(normalized.get("coverage")).get("scripts"))]
     scripts = [s for s in scripts if s["functions"]]
     scripts.sort(key=lambda s: -sum(f["count"] for f in s["functions"]))
+    truncated = len(scripts) > MAX_SCRIPTS
     observed, files, total = [], [], 0
     for script in scripts[:MAX_SCRIPTS]:
-        record, data = _keep_source(texts.get(script["script_id"]), len(files), total)
+        truncated = truncated or script.pop("truncated")
+        record, data = _keep_source(texts.get(script.pop("script_id")), len(files), total)
         if data is not None:
             files.append((record["file"], data))
             total += len(data)
-        script.pop("script_id")
         observed.append({**script, "source": record})
     observation = {
         "tool": "rea",
@@ -221,18 +262,20 @@ def clean_rea(raw, version, window_ms):
         "window_ms": window_ms,
         "scripts": observed,
         "requests": len(_list(normalized.get("requests"))),
+        "truncated": truncated,
     }
     return observation, files
 
 
 def publish_rea(folder, raw, version, window_ms):
-    """Write rea/sources/<n>.txt and rea-observation.json into the kit's staging folder."""
+    """Create rea/ and rea/sources/ exclusively, write the kept sources and rea-observation.json."""
     observation, files = clean_rea(raw, version, window_ms)
+    root = Path(folder)
+    (root / "rea").mkdir()
+    (root / "rea" / "sources").mkdir()
     for name, data in files:
-        path = Path(folder) / name
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_bytes(data)
-    publish_json(Path(folder) / "rea-observation.json", observation)
+        (root / name).write_bytes(data)
+    publish_json(root / "rea-observation.json", observation)
     return {"state": "captured", "version": version}
 
 
@@ -244,21 +287,21 @@ def _origin(url):
     return origin
 
 
-def rea_version(binary):
-    text = run([binary, "--version"], timeout=CRAFT_TIMEOUT_S, cap=4096).decode("utf-8", "replace")
+def rea_version(binary, timeout_s):
+    text = run([binary, "--version"], timeout=timeout_s, cap=4096).decode("utf-8", "replace")
     text = text.strip()
     if not REA_VERSION.fullmatch(text):
         raise ToolError("bad output")
     return text
 
 
-def rea_target(binary, endpoint, url):
+def rea_target(binary, endpoint, url, timeout_s):
     """The one page target at url, from REA's list. Zero or several matches fail the stage."""
     if not ENDPOINT.fullmatch(endpoint):
         raise ValueError("bad rea arguments")
     raw = run(
         [binary, "list-browser-targets", endpoint, "--format", "json"],
-        timeout=CRAFT_TIMEOUT_S,
+        timeout=timeout_s,
         cap=REA_TARGETS_MAX,
     )
     targets = _list(_dict(_json(raw).get("normalized_result")).get("targets"))
@@ -272,7 +315,7 @@ def rea_target(binary, endpoint, url):
     return target_id
 
 
-def rea_observe(binary, *, endpoint, target_id, url, window_ms):
+def rea_observe(binary, *, endpoint, target_id, url, window_ms, timeout_s):
     """REA's observation stdout for one page. The endpoint is the run's own loopback CDP."""
     if not (ENDPOINT.fullmatch(endpoint) and TARGET_ID.fullmatch(target_id)):
         raise ValueError("bad rea arguments")
@@ -288,7 +331,44 @@ def rea_observe(binary, *, endpoint, target_id, url, window_ms):
         "--format",
         "json",
     ]
-    return run(argv, timeout=window_ms / 1000 + REA_EXTRA_TIMEOUT_S, cap=REA_OUT_MAX)
+    return run(argv, timeout=timeout_s, cap=REA_OUT_MAX)
+
+
+def devtools_endpoint(profile):
+    """(endpoint, browser path) from the DevToolsActivePort that Chromium wrote into its profile.
+
+    ponytail: the file is read once it exists; a half-written file reads as bad output.
+    """
+    path = Path(profile) / "DevToolsActivePort"
+    deadline = time.monotonic() + DEVTOOLS_WAIT_S
+    while not path.exists():
+        if time.monotonic() >= deadline:
+            raise ToolError("no debugging port")
+        time.sleep(0.1)
+    try:
+        lines = path.read_text(encoding="utf-8").split("\n")
+    except (OSError, UnicodeDecodeError):
+        raise ToolError("bad output") from None
+    if len(lines) < 2 or not PORT.fullmatch(lines[0]) or not BROWSER_PATH.fullmatch(lines[1]):
+        raise ToolError("bad output")
+    port = int(lines[0])
+    if not 0 < port <= 65535:
+        raise ToolError("bad output")
+    return f"http://127.0.0.1:{port}", lines[1]
+
+
+def verify_browser(endpoint, path):
+    """Raise unless the listener on endpoint is the browser that wrote path (loopback, no proxy)."""
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+    try:
+        with opener.open(f"{endpoint}/json/version", timeout=5) as reply:
+            data = json.loads(reply.read(65536), parse_constant=_no_constant)
+    except (OSError, ValueError, RecursionError):
+        raise ToolError("not our browser") from None
+    url = data.get("webSocketDebuggerUrl") if isinstance(data, dict) else None
+    port = endpoint.rsplit(":", 1)[1]
+    if url != f"ws://127.0.0.1:{port}{path}":
+        raise ToolError("not our browser")
 
 
 def craft_version(binary):
@@ -300,89 +380,114 @@ def craft_version(binary):
 
 
 class _McpSession:
-    """One Craft MCP stdio session: a fixed tool allowlist, one child, a deadline.
+    """One Craft MCP stdio session: a fixed tool allowlist, one child, one deadline.
 
     Craft keeps evidence in the process that wrote it, so every call of a kit runs in this session.
-    ponytail: one reader thread; a line-at-a-time reader is enough for one short-lived run.
+    The child is reaped on every exit: a stage that fails at start, mid-call or at close.
+    ponytail: one reader thread and one writer thread per message; fine for one short run.
     """
 
     def __init__(self, binary, project):
         self.binary = binary
         self.project = str(project)
         self.proc = None
-        self.lines = None
+        self.lines = queue.Queue()
         self.total = 0
         self.next_id = 1
         self.deadline = time.monotonic() + MCP_DEADLINE_S
 
     def __enter__(self):
-        env = {key: os.environ[key] for key in ENV_KEYS if key in os.environ}
-        self.proc = subprocess.Popen(
-            [self.binary, "--project", self.project, "mcp"],
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.DEVNULL,
-            env=env,
-        )
-        self.lines = queue.Queue()
-        threading.Thread(target=self._read, daemon=True).start()
-        self._request(
-            "initialize",
-            {
-                "protocolVersion": MCP_PROTOCOL,
-                "capabilities": {},
-                "clientInfo": {"name": "piggyback", "version": __version__},
-            },
-        )
-        self._send({"jsonrpc": "2.0", "method": "notifications/initialized"})
+        try:
+            self.proc = _spawn(
+                [self.binary, "--project", self.project, "mcp"],
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+            )
+            threading.Thread(target=self._read, daemon=True).start()
+            self._request(
+                "initialize",
+                {
+                    "protocolVersion": MCP_PROTOCOL,
+                    "capabilities": {},
+                    "clientInfo": {"name": "piggyback", "version": __version__},
+                },
+            )
+            self._send({"jsonrpc": "2.0", "method": "notifications/initialized"})
+        except BaseException:
+            if self.proc is not None:
+                self._stop()
+            raise
         return self
 
     def __exit__(self, *_):
-        try:
+        self._stop()
+
+    def _stop(self):
+        """Kill and reap the child, then close its pipes. Always a kill: a graceful close would wait
+        on a stdin write still blocked in another thread. Craft writes each evidence file before its
+        reply, so nothing is lost.
+        ponytail: a kill at exit; add a graceful shutdown if Craft defers writes."""
+        _reap(self.proc)
+        with contextlib.suppress(OSError):
             self.proc.stdin.close()
-        except OSError:
-            pass
-        try:
-            self.proc.wait(timeout=5)
-        except subprocess.TimeoutExpired:
-            self.proc.kill()
-            self.proc.wait()
+        self.proc.stdout.close()
+
+    def _left(self):
+        return max(self.deadline - time.monotonic(), 0)
 
     def _read(self):
-        """Puts each stdout line on the queue; a line over the cap ends the stream as an error."""
-        for line in self.proc.stdout:
-            if len(line) > MCP_LINE_MAX:
-                self.lines.put(ToolError("output too large"))
-                return
-            self.lines.put(line)
+        """Each stdout line goes on the queue. Reads stop at the line cap and at the total cap."""
+        try:
+            while True:
+                line = self.proc.stdout.readline(MCP_LINE_MAX + 1)
+                if not line:
+                    break
+                if len(line) > MCP_LINE_MAX:  # readline stopped at the cap: no newline came
+                    self.lines.put(ToolError("output too large"))
+                    return
+                self.total += len(line)  # charged as the bytes arrive, not after queueing
+                if self.total > MCP_TOTAL_MAX:
+                    self.lines.put(ToolError("output too large"))
+                    return
+                self.lines.put(line)
+        except (OSError, ValueError):  # stdout closed under us: the session is over
+            pass
         self.lines.put(None)
 
     def _send(self, message):
-        try:
-            self.proc.stdin.write((json.dumps(message) + "\n").encode("utf-8"))
-            self.proc.stdin.flush()
-        except OSError:
-            raise ToolError("craft error") from None
+        data = (json.dumps(message) + "\n").encode("utf-8")
+        failed = []
+
+        def write():
+            try:
+                self.proc.stdin.write(data)
+                self.proc.stdin.flush()
+            except (OSError, ValueError):
+                failed.append(True)
+
+        writer = threading.Thread(target=write, daemon=True)
+        writer.start()
+        writer.join(self._left())
+        if writer.is_alive():
+            raise ToolError("timeout")
+        if failed:
+            raise ToolError("craft error")
 
     def _request(self, method, params):
         request_id = self.next_id
         self.next_id += 1
         self._send({"jsonrpc": "2.0", "id": request_id, "method": method, "params": params})
         while True:
-            left = self.deadline - time.monotonic()
             try:
-                line = self.lines.get(timeout=max(left, 0))
+                line = self.lines.get(timeout=self._left())
             except queue.Empty:
                 raise ToolError("timeout") from None
             if isinstance(line, ToolError):
                 raise line
             if line is None:
                 raise ToolError("craft error")
-            self.total += len(line)
-            if self.total > MCP_TOTAL_MAX:
-                raise ToolError("output too large")
             reply = _json(line)
-            if reply.get("id") != request_id:
+            if not _is_int(reply.get("id")) or reply["id"] != request_id:
                 continue
             if "error" in reply:
                 raise ToolError("craft error")
@@ -398,9 +503,10 @@ class _McpSession:
         if "structuredContent" in result:
             return _dict(result["structuredContent"])
         content = _list(result.get("content"))
-        if not content or not isinstance(content[0], dict):
+        text = content[0].get("text") if content and isinstance(content[0], dict) else None
+        if not isinstance(text, str):
             raise ToolError("bad output")
-        return _json(content[0].get("text", "").encode("utf-8"))
+        return _json(text)
 
 
 def _changed_box(result, fraction):
@@ -436,9 +542,9 @@ def craft_steps(binary, folder, host, stops):
     """Compare each stop's arrival frame with its late frame in one Craft MCP session.
 
     stops: (step, scroll_y, arrival_png, late_png). Returns the step numbers whose frames changed.
-    Writes folder/recon.cany (Craft's own project) and folder/HANDOFF.md.
+    Creates folder exclusively, with Craft's project folder/recon.cany and folder/HANDOFF.md.
     """
-    folder.mkdir(exist_ok=True)
+    folder.mkdir()
     project = folder / "recon.cany"
     changed, lines = [], []
     with _McpSession(binary, project) as mcp:
@@ -465,8 +571,6 @@ def craft_steps(binary, folder, host, stops):
             lines.append(f"- stop {step} (scroll y {scroll_y}): {fraction:.2%} of pixels changed")
             if fraction < CHANGE:
                 continue
-            if box is None:  # _compare already refuses a change without a box; kept for the type
-                raise ToolError("bad output")
             changed.append(step)
             mcp.tool(
                 "core_hypothesis_record",
@@ -483,5 +587,7 @@ def craft_steps(binary, folder, host, stops):
             "\n".join(lines) + "\n"
         )
         mcp.tool("core_handoff_write", {"text": text})
+    # The journal records every call's params, absolute frame paths included: it is not published.
+    shutil.rmtree(project / "journal", ignore_errors=True)
     (folder / "HANDOFF.md").write_text(text, encoding="utf-8")
     return changed

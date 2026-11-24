@@ -15,7 +15,7 @@ from urllib.parse import urlsplit
 from . import __version__, tools
 from . import brief as brief_mod
 from . import fingerprint as fingerprints
-from .measure import check_url, publish_json, refuse_links, write_measure
+from .measure import MeasureError, check_url, publish_json, refuse_links, write_measure
 from .server import write_new
 
 SCHEMA = 1
@@ -66,8 +66,17 @@ def _digest(path):
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 
 
+def _unsafe(path):
+    """True if path, or anything under it, is a symbolic link or not a plain file or folder."""
+    path = Path(path)
+    if path.is_symlink() or not (path.is_file() or path.is_dir()):
+        return True
+    return any(p.is_symlink() or not (p.is_file() or p.is_dir()) for p in path.rglob("*"))
+
+
 def _craft_stage(folder, host, samples):
-    """Craft compares each stop's arrival and late frames. A failure is a stage, not a crash."""
+    """Craft compares each stop's arrival and late frames. A failure is a stage, not a crash: its
+    folder is removed and the stage says why. Craft's journal is removed inside craft_steps."""
     binary = tools.find("PIGGYBACK_CRAFT", "craft-anything-cli")
     if binary is None:
         return {"state": "missing"}
@@ -80,12 +89,28 @@ def _craft_stage(folder, host, samples):
         )
         for step in samples["steps"]
     ]
+    stage = folder / "craft"
     try:
         version = tools.craft_version(binary)
-        changed = tools.craft_steps(binary, folder / "craft", host, stops)
-    except tools.ToolError as exc:
-        return {"state": "failed", "reason": exc.reason}
+        changed = tools.craft_steps(binary, stage, host, stops)
+    except (tools.ToolError, OSError) as exc:
+        shutil.rmtree(stage, ignore_errors=True)
+        return {"state": "failed", "reason": getattr(exc, "reason", "craft error")}
+    if _unsafe(stage):
+        shutil.rmtree(stage, ignore_errors=True)
+        return {"state": "failed", "reason": "unsafe output"}
     return {"state": "done", "version": version, "changed_steps": changed}
+
+
+def _rea_stage(folder, rea):
+    """REA's stage result. A failed or unsafe REA loses its folder and keeps a failed record."""
+    if rea["state"] == "captured" and _unsafe(folder / "rea"):
+        rea = {"state": "failed", "version": rea.get("version"), "reason": "unsafe output"}
+    if rea["state"] == "failed":
+        shutil.rmtree(folder / "rea", ignore_errors=True)
+        record = {"tool": "rea", "state": "failed", "reason": rea["reason"]}
+        publish_json(folder / "rea-observation.json", record)
+    return rea
 
 
 def _build(url, folder, text, allow_loopback):
@@ -103,6 +128,9 @@ def _build(url, folder, text, allow_loopback):
     write_new(folder / "BUILD-PROMPT.md", build_prompt(text))
     samples = fingerprints.load(folder / "scroll-samples.json")
     craft = _craft_stage(folder, urlsplit(fp["url"]).hostname or "", samples)
+    rea = _rea_stage(folder, fp.get("rea", {"state": "missing"}))
+    if _unsafe(folder):  # a link outside the optional stages: the whole kit is refused
+        raise MeasureError("the kit folder holds a symbolic link or a special file")
     kit = {
         "schema": SCHEMA,
         "url": fp["url"],
@@ -116,7 +144,7 @@ def _build(url, folder, text, allow_loopback):
             "design": "done",
             "prompt": "done",
             "craft": craft,
-            "rea": fp.get("rea", {"state": "missing"}),
+            "rea": rea,
             "motion": "not run",
         },
         # Every file in the folder: the scroll frames, Craft's project and handoff included.

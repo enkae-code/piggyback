@@ -62,7 +62,6 @@ def package(ident, port):
     with tempfile.TemporaryDirectory() as tmp:
         write_measure(base, tmp, allow_loopback=True)
         data = json.loads((Path(tmp) / "fingerprint.json").read_text(encoding="utf-8"))
-        data["screenshot"] = "screenshot.png"  # a file name, not the temp path it was measured to
         data = relabel(data, base, label)
         if f"127.0.0.1:{port}" in json.dumps(data):
             raise RuntimeError(f"{ident}: a loopback address is still in the fingerprint")

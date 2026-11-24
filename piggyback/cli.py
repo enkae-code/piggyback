@@ -78,11 +78,14 @@ def run_kit(url, out, request, allow_loopback):
         print(f"kit failed: {fingerprints.clean(exc, 200)}", file=sys.stderr)
         return 1
     print(f"wrote {kit_path}")
-    if json.loads(kit_path.read_text(encoding="utf-8"))["stages"]["craft"]["state"] == "missing":
-        print(
-            "piggyback: craft-anything-cli not found; install it or set PIGGYBACK_CRAFT",
-            file=sys.stderr,
-        )
+    stages = json.loads(kit_path.read_text(encoding="utf-8"))["stages"]
+    hints = {
+        "craft": "craft-anything-cli not found; install it or set PIGGYBACK_CRAFT",
+        "rea": "rea not found; install it or set PIGGYBACK_REA",
+    }
+    for name, hint in hints.items():
+        if stages[name]["state"] == "missing":
+            print(f"piggyback: {hint}", file=sys.stderr)
     return 0
 
 

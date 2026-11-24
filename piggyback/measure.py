@@ -13,7 +13,7 @@ import os
 import platform
 import re
 import secrets
-import socket
+import shutil
 import stat
 import subprocess
 import sys
@@ -26,13 +26,13 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 from . import __version__, netpolicy
-from .browser import NO_WEBRTC, launch
+from .browser import ARGS, CHANNELS, NO_WEBRTC, launch
 from .proxy import EgressProxy
 
 SCRIPT = (Path(__file__).parent / "measure.js").read_text(encoding="utf-8").strip().rstrip(";")
 BYPASS_ENV = "PLAYWRIGHT_DISABLE_FORCED_CHROMIUM_PROXIED_LOOPBACK"
 TOTAL_S = 90  # whole run, browser start included
-SCROLL_TOTAL_S = 180  # a scroll run also wheels through six steps, samples each one and runs REA
+SCROLL_TOTAL_S = 240  # a scroll run: six wheel steps with samples, then REA in its own browser
 SCROLL_NUM_LIMIT = (
     1_000_000  # page numbers are clamped to this: no real px, ms or opacity is larger
 )
@@ -46,7 +46,10 @@ SCROLL_STEPS = 5  # six frames: the top, then five equal steps down to the botto
 DENSE_MS = (0, 200, 500, 900)  # samples after each wheel move: the first second of motion
 REA_ARM_MS = 500  # REA attaches before the first wheel move
 REA_STEP_MS = 700  # pause after each wheel move, so REA sees the page's own work
-REA_WINDOW_MS = 6000  # REA's observation window; the wheel pass sits inside it
+# The window covers the slowest wheel pass: REA arms, then each step waits for a move and a pause.
+REA_WINDOW_MS = REA_ARM_MS + SCROLL_STEPS * (SCROLL_ARRIVE_MS + REA_STEP_MS)
+REA_STAGE_S = 40  # REA version, target and observation together: a slow REA fails only REA
+REA_BROWSER_ARGS = ["--remote-debugging-port=0", "--remote-debugging-address=127.0.0.1"]
 # Numbers and fixed words only: no text, HTML, URLs or class names leave the page.
 SCROLL_SAMPLE = """(withAnimations) => {
   const EASES = ['linear', 'ease', 'ease-in', 'ease-out', 'ease-in-out', 'step-start', 'step-end'];
@@ -208,6 +211,10 @@ def write_measure(
     )
     if "scroll" in result:
         publish_json(samples, result.pop("scroll"))
+    if result.get("screenshot"):
+        result["screenshot"] = (
+            shot.name
+        )  # beside the fingerprint; an absolute path leaks and goes stale
     publish_json(fingerprint, result)  # last: its presence marks the folder complete
     return fingerprint, shot
 
@@ -404,6 +411,20 @@ def _capture(req):
             Path(tmp).unlink(missing_ok=True)
 
 
+def _guard(egress, allow_loopback):
+    """Second layer for page requests, redirect hops included; the proxy is authoritative."""
+
+    def guard(route):
+        url = route.request.url
+        if netpolicy.url_allowed(url, allow_loopback):
+            route.continue_()
+        else:
+            egress.record(url)
+            route.abort("blockedbyclient")
+
+    return guard
+
+
 def _capture_page(req, tmp):
     from playwright.sync_api import sync_playwright
 
@@ -411,18 +432,11 @@ def _capture_page(req, tmp):
     allow_loopback = req["allow_loopback"]
     # The proxy is the enforcement point: every connection Chromium makes goes through it.
     with closing(EgressProxy(allow_loopback)) as egress, sync_playwright() as p:
-
-        def guard(route):
-            # Second layer for page requests, redirect hops included; the proxy is authoritative.
-            url = route.request.url
-            if netpolicy.url_allowed(url, allow_loopback):
-                route.continue_()
-            else:
-                egress.record(url)
-                route.abort("blockedbyclient")
-
+        guard = _guard(egress, allow_loopback)
         proxy = {"server": f"http://127.0.0.1:{egress.port}"}  # loopback is proxied by Playwright
-        browser, label, port = _launch_for(p, req, proxy)
+        browser, label = launch(
+            p, proxy=proxy
+        )  # fresh temporary profile per launch, removed on close
         try:
             ctx = browser.new_context(
                 viewport={"width": width, "height": height},
@@ -455,11 +469,10 @@ def _capture_page(req, tmp):
                 "viewport": {"width": width, "height": height},
                 "captured_at": captured_at,
             }
-            scroll, rea = (
-                _capture_scroll(ctx, req, page, port) if req.get("scroll_dir") else (None, None)
-            )
+            scroll = _capture_scroll(ctx, req, page) if req.get("scroll_dir") else None
         finally:
             browser.close()
+        rea = _rea_pass(p, req, egress) if scroll is not None and req.get("rea") else None
     result = {
         **fingerprint,
         "url": req["url"],
@@ -477,81 +490,112 @@ def _capture_page(req, tmp):
     return result
 
 
-class _DebugPort:
-    """The Playwright object with --remote-debugging-port added to every launch. browser.py's
-    argument list is shared, so the switch is added here, and only for a run that uses REA."""
+def _launch_rea(p, profile, proxy, viewport):
+    """The REA browser: a persistent profile and a loopback debugging port the OS picks (0, read
+    back from DevToolsActivePort). Same sandbox, WebRTC switch, proxy and init script as capture.
+    browser.launch() takes no profile, so its channel loop is repeated here."""
+    from .tools import ToolError  # tools imports this module: a top-level import would be circular
 
-    def __init__(self, playwright, port):
-        self._playwright = playwright
-        self._switch = f"--remote-debugging-port={port}"
-        self.chromium = self
-
-    def launch(self, **options):
-        options["args"] = [*options["args"], self._switch]
-        return self._playwright.chromium.launch(**options)
-
-
-def _launch_for(playwright, req, proxy):
-    """(browser, channel label, REA port or None). A port is picked only for a run that uses REA."""
-    port = _free_port() if req.get("rea") else None
-    browser, label = launch(
-        _DebugPort(playwright, port) if port else playwright, proxy=proxy
-    )  # fresh temporary profile per launch, removed on close
-    return browser, label, port
-
-
-def _free_port():
-    """A free loopback port for REA's debugging endpoint.
-    # ponytail: bind 0 then close: another process can take the port before Chromium binds it."""
-    with closing(socket.socket()) as sock:
-        sock.bind(("127.0.0.1", 0))
-        return sock.getsockname()[1]
+    width, height = viewport
+    for channel in CHANNELS:
+        try:
+            ctx = p.chromium.launch_persistent_context(
+                str(profile),
+                channel=channel,
+                chromium_sandbox=True,
+                args=[*ARGS, *REA_BROWSER_ARGS],
+                proxy=proxy,
+                viewport={"width": width, "height": height},
+                service_workers="block",
+                accept_downloads=False,
+            )
+        except Exception:  # the next channel; the stage fails only if none starts
+            continue
+        ctx.add_init_script(NO_WEBRTC)
+        return ctx
+    raise ToolError("browser unavailable")
 
 
-def _capture_rea(page, req, port, targets):
-    """REA observes the scroll page after the timing samples. A failure is a stage: the caller
-    still checks that the page was not replaced, and the kit is still published."""
+def _rea_pass(p, req, egress):
+    """REA observes the scroll page in its own short-lived browser: the capture browser has no
+    debugging port. A REA or browser failure is the rea stage; a page that was replaced or moved
+    refuses the kit (MeasureError). The profile is removed on every path."""
+    profile = Path(tempfile.mkdtemp(prefix="piggyback-rea-"))  # mkdtemp makes it owner-only
+    proxy = {"server": f"http://127.0.0.1:{egress.port}"}
+    result = {"version": None}
+    try:
+        ctx = _launch_rea(p, profile, proxy, req["viewport"])
+        try:
+            _rea_observe(ctx, req, profile, result)
+        finally:
+            ctx.close()
+    except MeasureError:
+        raise
+    except Exception as exc:  # a REA or browser failure is a stage, never a failed kit
+        return {"state": "failed", **result, "reason": getattr(exc, "reason", "page error")}
+    finally:
+        shutil.rmtree(profile, ignore_errors=True)
+    return {"state": "captured", **result}
+
+
+def _rea_observe(ctx, req, profile, result):
+    """Version, target and observation under one deadline. The wheel pass runs in observation."""
     from . import tools  # tools imports this module: a top-level import would be circular
 
     binary = req["rea"]
-    endpoint = f"http://127.0.0.1:{port}"
-    version = None
-    try:
-        version = tools.rea_version(binary)
-        page.evaluate("scrollTo(0, 0)")
-        url = page.url  # read here: the observer thread must not call Playwright
-        target = tools.rea_target(binary, endpoint, url)
-        outcome = {}
+    width, height = req["viewport"]
+    deadline = time.monotonic() + REA_STAGE_S
 
-        def observe():  # only REA's subprocess runs in this thread
-            try:
-                outcome["raw"] = tools.rea_observe(
-                    binary,
-                    endpoint=endpoint,
-                    target_id=target,
-                    url=url,
-                    window_ms=REA_WINDOW_MS,
-                )
-            except Exception as exc:
-                outcome["error"] = exc
+    def left():
+        return max(deadline - time.monotonic(), 1)
 
-        observer = threading.Thread(target=observe, daemon=True)
-        observer.start()
-        page.wait_for_timeout(REA_ARM_MS)
-        for k in range(1, SCROLL_STEPS + 1):
-            _scroll_to(page, targets[k] - targets[k - 1])
-            page.wait_for_timeout(REA_STEP_MS)
-        observer.join()
-        if "error" in outcome:
-            raise outcome["error"]
-        tools.publish_rea(Path(req["scroll_dir"]).parent, outcome["raw"], version, REA_WINDOW_MS)
-    except Exception as exc:
-        return {
-            "state": "failed",
-            "version": version,
-            "reason": getattr(exc, "reason", "page error"),
-        }
-    return {"state": "captured", "version": version}
+    endpoint, browser_path = tools.devtools_endpoint(profile)
+    tools.verify_browser(endpoint, browser_path)  # the listener must be this browser
+    result["version"] = tools.rea_version(binary, left())
+    page = ctx.new_page()
+    response = page.goto(req["url"], wait_until="load", timeout=NAV_MS)
+    status = response.status if response else None
+    _refuse_if_moved(status, req, page)
+    origin = _document_origin(page)
+    navigations = []
+    page.on("domcontentloaded", lambda _page: navigations.append(True))
+    page.wait_for_timeout(SCROLL_WAIT_MS)
+    _refuse_if_replaced(page, origin, navigations, status, req)
+    scrollable = page.evaluate("document.documentElement.scrollHeight - innerHeight")
+    targets = [round(scrollable * k / SCROLL_STEPS) for k in range(SCROLL_STEPS + 1)]
+    url = page.url  # read here: the observer thread must not call Playwright
+    target = tools.rea_target(binary, endpoint, url, left())
+    outcome = {}
+
+    def observe():  # only REA's subprocess runs in this thread
+        try:
+            outcome["raw"] = tools.rea_observe(
+                binary,
+                endpoint=endpoint,
+                target_id=target,
+                url=url,
+                window_ms=REA_WINDOW_MS,
+                timeout_s=left(),
+            )
+        except Exception as exc:
+            outcome["error"] = exc
+
+    observer = threading.Thread(target=observe, daemon=True)
+    observer.start()
+    page.wait_for_timeout(REA_ARM_MS)
+    page.mouse.move(width / 2, height / 2)
+    for k in range(1, SCROLL_STEPS + 1):
+        _scroll_to(page, targets[k] - targets[k - 1])
+        page.wait_for_timeout(REA_STEP_MS)
+    observer.join(left())
+    if observer.is_alive():
+        raise tools.ToolError("timeout")
+    if "error" in outcome:
+        raise outcome["error"]
+    _refuse_if_replaced(page, origin, navigations, status, req)
+    tools.publish_rea(
+        Path(req["scroll_dir"]).parent, outcome["raw"], result["version"], REA_WINDOW_MS
+    )
 
 
 def _sample(page, with_animations):
@@ -621,7 +665,7 @@ def _refuse_if_replaced(page, origin, navigations, status, req):
     _refuse_if_moved(status, req, page)
 
 
-def _capture_scroll(ctx, req, first_page, port=None):
+def _capture_scroll(ctx, req, first_page):
     """Frames from the top to the bottom on a fresh page in the same context, with motion samples.
 
     The first page closes first. Each frame is written beside its final name and published only
@@ -670,7 +714,6 @@ def _capture_scroll(ctx, req, first_page, port=None):
                 }
             )
         scrollable_end = page.evaluate("document.documentElement.scrollHeight - innerHeight")
-        rea = _capture_rea(page, req, port, targets) if port else None
         _refuse_if_replaced(page, origin, navigations, status, req)
         for tmp, final in pending:
             os.replace(tmp, final)
@@ -695,7 +738,7 @@ def _capture_scroll(ctx, req, first_page, port=None):
         "final_host": urlsplit(page.url).hostname,
         "coverage": {"scroll": scroll_coverage(scrollable, scrollable_end, steps)},
         "steps": steps,
-    }, rea
+    }
 
 
 def scroll_coverage(scrollable, scrollable_end, steps):
