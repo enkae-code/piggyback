@@ -1,5 +1,6 @@
 import contextlib
 import io
+import json
 import os
 import subprocess
 import sys
@@ -909,7 +910,39 @@ class ReaWorkerTests(unittest.TestCase):
 
     def test_a_refusal_from_the_rea_worker_refuses_the_kit(self):
         with self.assertRaises(measure_mod.MeasureError):
-            self.measure_with(CAPTURE, {"error": "page moved"})
+            self.measure_with(CAPTURE, {"error": "page moved", "refused": True})
+
+    def test_a_setup_error_in_the_rea_worker_keeps_the_capture(self):
+        result, _ = self.measure_with(CAPTURE, {"error": "proxy could not bind"})
+        self.assertEqual(result["rea"], {"state": "failed", "reason": "page error"})
+        self.assertEqual(result["scroll"], CAPTURE["scroll"])
+
+
+class WorkerRefusalTests(unittest.TestCase):
+    """The worker says a refusal is a refusal; any other failure carries no such mark."""
+
+    def worker_output(self, error):
+        out = io.StringIO()
+        with (
+            mock.patch.object(sys, "stdin", io.StringIO('{"mode": "rea"}')),
+            mock.patch.object(measure_mod, "_capture_rea", side_effect=error),
+            mock.patch.object(measure_mod.signal, "signal"),
+            contextlib.redirect_stdout(out),
+        ):
+            measure_mod._worker()
+        return json.loads(out.getvalue())
+
+    def test_a_page_refusal_is_marked_refused_and_keeps_its_status(self):
+        reply = self.worker_output(
+            measure_mod.MeasureError("page moved", status=301, final_url="http://x/")
+        )
+        self.assertIs(reply["refused"], True)
+        self.assertEqual(reply["status"], 301)
+
+    def test_a_setup_failure_is_not_marked_refused(self):
+        reply = self.worker_output(RuntimeError("proxy could not bind"))
+        self.assertNotIn("refused", reply)
+        self.assertIn("error", reply)
 
 
 class KillTreeTests(unittest.TestCase):
@@ -933,6 +966,14 @@ class KillTreeTests(unittest.TestCase):
     def test_taskkill_has_a_timeout(self):
         _, run = self.kill_on_windows()
         self.assertLessEqual(run.call_args.kwargs["timeout"], 10)
+
+    @unittest.skipUnless(os.name == "posix", "killpg is POSIX")
+    def test_a_group_whose_only_member_is_a_zombie_leader_is_not_an_error(self):
+        # macOS answers EPERM, not ESRCH, for a group left with only an unreaped leader.
+        with mock.patch.object(
+            measure_mod.os, "killpg", side_effect=PermissionError(1, "Operation not permitted")
+        ):
+            measure_mod.kill_tree(mock.Mock(pid=4242))
 
 
 FAKE_WORKER = """import signal, subprocess, sys, time
@@ -983,6 +1024,54 @@ class WorkerTimeoutTests(unittest.TestCase):
             elapsed = time.monotonic() - started
         self.assertFalse(alive(int(pid_file.read_text())))
         self.assertLess(elapsed, 2 + measure_mod.WORKER_GRACE_S + 3)
+
+    def test_the_timeout_path_needs_no_os_waitid(self):
+        saved = os.waitid
+        delattr(os, "waitid")
+        self.addCleanup(setattr, os, "waitid", saved)
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        pid_file = Path(tmp.name) / "tool.pid"
+        script = Path(tmp.name) / "fake-worker"
+        body = FAKE_WORKER.format(repo=str(Path(__file__).resolve().parents[1]), pid=str(pid_file))
+        script.write_text(f"#!{sys.executable}\n" + body, encoding="utf-8")
+        script.chmod(0o755)
+        self.addCleanup(lambda: pid_file.exists() and _kill_quietly(int(pid_file.read_text())))
+        with mock.patch.object(sys, "executable", str(script)):
+            with self.assertRaises(measure_mod.MeasureError):
+                measure_mod._run_worker({"scroll_dir": None}, timeout=2)
+        self.assertTrue(_gone(int(pid_file.read_text())))
+
+    def test_a_worker_that_exited_while_a_grandchild_holds_stderr_is_killed_with_it(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        pid_file = Path(tmp.name) / "grandchild.pid"
+        script = Path(tmp.name) / "fake-worker"
+        body = GRANDCHILD.format(pid=str(pid_file))
+        script.write_text(f"#!{sys.executable}\n" + body, encoding="utf-8")
+        script.chmod(0o755)
+        self.addCleanup(lambda: pid_file.exists() and _kill_quietly(int(pid_file.read_text())))
+        with mock.patch.object(sys, "executable", str(script)):
+            started = time.monotonic()
+            with self.assertRaises(measure_mod.MeasureError):
+                measure_mod._run_worker({"scroll_dir": None}, timeout=2)
+            elapsed = time.monotonic() - started
+        self.assertTrue(_gone(int(pid_file.read_text())))
+        # The grandchild sleeps 30 s: only the kill keeps this under the bound.
+        self.assertLess(elapsed, 2 + measure_mod.WORKER_GRACE_S + 3)
+
+
+GRANDCHILD = """import subprocess, sys
+child = subprocess.Popen(["sleep", "30"], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL)
+open({pid!r}, "w").write(str(child.pid))
+sys.exit(0)
+"""
+
+
+def _gone(pid):
+    """True once pid is no longer running: gone, or a zombie nobody will reap."""
+    state = subprocess.run(["ps", "-o", "stat=", "-p", str(pid)], capture_output=True, text=True)
+    return not state.stdout.strip() or state.stdout.strip().startswith("Z")
 
 
 def _kill_quietly(pid):

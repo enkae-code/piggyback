@@ -951,7 +951,7 @@ class ReaRunTests(KitCase):
             ],
         )
         self.assertNotIn("PIGGYBACK_SECRET_TEST", seen["env"])
-        # LC_CTYPE is set by the Python interpreter itself (locale coercion), not inherited.
+        # ENV_OK also lists the keys the interpreter and macOS add on their own; none is inherited.
         self.assertLessEqual(set(seen["env"]), ENV_OK)
 
     @unittest.skipUnless(

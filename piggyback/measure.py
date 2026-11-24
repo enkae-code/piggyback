@@ -240,26 +240,26 @@ def kill_tree(proc):
             with contextlib.suppress(OSError):
                 proc.kill()
     else:
-        with contextlib.suppress(ProcessLookupError):
+        # macOS answers EPERM, not ESRCH, when the group's only member is an unreaped zombie leader.
+        # Every member is our own child, so EPERM can only mean that.
+        with contextlib.suppress(ProcessLookupError, PermissionError):
             os.killpg(proc.pid, signal.SIGKILL)
 
 
 def _stop_worker(proc):
-    """SIGTERM first, so the worker's own cleanup closes its browsers and reaps its tools. Then its
-    whole tree is killed, even after a clean exit: a browser helper left in the group keeps stderr
-    open. The worker is reaped only after that (by the caller), so its group id is still ours.
-    Windows: taskkill walks the tree at once."""
-    if os.name != "nt":
-        proc.terminate()
-        end = time.monotonic() + WORKER_GRACE_S
-        # WNOWAIT: see the exit without reaping, so the group id stays reserved.
-        while time.monotonic() < end and not _exited(proc.pid):
-            time.sleep(0.05)
-    kill_tree(proc)
-
-
-def _exited(pid):
-    return os.waitid(os.P_PID, pid, os.WEXITED | os.WNOHANG | os.WNOWAIT) is not None
+    """Stop a timed-out worker: SIGTERM, a fixed grace for its own cleanup, then its whole tree.
+    The kill is in finally, so nothing during the grace can skip it. The worker is never polled,
+    so its id is still ours when the tree is killed; the caller reaps it after. Windows: taskkill
+    walks the tree at once."""
+    if os.name == "nt":
+        kill_tree(proc)
+        return
+    try:
+        with contextlib.suppress(ProcessLookupError):
+            os.kill(proc.pid, signal.SIGTERM)
+        time.sleep(WORKER_GRACE_S)
+    finally:
+        kill_tree(proc)
 
 
 def _run_worker(request, timeout=None):
@@ -350,7 +350,14 @@ def _rea_worker(request):
     except MeasureError as exc:
         return {"state": "failed", "reason": "timeout" if "timed out" in str(exc) else "page error"}
     if "error" in result:
-        raise MeasureError(result["error"])
+        if result.get("refused"):
+            raise MeasureError(
+                result["error"],
+                status=result.get("status"),
+                final_url=result.get("final_url"),
+                screenshot=result.get("screenshot"),
+            )
+        return {"state": "failed", "reason": "page error"}
     return result["rea"]
 
 
@@ -1013,7 +1020,8 @@ def _worker():
     except Exception as exc:  # Playwright and launch errors
         text = str(exc).strip()
         out: dict = {"error": text or repr(exc)}
-        if isinstance(exc, MeasureError):
+        if isinstance(exc, MeasureError):  # a page refusal, not a setup failure
+            out["refused"] = True
             out["status"], out["final_url"] = exc.status, exc.final_url
             out["screenshot"] = exc.screenshot
         print(json.dumps(out))
