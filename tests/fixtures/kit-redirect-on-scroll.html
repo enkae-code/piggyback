@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Kit fixture: redirect on scroll</title>
+</head>
+<body style="margin: 0">
+<main style="min-height: 3200px">
+  <h1>Redirect on scroll fixture</h1>
+</main>
+<!-- On the first scroll, the page moves to another loopback host (same port): a host change. -->
+<script>
+  addEventListener('scroll', function () {
+    location.href = `http://127.0.0.2:${location.port}/plain.html`;
+  }, { once: true });
+</script>
+</body>
+</html>

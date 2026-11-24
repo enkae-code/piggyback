@@ -90,7 +90,7 @@ Each URL gets a folder under `measured/` with `fingerprint.json` and `screenshot
 piggyback kit https://example.com --out kit/ --request "a landing page for a boat studio"
 ```
 
-The folder holds the screenshot, six scroll frames (`scroll/frame-0.png` to `frame-5.png`), `scroll-samples.json` (measured scroll and motion values), `BRIEF.md`, `DESIGN.md` and `BUILD-PROMPT.md`. `kit.json` is written last and lists a SHA-256 for every file; its presence means the kit is complete. The folder must be new or empty, and `--request` takes 1 to 500 characters. Motion from REA is not part of the kit yet.
+The folder holds the screenshot, six scroll frames (`scroll/frame-0.png` to `frame-5.png`), `scroll-samples.json` (measured scroll and motion values), `BRIEF.md`, `DESIGN.md` and `BUILD-PROMPT.md`. `kit.json` is written last and lists a SHA-256 for every file; its presence means the kit is complete. The folder must be new or empty, and `--request` takes 1 to 500 characters. The kit is built in a hidden `.kit-*` folder beside `--out` and renamed into place at the end, so a failed run leaves no partial kit. A kit run takes up to 150 s (a plain measure 90 s). `scroll-samples.json` records `coverage`: `done`, `partial` (a wheel step timed out or the page stopped short of the bottom) or `none` (the page did not scroll). Motion from REA is not part of the kit yet.
 
 ## Use with your agent
 

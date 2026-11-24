@@ -7,7 +7,7 @@ from pathlib import Path
 if importlib.util.find_spec("playwright") is None:
     raise unittest.SkipTest("playwright not installed; run with the measure extra")
 
-from piggyback.measure import write_measure  # noqa: E402
+from piggyback.measure import MeasureError, write_measure  # noqa: E402
 from tests.test_measure_integration import serve  # noqa: E402
 
 MARKER = "kit-marker-7f3a9c"  # in both fixtures' visible text and an HTML comment
@@ -80,6 +80,34 @@ class KitScrollIntegration(unittest.TestCase):
                 values.setdefault(e["index"], set()).add((json.dumps(e["transform"]), e["opacity"]))
         self.assertTrue(values)
         self.assertTrue(all(len(v) == 1 for v in values.values()))
+
+    def test_a_host_change_during_scroll_refuses_the_whole_kit(self):
+        # 127.0.0.2 is another loopback host on the same port: the page moves there on scroll.
+        try:
+            other = serve(host="127.0.0.2", port=self.server.server_address[1])
+        except OSError as exc:
+            self.skipTest(f"cannot bind 127.0.0.2 on this host: {exc}")
+        self.addCleanup(other.server_close)
+        self.addCleanup(other.shutdown)
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        out = Path(tmp.name) / "kit"
+        with self.assertRaisesRegex(MeasureError, "navigated during its capture"):
+            write_measure(
+                f"{self.base}/kit-redirect-on-scroll.html", out, allow_loopback=True, scroll=True
+            )
+        self.assertFalse((out / "scroll-samples.json").exists())
+        self.assertEqual(list((out / "scroll").glob("frame-*.png")), [])
+
+    def test_a_denied_request_during_scroll_is_recorded_as_blocked(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        out = Path(tmp.name) / "kit"
+        write_measure(
+            f"{self.base}/kit-denied-on-scroll.html", out, allow_loopback=True, scroll=True
+        )
+        fingerprint = json.loads((out / "fingerprint.json").read_text(encoding="utf-8"))
+        self.assertIn("http://10.0.0.1/kit-probe.png", fingerprint["blocked_requests"])
 
     def test_samples_carry_no_page_text_html_or_urls(self):
         for name in ("kit-motion.html", "kit-static.html"):

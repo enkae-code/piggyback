@@ -1,11 +1,13 @@
 """`piggyback kit`: one folder from one reference URL, for an agent to build from.
 
-Stages run in order: capture (screenshot, scroll frames, scroll samples, fingerprint), then
-BRIEF.md, DESIGN.md and BUILD-PROMPT.md, then kit.json last. kit.json present = kit complete.
+The whole kit is built in a private staging folder beside --out, then renamed into place as one
+step. --out holds a complete kit or nothing: a failed stage removes the staging folder.
 """
 
 import hashlib
 import os
+import shutil
+import tempfile
 from pathlib import Path
 
 from . import __version__
@@ -53,40 +55,29 @@ def check_request(request):
 
 
 def build_prompt(request):
-    return PROMPT_START + request + PROMPT_END
+    # ponytail: PROMPT_END opens with a full stop; a request that already ends in one skips it.
+    end = PROMPT_END[1:] if request.endswith(".") else PROMPT_END
+    return PROMPT_START + request + end
 
 
 def _fresh_folder(out):
     refuse_links(out)
     if os.path.lexists(out) and (not os.path.isdir(out) or os.listdir(out)):
-        if not os.path.isdir(out):
-            state = "is not a folder"
-        elif os.path.isfile(os.path.join(out, "kit.json")):
-            state = "holds a complete kit"
-        else:
-            state = "holds an incomplete kit (no kit.json): remove it before re-running"
-        raise ValueError(f"{out} must be a new or empty folder; it {state}")
+        raise ValueError(f"{out} must be a new or empty folder")
 
 
 def _digest(path):
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 
 
-def make(url, out, request, *, allow_loopback=False):
-    """Write one kit into out (new or empty). Returns kit.json's path; raises on a failed stage."""
-    text = check_request(request)
-    url = check_url(url, allow_loopback)
-    _fresh_folder(out)
-    out_dir = Path(out)
-    # Before any browser runs. An empty folder holds no link, so this is the cheap guard.
-    refuse_links(*(out_dir / name for name in (*ARTIFACTS, "kit.json")))
-    out_dir.mkdir(parents=True, exist_ok=True)
-    write_measure(url, out_dir, allow_loopback=allow_loopback, scroll=True)
-    fp = fingerprints.load(out_dir / "fingerprint.json")
-    write_new(out_dir / "BRIEF.md", brief_mod.brief([fp]))
-    write_new(out_dir / "DESIGN.md", brief_mod.design_md(fp))
-    write_new(out_dir / "BUILD-PROMPT.md", build_prompt(text))
-    scroll_coverage = fingerprints.load(out_dir / "scroll-samples.json")["coverage"]["scroll"]
+def _build(url, folder, text, allow_loopback):
+    """Every stage, into folder. A failed stage raises; the caller removes folder."""
+    write_measure(url, folder, allow_loopback=allow_loopback, scroll=True)
+    fp = fingerprints.load(folder / "fingerprint.json")
+    write_new(folder / "BRIEF.md", brief_mod.brief([fp]))
+    write_new(folder / "DESIGN.md", brief_mod.design_md(fp))
+    write_new(folder / "BUILD-PROMPT.md", build_prompt(text))
+    scroll_coverage = fingerprints.load(folder / "scroll-samples.json")["coverage"]["scroll"]
     kit = {
         "schema": SCHEMA,
         "url": fp["url"],
@@ -101,8 +92,26 @@ def make(url, out, request, *, allow_loopback=False):
             "prompt": "done",
             "motion": "not run",
         },
-        "artifacts": {name: _digest(out_dir / name) for name in ARTIFACTS},
+        "artifacts": {name: _digest(folder / name) for name in ARTIFACTS},
     }
-    kit_path = out_dir / "kit.json"
-    publish_json(kit_path, kit)  # last: its presence marks the kit complete
-    return kit_path
+    publish_json(folder / "kit.json", kit)  # last: its presence marks the kit complete
+
+
+def make(url, out, request, *, allow_loopback=False):
+    """Write one kit into out (new or empty), all at once. Returns kit.json's path."""
+    text = check_request(request)
+    url = check_url(url, allow_loopback)
+    out_dir = Path(out)
+    _fresh_folder(out_dir)
+    out_dir.parent.mkdir(parents=True, exist_ok=True)
+    staging = Path(tempfile.mkdtemp(dir=out_dir.parent, prefix=".kit-"))  # owner-only: 0700
+    try:
+        _build(url, staging, text, allow_loopback)
+        try:
+            os.rename(staging, out_dir)  # one step; fails if out_dir has become non-empty
+        except OSError as exc:
+            raise ValueError(f"{out} must be a new or empty folder ({exc.strerror})") from None
+    except BaseException:
+        shutil.rmtree(staging, ignore_errors=True)
+        raise
+    return out_dir / "kit.json"

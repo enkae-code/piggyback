@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Kit fixture: denied request on scroll</title>
+</head>
+<body style="margin: 0">
+<main style="min-height: 3200px">
+  <h1>Denied request on scroll fixture</h1>
+</main>
+<!-- On the first scroll, the page asks for a private-range address: the route guard must refuse it. -->
+<script>
+  addEventListener('scroll', function () {
+    new Image().src = 'http://10.0.0.1/kit-probe.png';
+  }, { once: true });
+</script>
+</body>
+</html>
