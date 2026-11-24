@@ -1204,5 +1204,51 @@ class BuildPromptTests(unittest.TestCase):
         )
 
 
+class KitUnsafeStageTests(KitCase):
+    def run_kit(self, out_name, craft=None, write=None):
+        out = self.root / out_name
+        log = self.root / f"{out_name}.log"
+        binary = craft or fake_craft(self.root, LOG=str(log))
+        with (
+            mock.patch.dict(os.environ, {"PIGGYBACK_CRAFT": binary}),
+            mock.patch("piggyback.kit.write_measure", side_effect=write or fake_write_measure),
+            mock.patch("piggyback.brief.brief", return_value="# Design brief\n"),
+            mock.patch("piggyback.brief.design_md", return_value="---\nname: x\n---\n"),
+        ):
+            path = kit.make(URL, out, "a landing page")
+        return json.loads(path.read_text(encoding="utf-8")), out
+
+    def test_a_handoff_symlink_left_by_craft_fails_the_stage_and_leaves_the_outside_file_alone(
+        self,
+    ):
+        outside = self.root / "outside.txt"
+        outside.write_bytes(b"outside original\n")
+        craft = fake_craft(self.root, MODE="link_handoff", OUTSIDE=str(outside))
+        data, out = self.run_kit("kit", craft=craft)
+        self.assertEqual(data["stages"]["craft"], {"state": "failed", "reason": "unsafe output"})
+        self.assertEqual(outside.read_bytes(), b"outside original\n")
+        self.assertFalse((out / "craft").exists())
+        self.assertFalse(any(p.is_symlink() for p in out.rglob("*")))
+
+    def test_a_rea_folder_that_is_a_symlink_is_removed_and_the_kit_publishes(self):
+        target = self.root / "elsewhere"
+        target.mkdir()
+        (target / "keep.txt").write_text("keep", encoding="utf-8")
+
+        def write(url, out_dir, *, scroll=False, **_):
+            out = Path(out_dir)
+            fake_write_measure(url, out, scroll=scroll)
+            fp = json.loads((out / "fingerprint.json").read_text(encoding="utf-8"))
+            fp["rea"] = {"state": "captured", "version": "6.7.0"}
+            (out / "fingerprint.json").write_text(json.dumps(fp), encoding="utf-8")
+            os.symlink(target, out / "rea")
+            return out / "fingerprint.json", out / "screenshot.png"
+
+        data, out = self.run_kit("kit", write=write)
+        self.assertEqual(data["stages"]["rea"]["state"], "failed")
+        self.assertFalse(os.path.lexists(out / "rea"))
+        self.assertEqual((target / "keep.txt").read_text(encoding="utf-8"), "keep")
+
+
 if __name__ == "__main__":
     unittest.main()

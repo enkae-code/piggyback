@@ -322,5 +322,106 @@ class PublishReaTests(unittest.TestCase):
                 tools.publish_rea(Path(tmp), REA_JSON, "6.7.0", 9000)
 
 
+class CraftTreeSafetyTests(unittest.TestCase):
+    """MAJOR 1: Craft's tree is validated before anything it could redirect is written."""
+
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.root = Path(tmp.name)
+        self.outside = self.root / "outside.txt"
+        self.outside.write_bytes(b"outside original\n")
+
+    def steps_into(self, folder, binary):
+        stops = [
+            (
+                k,
+                300 * k,
+                folder / "scroll" / f"frame-{k}-arrival.png",
+                folder / "scroll" / f"frame-{k}.png",
+            )
+            for k in range(3)
+        ]
+        return tools.craft_steps(binary, folder / "craft", "happyrobot.ai", stops)
+
+    def test_a_handoff_symlink_left_by_craft_never_redirects_the_write(self):
+        folder = self.root / "kit"
+        folder.mkdir()
+        binary = fake(self.root, MODE="link_handoff", OUTSIDE=str(self.outside))
+        with self.assertRaises(tools.ToolError):
+            self.steps_into(folder, binary)
+        self.assertEqual(self.outside.read_bytes(), b"outside original\n")
+
+    def test_a_symlinked_project_parent_never_lets_the_journal_removal_escape(self):
+        folder = self.root / "kit"
+        folder.mkdir()
+        binary = fake(self.root, MODE="link_project", OUTSIDE=str(self.outside))
+        with self.assertRaises(tools.ToolError):
+            self.steps_into(folder, binary)
+        self.assertEqual(self.outside.read_bytes(), b"outside original\n")
+        self.assertTrue(self.outside.exists())
+
+    def test_a_hardlink_inside_craft_is_refused(self):
+        folder = self.root / "kit"
+        folder.mkdir()
+        binary = fake(self.root, MODE="hardlink_out", OUTSIDE=str(self.outside))
+        with self.assertRaises(tools.ToolError) as ctx:
+            self.steps_into(folder, binary)
+        self.assertEqual(ctx.exception.reason, "unsafe output")
+        self.assertEqual(self.outside.read_bytes(), b"outside original\n")
+
+    def test_a_clean_run_writes_handoff_exclusively_with_mode_0600(self):
+        folder = self.root / "kit"
+        folder.mkdir()
+        self.steps_into(folder, fake(self.root))
+        handoff = folder / "craft" / "HANDOFF.md"
+        self.assertEqual(handoff.stat().st_mode & 0o777, 0o600)
+        self.assertFalse(handoff.is_symlink())
+
+
+class McpBoundedWriteTests(unittest.TestCase):
+    """MINOR 10: a child that stops reading stdin fails within the deadline, by measured time."""
+
+    def test_a_stalled_write_fails_within_a_short_deadline(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        root = Path(tmp.name)
+        started = time.monotonic()
+        with (
+            mock.patch.object(tools, "MCP_DEADLINE_S", 1),
+            self.assertRaises(tools.ToolError) as ctx,
+            tools._McpSession(fake(root, MODE="stall"), root / "p") as mcp,
+        ):
+            mcp.tool("core_brief_write", {"text": "x" * 4_000_000})
+        self.assertEqual(ctx.exception.reason, "timeout")
+        self.assertLess(time.monotonic() - started, 15)
+
+
+class RemoveUnsafeRootTests(unittest.TestCase):
+    """MINOR 3: an unsafe stage root is unlinked, never followed."""
+
+    def test_a_symlink_where_a_folder_should_be_is_unlinked_not_followed(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        root = Path(tmp.name)
+        target = root / "elsewhere"
+        target.mkdir()
+        (target / "keep.txt").write_text("keep", encoding="utf-8")
+        stage = root / "rea"
+        os.symlink(target, stage)
+        tools.remove_tree(stage)
+        self.assertFalse(os.path.lexists(stage))
+        self.assertEqual((target / "keep.txt").read_text(encoding="utf-8"), "keep")
+
+    def test_a_real_folder_tree_is_removed(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        stage = Path(tmp.name) / "craft"
+        (stage / "sub").mkdir(parents=True)
+        (stage / "sub" / "f").write_text("x", encoding="utf-8")
+        tools.remove_tree(stage)
+        self.assertFalse(stage.exists())
+
+
 if __name__ == "__main__":
     unittest.main()

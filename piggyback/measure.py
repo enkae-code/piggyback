@@ -472,6 +472,7 @@ def _capture_page(req, tmp):
             scroll = _capture_scroll(ctx, req, page) if req.get("scroll_dir") else None
         finally:
             browser.close()
+        captured_blocked = list(egress.blocked)  # the capture's own blocks, before REA's pass
         rea = _rea_pass(p, req, egress) if scroll is not None and req.get("rea") else None
     result = {
         **fingerprint,
@@ -480,7 +481,7 @@ def _capture_page(req, tmp):
         "browser": label,
         "captured_at": captured_at,
         "capture": receipt,
-        "blocked_requests": egress.blocked,
+        "blocked_requests": captured_blocked,
         "screenshot": req["screenshot"],
     }
     if scroll is not None:
@@ -490,13 +491,25 @@ def _capture_page(req, tmp):
     return result
 
 
-def _launch_rea(p, profile, proxy, viewport):
-    """The REA browser: a persistent profile and a loopback debugging port the OS picks (0, read
-    back from DevToolsActivePort). Same sandbox, WebRTC switch, proxy and init script as capture.
-    browser.launch() takes no profile, so its channel loop is repeated here."""
+def _remaining(deadline):
+    """Seconds left on the REA stage. An expired deadline is a timeout: no call starts unfunded."""
     from .tools import ToolError  # tools imports this module: a top-level import would be circular
 
-    width, height = viewport
+    left = deadline - time.monotonic()
+    if left <= 0:
+        raise ToolError("timeout")
+    return left
+
+
+def _launch_rea(p, profile, egress, req, deadline):
+    """The REA browser: a persistent profile and a loopback debugging port the OS picks (0, read
+    back from DevToolsActivePort). Same sandbox, WebRTC switch, proxy, request guard and init
+    script as capture. browser.launch() takes no profile, so its channel loop is repeated here.
+    Each launch gets the time left as its timeout; a failure after the deadline is a timeout."""
+    from .tools import ToolError  # tools imports this module: a top-level import would be circular
+
+    width, height = req["viewport"]
+    proxy = {"server": f"http://127.0.0.1:{egress.port}"}
     for channel in CHANNELS:
         try:
             ctx = p.chromium.launch_persistent_context(
@@ -508,9 +521,12 @@ def _launch_rea(p, profile, proxy, viewport):
                 viewport={"width": width, "height": height},
                 service_workers="block",
                 accept_downloads=False,
+                timeout=int(_remaining(deadline) * 1000),
             )
-        except Exception:  # the next channel; the stage fails only if none starts
+        except Exception:  # the next channel; an expired deadline is the stage's timeout
+            _remaining(deadline)
             continue
+        ctx.route("**/*", _guard(egress, req["allow_loopback"]))
         ctx.add_init_script(NO_WEBRTC)
         return ctx
     raise ToolError("browser unavailable")
@@ -518,42 +534,42 @@ def _launch_rea(p, profile, proxy, viewport):
 
 def _rea_pass(p, req, egress):
     """REA observes the scroll page in its own short-lived browser: the capture browser has no
-    debugging port. A REA or browser failure is the rea stage; a page that was replaced or moved
-    refuses the kit (MeasureError). The profile is removed on every path."""
+    debugging port. One deadline covers the whole stage, started before the launch. A REA or browser
+    failure is the rea stage; a page that was replaced or moved refuses the kit (MeasureError).
+    The profile is removed on every path. blocked counts the requests this pass alone refused."""
     profile = Path(tempfile.mkdtemp(prefix="piggyback-rea-"))  # mkdtemp makes it owner-only
-    proxy = {"server": f"http://127.0.0.1:{egress.port}"}
+    deadline = time.monotonic() + REA_STAGE_S
+    before = len(egress.blocked)
     result = {"version": None}
     try:
-        ctx = _launch_rea(p, profile, proxy, req["viewport"])
+        ctx = _launch_rea(p, profile, egress, req, deadline)
         try:
-            _rea_observe(ctx, req, profile, result)
+            _rea_observe(ctx, req, profile, result, deadline)
         finally:
             ctx.close()
     except MeasureError:
         raise
     except Exception as exc:  # a REA or browser failure is a stage, never a failed kit
-        return {"state": "failed", **result, "reason": getattr(exc, "reason", "page error")}
+        reason = "timeout" if time.monotonic() >= deadline else getattr(exc, "reason", "page error")
+        state = {"state": "failed", **result, "reason": reason}
+    else:
+        state = {"state": "captured", **result}
     finally:
         shutil.rmtree(profile, ignore_errors=True)
-    return {"state": "captured", **result}
+    return {**state, "blocked": len(egress.blocked) - before}
 
 
-def _rea_observe(ctx, req, profile, result):
+def _rea_observe(ctx, req, profile, result, deadline):
     """Version, target and observation under one deadline. The wheel pass runs in observation."""
     from . import tools  # tools imports this module: a top-level import would be circular
 
     binary = req["rea"]
     width, height = req["viewport"]
-    deadline = time.monotonic() + REA_STAGE_S
-
-    def left():
-        return max(deadline - time.monotonic(), 1)
-
     endpoint, browser_path = tools.devtools_endpoint(profile)
     tools.verify_browser(endpoint, browser_path)  # the listener must be this browser
-    result["version"] = tools.rea_version(binary, left())
+    result["version"] = tools.rea_version(binary, _remaining(deadline))
     page = ctx.new_page()
-    response = page.goto(req["url"], wait_until="load", timeout=NAV_MS)
+    response = page.goto(req["url"], wait_until="load", timeout=int(_remaining(deadline) * 1000))
     status = response.status if response else None
     _refuse_if_moved(status, req, page)
     origin = _document_origin(page)
@@ -564,7 +580,7 @@ def _rea_observe(ctx, req, profile, result):
     scrollable = page.evaluate("document.documentElement.scrollHeight - innerHeight")
     targets = [round(scrollable * k / SCROLL_STEPS) for k in range(SCROLL_STEPS + 1)]
     url = page.url  # read here: the observer thread must not call Playwright
-    target = tools.rea_target(binary, endpoint, url, left())
+    target = tools.rea_target(binary, endpoint, url, _remaining(deadline))
     outcome = {}
 
     def observe():  # only REA's subprocess runs in this thread
@@ -575,7 +591,7 @@ def _rea_observe(ctx, req, profile, result):
                 target_id=target,
                 url=url,
                 window_ms=REA_WINDOW_MS,
-                timeout_s=left(),
+                timeout_s=_remaining(deadline),
             )
         except Exception as exc:
             outcome["error"] = exc
@@ -585,9 +601,10 @@ def _rea_observe(ctx, req, profile, result):
     page.wait_for_timeout(REA_ARM_MS)
     page.mouse.move(width / 2, height / 2)
     for k in range(1, SCROLL_STEPS + 1):
+        _remaining(deadline)  # no wheel move after the deadline
         _scroll_to(page, targets[k] - targets[k - 1])
         page.wait_for_timeout(REA_STEP_MS)
-    observer.join(left())
+    observer.join(max(deadline - time.monotonic(), 0))
     if observer.is_alive():
         raise tools.ToolError("timeout")
     if "error" in outcome:

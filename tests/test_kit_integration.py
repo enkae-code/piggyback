@@ -185,7 +185,7 @@ class KitScrollIntegration(unittest.TestCase):
         entry = next(step["step"] for step in samples["steps"] if step["scroll_y"] > 300)
         self.assertIn(entry, data["stages"]["craft"]["changed_steps"])
 
-    def test_rea_counts_the_scroll_callback_in_the_script_that_carries_the_marker(self):
+    def test_rea_counts_the_named_scroll_callback_in_the_script_that_carries_the_marker(self):
         if tools.find("PIGGYBACK_REA", "rea") is None:
             self.skipTest("rea is not installed")
         tmp = tempfile.TemporaryDirectory()
@@ -202,15 +202,21 @@ class KitScrollIntegration(unittest.TestCase):
             if MARKER in (out / s["source"]["file"]).read_text(encoding="utf-8")
         ]
         self.assertEqual(len(holders), 1)
-        text = (out / holders[0]["source"]["file"]).read_text(encoding="utf-8")
-        callback = text.index("scrollY > 300")  # the fixture's scroll listener body
-        self.assertTrue(
-            any(
-                f["count"] > 0 and any(r["start"] <= callback < r["end"] for r in f["ranges"])
-                for f in holders[0]["functions"]
-            ),
-            "no executed function covers the scroll callback",
+        callbacks = [f for f in holders[0]["functions"] if f["name"] == "onScroll"]
+        self.assertTrue(callbacks, "onScroll is not in the observed functions")
+        self.assertGreater(callbacks[0]["count"], 0)
+
+    def test_the_rea_pass_blocks_a_denied_host_and_counts_it_in_the_rea_stage(self):
+        if tools.find("PIGGYBACK_REA", "rea") is None:
+            self.skipTest("rea is not installed")
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        out = Path(tmp.name) / "kit"
+        kit.make(
+            f"{self.base}/kit-denied-on-scroll.html", out, "a landing page", allow_loopback=True
         )
+        data = json.loads((out / "kit.json").read_text(encoding="utf-8"))
+        self.assertGreaterEqual(data["stages"]["rea"].get("blocked", 0), 1)
 
     def test_the_main_browser_has_no_debugging_port_during_the_dense_pass(self):
         if tools.find("PIGGYBACK_REA", "rea") is None:

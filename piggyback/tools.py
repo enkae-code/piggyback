@@ -130,6 +130,27 @@ def run(argv, *, timeout, cap):
     return bytes(out)
 
 
+def _unsafe_entry(entry):
+    """True for a link, a special file, or a file with another name (a hard link)."""
+    if entry.is_symlink() or not (entry.is_file() or entry.is_dir()):
+        return True
+    return entry.is_file() and entry.stat().st_nlink > 1
+
+
+def unsafe_tree(path):
+    """True if path or anything under it is unsafe: a tool may have left a link out of the tree."""
+    path = Path(path)
+    return _unsafe_entry(path) or any(_unsafe_entry(entry) for entry in path.rglob("*"))
+
+
+def remove_tree(path):
+    """Remove a folder tree without following links. A link or file at path is unlinked itself."""
+    if os.path.lexists(path) and (os.path.islink(path) or not os.path.isdir(path)):
+        os.unlink(path)
+        return
+    shutil.rmtree(path, ignore_errors=True)
+
+
 def _no_constant(name):
     raise ValueError(name)
 
@@ -587,7 +608,21 @@ def craft_steps(binary, folder, host, stops):
             "\n".join(lines) + "\n"
         )
         mcp.tool("core_handoff_write", {"text": text})
+    # Validate before anything is written or removed: Craft may have left links that point outside.
+    if unsafe_tree(folder):
+        raise ToolError("unsafe output")
     # The journal records every call's params, absolute frame paths included: it is not published.
-    shutil.rmtree(project / "journal", ignore_errors=True)
-    (folder / "HANDOFF.md").write_text(text, encoding="utf-8")
+    remove_tree(project / "journal")
+    _write_exclusive(folder / "HANDOFF.md", text)
     return changed
+
+
+def _write_exclusive(path, text):
+    """A new file with mode 0600, never through a link: O_EXCL refuses any existing name."""
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0)
+    try:
+        fd = os.open(path, flags, 0o600)
+    except OSError:
+        raise ToolError("craft error") from None
+    with os.fdopen(fd, "w", encoding="utf-8") as handle:
+        handle.write(text)

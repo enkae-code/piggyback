@@ -416,7 +416,7 @@ class ReaPassTests(unittest.TestCase):
             for patcher in patches:
                 stack.enter_context(patcher)
             stack.enter_context(mock.patch.object(measure_mod, "_launch_rea", return_value=ctx))
-            return measure_mod._rea_pass(mock.Mock(), REA_REQ, mock.Mock(port=1))
+            return measure_mod._rea_pass(mock.Mock(), REA_REQ, mock.Mock(port=1, blocked=[]))
 
     def test_a_missing_target_is_a_failed_stage_and_nothing_is_observed(self):
         patches = rea_tools(target=None)
@@ -427,9 +427,11 @@ class ReaPassTests(unittest.TestCase):
                 mock.patch.object(measure_mod, "_launch_rea", return_value=rea_context(rea_page()))
             )
             observe = tools.rea_observe
-            result = measure_mod._rea_pass(mock.Mock(), REA_REQ, mock.Mock(port=1))
+            result = measure_mod._rea_pass(mock.Mock(), REA_REQ, mock.Mock(port=1, blocked=[]))
             observe.assert_not_called()
-        self.assertEqual(result, {"state": "failed", "version": "6.7.0", "reason": "no target"})
+        self.assertEqual(
+            result, {"state": "failed", "version": "6.7.0", "reason": "no target", "blocked": 0}
+        )
 
     def test_a_replaced_rea_page_refuses_the_kit_and_publishes_nothing(self):
         patches = rea_tools()
@@ -446,7 +448,7 @@ class ReaPassTests(unittest.TestCase):
         patches.append(mock.patch.object(measure_mod, "_refuse_if_replaced"))
         with mock.patch.object(tools, "publish_rea") as published:
             result = self.run_pass([*patches], rea_context(rea_page()))
-        self.assertEqual(result, {"state": "captured", "version": "6.7.0"})
+        self.assertEqual(result, {"state": "captured", "version": "6.7.0", "blocked": 0})
         published.assert_called_once()
 
 
@@ -456,7 +458,7 @@ class ReaBrowserTests(unittest.TestCase):
         p = mock.Mock()
         p.chromium.launch_persistent_context.return_value = ctx
         measure_mod._launch_rea(
-            p, Path("/tmp/profile"), {"server": "http://127.0.0.1:9"}, (100, 100)
+            p, Path("/tmp/profile"), mock.Mock(port=1, blocked=[]), REA_REQ, time.monotonic() + 60
         )
         kwargs = p.chromium.launch_persistent_context.call_args.kwargs
         self.assertTrue(kwargs["chromium_sandbox"])
@@ -470,7 +472,11 @@ class ReaBrowserTests(unittest.TestCase):
         p.chromium.launch_persistent_context.side_effect = RuntimeError("no browser")
         with self.assertRaises(tools.ToolError) as ctx:
             measure_mod._launch_rea(
-                p, Path("/tmp/profile"), {"server": "http://127.0.0.1:9"}, (100, 100)
+                p,
+                Path("/tmp/profile"),
+                mock.Mock(port=1, blocked=[]),
+                REA_REQ,
+                time.monotonic() + 60,
             )
         self.assertEqual(ctx.exception.reason, "browser unavailable")
 
@@ -482,6 +488,231 @@ class ReaWindowTests(unittest.TestCase):
         )
         self.assertGreaterEqual(measure_mod.REA_WINDOW_MS, worst)
         self.assertLess(measure_mod.REA_STAGE_S * 1000, measure_mod.SCROLL_TOTAL_S * 1000)
+
+
+class FakeClock:
+    """time.monotonic stand-in: advances only when a fake browser call spends time."""
+
+    def __init__(self):
+        self.now = 1000.0
+
+    def __call__(self):
+        return self.now
+
+
+class ReaDeadlineTests(unittest.TestCase):
+    """MAJOR 2: the REA stage has one deadline, started before the browser launch, and every
+    browser or tool call gets the time left as its timeout."""
+
+    def setUp(self):
+        self.clock = FakeClock()
+        patcher = mock.patch("piggyback.measure.time.monotonic", self.clock)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def page(self, goto_cost=0.0):
+        page = mock.Mock(url=REA_REQ["url"])
+
+        def goto(url, *, wait_until, timeout):
+            self.clock.now += min(goto_cost, timeout / 1000)  # spends what it takes, no more
+            if goto_cost >= timeout / 1000:
+                raise RuntimeError("Timeout")
+            return types.SimpleNamespace(status=200)
+
+        page.goto.side_effect = goto
+        page.evaluate.return_value = 900
+        return page
+
+    def launcher(self, cost):
+        def launch(profile, *, timeout, **_):
+            self.clock.now += min(timeout / 1000, cost)
+            if cost >= timeout / 1000:
+                raise RuntimeError("Timeout")
+            return rea_context(self.page())
+
+        p = mock.Mock()
+        p.chromium.launch_persistent_context.side_effect = launch
+        return p
+
+    def run_pass(self, p, observe=None, scroll=None):
+        egress = mock.Mock(port=1, blocked=[])
+        patches = [
+            mock.patch.object(
+                tools,
+                "devtools_endpoint",
+                return_value=("http://127.0.0.1:9", "/devtools/browser/x"),
+            ),
+            mock.patch.object(tools, "verify_browser"),
+            mock.patch.object(tools, "rea_version", return_value="6.7.0"),
+            mock.patch.object(tools, "rea_target", return_value="T1"),
+            mock.patch.object(tools, "rea_observe", side_effect=observe or (lambda *a, **k: b"{}")),
+            mock.patch.object(tools, "publish_rea"),
+            mock.patch.object(measure_mod, "_refuse_if_moved"),
+            mock.patch.object(measure_mod, "_document_origin", return_value="origin"),
+            mock.patch.object(measure_mod, "_refuse_if_replaced"),
+            mock.patch.object(measure_mod, "_scroll_to", side_effect=scroll),
+        ]
+        with contextlib.ExitStack() as stack:
+            for patcher in patches:
+                stack.enter_context(patcher)
+            return measure_mod._rea_pass(p, REA_REQ, egress)
+
+    def test_the_launch_and_navigation_get_the_remaining_budget_as_timeouts(self):
+        p = self.launcher(cost=1.0)
+        result = self.run_pass(p)
+        self.assertEqual(result["state"], "captured")
+        launch_timeout = p.chromium.launch_persistent_context.call_args.kwargs["timeout"]
+        self.assertLessEqual(launch_timeout, measure_mod.REA_STAGE_S * 1000)
+        self.assertGreater(launch_timeout, 0)
+
+    def test_a_slow_launch_fails_the_stage_as_a_timeout_within_its_budget(self):
+        started = self.clock.now
+        result = self.run_pass(self.launcher(cost=measure_mod.REA_STAGE_S + 30))
+        self.assertEqual(result["state"], "failed")
+        self.assertEqual(result["reason"], "timeout")
+        self.assertLessEqual(self.clock.now - started, measure_mod.REA_STAGE_S + 1)
+
+    def test_a_slow_navigation_fails_the_stage_as_a_timeout(self):
+        started = self.clock.now
+        p = mock.Mock()
+        p.chromium.launch_persistent_context.side_effect = lambda *_, **__: rea_context(
+            self.page(goto_cost=measure_mod.REA_STAGE_S + 30)
+        )
+        result = self.run_pass(p)
+        self.assertEqual(result["state"], "failed")
+        self.assertEqual(result["reason"], "timeout")
+        self.assertLessEqual(self.clock.now - started, measure_mod.REA_STAGE_S + 1)
+
+    def test_the_wheel_pass_stops_when_the_deadline_has_passed(self):
+        moves = []
+
+        def slow_scroll(page, delta):
+            moves.append(delta)
+            self.clock.now += measure_mod.REA_STAGE_S / 2
+
+        result = self.run_pass(self.launcher(cost=0.0), scroll=slow_scroll)
+        self.assertEqual(
+            result, {"state": "failed", "version": "6.7.0", "reason": "timeout", "blocked": 0}
+        )
+        self.assertLess(len(moves), measure_mod.SCROLL_STEPS)
+
+    def test_a_launch_that_fails_after_the_deadline_is_a_timeout_not_another_channel(self):
+        p = mock.Mock()
+
+        def fail_late(*_, **kwargs):
+            self.clock.now += measure_mod.REA_STAGE_S + 5
+            raise RuntimeError("could not start")
+
+        p.chromium.launch_persistent_context.side_effect = fail_late
+        result = self.run_pass(p)
+        self.assertEqual(result["reason"], "timeout")
+        self.assertEqual(p.chromium.launch_persistent_context.call_count, 1)
+
+
+class ReaRouteAndBlockedTests(unittest.TestCase):
+    def test_the_rea_browser_gets_the_same_request_guard_as_the_capture(self):
+        ctx = mock.Mock()
+        p = mock.Mock()
+        p.chromium.launch_persistent_context.return_value = ctx
+        egress = mock.Mock(port=1, blocked=[])
+        measure_mod._launch_rea(p, Path("/tmp/profile"), egress, REA_REQ, time.monotonic() + 60)
+        ctx.route.assert_called_once()
+        self.assertEqual(ctx.route.call_args.args[0], "**/*")
+
+    def test_the_rea_result_counts_only_the_requests_blocked_during_the_pass(self):
+        egress = mock.Mock(port=1, blocked=["http://earlier.example/"])
+
+        def observe(*_, **__):
+            egress.blocked.extend(["http://10.0.0.1/a", "http://10.0.0.1/b"])
+            return b"{}"
+
+        with (
+            mock.patch.object(tools, "verify_browser"),
+            mock.patch.object(
+                tools,
+                "devtools_endpoint",
+                return_value=("http://127.0.0.1:9", "/devtools/browser/x"),
+            ),
+            mock.patch.object(tools, "rea_version", return_value="6.7.0"),
+            mock.patch.object(tools, "rea_target", return_value="T1"),
+            mock.patch.object(tools, "rea_observe", side_effect=observe),
+            mock.patch.object(tools, "publish_rea"),
+            mock.patch.object(measure_mod, "_refuse_if_moved"),
+            mock.patch.object(measure_mod, "_document_origin", return_value="o"),
+            mock.patch.object(measure_mod, "_refuse_if_replaced"),
+            mock.patch.object(measure_mod, "_scroll_to"),
+        ):
+            p = mock.Mock()
+            p.chromium.launch_persistent_context.return_value = rea_context(rea_page())
+            result = measure_mod._rea_pass(p, REA_REQ, egress)
+        self.assertEqual(result["blocked"], 2)
+
+
+class ReaVerifyTests(unittest.TestCase):
+    def test_the_observed_browser_is_verified_before_rea_is_called(self):
+        with (
+            mock.patch.object(
+                tools,
+                "devtools_endpoint",
+                return_value=("http://127.0.0.1:9222", "/devtools/browser/x"),
+            ),
+            mock.patch.object(tools, "verify_browser") as verify,
+            mock.patch.object(tools, "rea_version", return_value="6.7.0"),
+            mock.patch.object(tools, "rea_target", side_effect=tools.ToolError("no target")),
+            mock.patch.object(measure_mod, "_refuse_if_moved"),
+            mock.patch.object(measure_mod, "_document_origin", return_value="o"),
+            mock.patch.object(measure_mod, "_refuse_if_replaced"),
+            mock.patch.object(measure_mod, "_scroll_to"),
+        ):
+            p = mock.Mock()
+            p.chromium.launch_persistent_context.return_value = rea_context(rea_page())
+            measure_mod._rea_pass(p, REA_REQ, mock.Mock(port=1, blocked=[]))
+        verify.assert_called_once_with("http://127.0.0.1:9222", "/devtools/browser/x")
+
+
+class ReaBranchTests(unittest.TestCase):
+    def test_the_rea_profile_is_removed_on_every_path(self):
+        profile = Path(tempfile.mkdtemp(prefix="test-rea-profile-"))
+        (profile / "DevToolsActivePort").write_text("9\n/devtools/browser/x\n", encoding="utf-8")
+        p = mock.Mock()
+        p.chromium.launch_persistent_context.side_effect = RuntimeError("no browser")
+        with mock.patch.object(measure_mod.tempfile, "mkdtemp", return_value=str(profile)):
+            result = measure_mod._rea_pass(p, REA_REQ, mock.Mock(port=1, blocked=[]))
+        self.assertEqual(result["state"], "failed")
+        self.assertFalse(profile.exists())
+
+    def test_an_observer_that_outlives_the_budget_is_a_timeout(self):
+        """Checked on _rea_observe itself: _rea_pass would map any later error to a timeout too."""
+
+        def hang(*_, **__):
+            time.sleep(10)
+            return b"{}"
+
+        with mock.patch.object(measure_mod, "REA_STAGE_S", 1):
+            deadline = time.monotonic() + measure_mod.REA_STAGE_S
+            started = time.monotonic()
+            with (
+                mock.patch.object(
+                    tools,
+                    "devtools_endpoint",
+                    return_value=("http://127.0.0.1:9", "/devtools/browser/x"),
+                ),
+                mock.patch.object(tools, "verify_browser"),
+                mock.patch.object(tools, "rea_version", return_value="6.7.0"),
+                mock.patch.object(tools, "rea_target", return_value="T1"),
+                mock.patch.object(tools, "rea_observe", side_effect=hang),
+                mock.patch.object(measure_mod, "_refuse_if_moved"),
+                mock.patch.object(measure_mod, "_document_origin", return_value="o"),
+                mock.patch.object(measure_mod, "_refuse_if_replaced"),
+                mock.patch.object(measure_mod, "_scroll_to"),
+                self.assertRaises(tools.ToolError) as ctx,
+            ):
+                measure_mod._rea_observe(
+                    rea_context(rea_page()), REA_REQ, Path("/tmp/unused"), {}, deadline
+                )
+            elapsed = time.monotonic() - started
+        self.assertEqual(ctx.exception.reason, "timeout")
+        self.assertLess(elapsed, 8)
 
 
 if __name__ == "__main__":
