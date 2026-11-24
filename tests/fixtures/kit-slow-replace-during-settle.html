@@ -8,8 +8,8 @@
 <main style="min-height: 3200px">
   <h1>Slow replacement during settle probe</h1>
 </main>
-<!-- Second load in the context (the scroll page): 500 ms after load, before the origin read at
-     SCROLL_WAIT_MS, move to a same-host document that never finishes, so DOMContentLoaded never fires. -->
+<!-- Second load in the context (the scroll page): 500 ms after load, inside the settle wait, move to
+     a same-host document that stalls for 20 s before it finishes loading. -->
 <script>
   if (localStorage.getItem('loaded')) {
     addEventListener('load', function () {
