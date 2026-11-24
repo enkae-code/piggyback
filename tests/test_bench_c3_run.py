@@ -543,7 +543,7 @@ class Transcript(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             home = Path(tmp) / "home"
             agent = FakeAgent(home=home)
-            with mock.patch.dict(os.environ, {"HOME": str(home)}):
+            with mock.patch.dict(os.environ, {"HOME": str(home), "USERPROFILE": str(home)}):
                 result, out = run_with(tmp, agent, lambda *a, **k: report("pass"))
             self.assertEqual(result["transcript"], "kept")
             self.assertEqual(
@@ -554,7 +554,7 @@ class Transcript(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             home = Path(tmp) / "home"
             home.mkdir()
-            with mock.patch.dict(os.environ, {"HOME": str(home)}):
+            with mock.patch.dict(os.environ, {"HOME": str(home), "USERPROFILE": str(home)}):
                 result, out = run_with(tmp, FakeAgent(), lambda *a, **k: report("pass"))
             self.assertEqual(result["transcript"], "missing")
             self.assertFalse((out / "rounds" / "transcript.jsonl").exists())
@@ -580,7 +580,7 @@ class Transcript(unittest.TestCase):
                 return real_copy(src, dst, *a, **k)
 
             copy = mock.patch.object(runner.shutil, "copyfile", side_effect=fail_transcript)
-            with mock.patch.dict(os.environ, {"HOME": str(home)}), copy:
+            with mock.patch.dict(os.environ, {"HOME": str(home), "USERPROFILE": str(home)}), copy:
                 result, out = run_with(tmp, FakeAgent(home=home), lambda *a, **k: report("pass"))
             self.assertEqual(result["transcript"], "lookup_failed: PermissionError")
             self.assertEqual(result["status"], "pass")
@@ -904,7 +904,7 @@ class SessionPersistence(unittest.TestCase):
             (out / "rounds").mkdir(parents=True)
             (out / "project").mkdir()
             (out / "rounds" / "session.txt").write_text("persisted-sess", encoding="utf-8")
-            with mock.patch.dict(os.environ, {"HOME": str(home)}):
+            with mock.patch.dict(os.environ, {"HOME": str(home), "USERPROFILE": str(home)}):
                 transcript = runner.transcript_path(out / "project", "persisted-sess")
                 transcript.parent.mkdir(parents=True)
                 transcript.write_text("{}\n", encoding="utf-8")
