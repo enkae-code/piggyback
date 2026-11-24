@@ -564,5 +564,37 @@ class RemoveUnsafeRootTests(unittest.TestCase):
         self.assertFalse(stage.exists())
 
 
+class ImpeccableToolTests(unittest.TestCase):
+    def py(self, code):
+        return [sys.executable, "-c", code]
+
+    def test_an_allowed_nonzero_exit_returns_the_output(self):
+        out = tools.run(
+            self.py("print('[]'); raise SystemExit(2)"), timeout=30, cap=4096, ok=(0, 2)
+        )
+        self.assertEqual(out, b"[]\n")
+
+    def test_a_nonzero_exit_outside_the_allowed_codes_is_a_failure(self):
+        with self.assertRaises(tools.ToolError):
+            tools.run(self.py("raise SystemExit(1)"), timeout=30, cap=4096, ok=(0, 2))
+
+    def test_the_version_must_be_a_plain_number(self):
+        with mock.patch.object(tools, "run", return_value=b"4.10.0\n") as run:
+            self.assertEqual(tools.impeccable_version("/bin/impeccable"), "4.10.0")
+        run.assert_called_once()
+        with mock.patch.object(tools, "run", return_value=b"hello\n"):
+            with self.assertRaises(tools.ToolError):
+                tools.impeccable_version("/bin/impeccable")
+
+    def test_a_skill_path_must_be_absolute_and_a_file(self):
+        with mock.patch.dict(os.environ, {"PIGGYBACK_SKILL_T": "SKILL.md"}):
+            self.assertIsNone(tools.configured_file("PIGGYBACK_SKILL_T"))
+        with mock.patch.dict(os.environ, {"PIGGYBACK_SKILL_T": str(Path(__file__))}):
+            self.assertEqual(tools.configured_file("PIGGYBACK_SKILL_T"), str(Path(__file__)))
+        with mock.patch.dict(os.environ, {}, clear=False):
+            os.environ.pop("PIGGYBACK_SKILL_T", None)
+            self.assertIsNone(tools.configured_file("PIGGYBACK_SKILL_T"))
+
+
 if __name__ == "__main__":
     unittest.main()

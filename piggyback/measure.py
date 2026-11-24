@@ -171,17 +171,21 @@ def _temp_beside(path):
     return str(tmp)
 
 
-def publish_json(path, data):
-    """Replace path with JSON text in one rename: a crash never leaves a partial file."""
+def publish_text(path, text):
+    """Replace path with text in one rename: a crash never leaves a partial file."""
     tmp = _temp_beside(path)
     try:
         with open(tmp, "w", encoding="utf-8") as handle:
-            handle.write(json.dumps(data, indent=2, ensure_ascii=False) + "\n")
+            handle.write(text)
         os.replace(tmp, path)  # replaces a link at path, never writes through it
     except BaseException:
         with contextlib.suppress(OSError):
             os.unlink(tmp)
         raise
+
+
+def publish_json(path, data):
+    publish_text(path, json.dumps(data, indent=2, ensure_ascii=False) + "\n")
 
 
 def write_measure(

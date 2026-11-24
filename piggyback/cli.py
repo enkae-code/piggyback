@@ -7,7 +7,7 @@ import re
 import sys
 from pathlib import Path
 
-from . import batch, mcp, server
+from . import batch, mcp, server, tools
 from . import brief as brief_mod
 from . import defaults as defaults_mod
 from . import fingerprint as fingerprints
@@ -82,10 +82,37 @@ def run_kit(url, out, request, allow_loopback):
     hints = {
         "craft": "craft-anything-cli not found; install it or set PIGGYBACK_CRAFT",
         "rea": "rea not found; install it or set PIGGYBACK_REA",
+        "impeccable": "impeccable skill not staged; set PIGGYBACK_IMPECCABLE and "
+        "PIGGYBACK_IMPECCABLE_SKILL",
     }
     for name, hint in hints.items():
         if stages[name]["state"] == "missing":
             print(f"piggyback: {hint}", file=sys.stderr)
+    return 0
+
+
+def run_kit_check(argv):
+    """`piggyback kit check`: operator-only. Measure a build against a kit and write CHECK.md."""
+    parser = argparse.ArgumentParser(prog="piggyback kit check")
+    parser.add_argument("--kit", required=True, metavar="DIR", help="a folder from piggyback kit")
+    parser.add_argument(
+        "--build", required=True, metavar="URL", help="your build: localhost, or a public preview"
+    )
+    parser.add_argument(
+        "--workspace", metavar="DIR", help="your project folder: Impeccable checks its files"
+    )
+    parser.add_argument(
+        "--allow-loopback", action="store_true", help="allow 127.0.0.0/8 and ::1 only"
+    )
+    args = parser.parse_args(argv)
+    try:
+        path = kit_mod.check(
+            args.kit, args.build, workspace=args.workspace, allow_loopback=args.allow_loopback
+        )
+    except (MeasureError, ValueError, OSError, tools.ToolError) as exc:
+        print(f"kit check failed: {fingerprints.clean(exc, 200)}", file=sys.stderr)
+        return 1
+    print(f"wrote {path}")
     return 0
 
 
@@ -202,6 +229,13 @@ def doctor():
 
 
 def main(argv=None):
+    argv = sys.argv[1:] if argv is None else list(argv)
+    if argv[:2] == ["kit", "check"]:  # `kit` takes a URL positional, so check is dispatched first
+        return run_kit_check(argv[2:])
+    return _main(argv)
+
+
+def _main(argv):
     parser = argparse.ArgumentParser(prog="piggyback")
     sub = parser.add_subparsers(dest="command")
     o = sub.add_parser("open", help="open the local screen (also the default with no command)")

@@ -44,6 +44,10 @@ BROWSER_PATH = re.compile(r"/devtools/browser/[A-Za-z0-9_-]{1,128}")
 TARGET_ID = re.compile(r"[A-Za-z0-9]{1,128}")
 ORIGIN = re.compile(r"https?://[A-Za-z0-9.-]{1,253}(:\d{1,5})?")
 CRAFT_VERSION = re.compile(r"craft-anything-cli (\d+\.\d+\.\d+)")
+IMPECCABLE_VERSION = re.compile(r"\d+\.\d+\.\d+")
+IMPECCABLE_TIMEOUT_S = 60
+IMPECCABLE_OUT_MAX = 1024 * 1024  # `detect --json` on a whole project: a long list still fits
+SKILL_MAX = 1024 * 1024
 REA_VERSION = re.compile(r"\d+\.\d+\.\d+")
 REA_TARGETS_MAX = 1024 * 1024
 MCP_DEADLINE_S = 60  # the whole Craft stage: a hung Craft is killed, never waited on
@@ -98,9 +102,9 @@ def _reap(proc):
     proc.wait()
 
 
-def run(argv, *, timeout, cap):
+def run(argv, *, timeout, cap, ok=(0,)):
     """Stdout of one child process, read while it runs. ToolError on timeout, on output over cap
-    (the child is killed as soon as the cap is passed), on a nonzero exit or a start failure."""
+    (the child is killed as soon as the cap is passed), on an exit outside ok or a start failure."""
     proc = _spawn(argv, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE)
     deadline = time.monotonic() + timeout
     out = bytearray()
@@ -131,12 +135,12 @@ def run(argv, *, timeout, cap):
             raise ToolError("timeout") from None
     finally:
         _reap(proc)
-    if code != 0:
+    if code not in ok:
         raise ToolError("exit status")
     return bytes(out)
 
 
-def _unsafe_entry(entry):
+def unsafe_entry(entry):
     """True for a link, a special file, or a file with another name (a hard link)."""
     if entry.is_symlink() or not (entry.is_file() or entry.is_dir()):
         return True
@@ -149,7 +153,7 @@ def unsafe_tree(path):
     path = Path(path)
     if path.is_symlink() or not path.is_dir():
         return True
-    return any(_unsafe_entry(entry) for entry in path.rglob("*"))
+    return any(unsafe_entry(entry) for entry in path.rglob("*"))
 
 
 def remove_tree(path):
@@ -164,12 +168,19 @@ def _no_constant(name):
     raise ValueError(name)
 
 
-def _json(raw):
+def _parse(raw):
     try:
-        data = json.loads(raw, parse_constant=_no_constant)
+        return json.loads(raw, parse_constant=_no_constant)
     except (ValueError, RecursionError):  # bad text, non-finite numbers, nesting too deep
         raise ToolError("bad output") from None
-    return _dict(data)
+
+
+def _json(raw):
+    return _dict(_parse(raw))
+
+
+def json_list(raw):
+    return _list(_parse(raw))
 
 
 def _dict(value):
@@ -413,6 +424,43 @@ def craft_version(binary):
     if not match:
         raise ToolError("bad output")
     return match[1]
+
+
+def impeccable_version(binary):
+    text = run([binary, "--version"], timeout=IMPECCABLE_TIMEOUT_S, cap=4096)
+    text = text.decode("utf-8", "replace").strip()
+    if not IMPECCABLE_VERSION.fullmatch(text):
+        raise ToolError("bad output")
+    return text
+
+
+def configured_file(env_name):
+    """The operator's file at env_name when it is an absolute path to a regular file, else None.
+
+    No PATH search: a skill file is chosen by configuration only, never found by name.
+    """
+    configured = os.environ.get(env_name, "")
+    return configured if os.path.isabs(configured) and os.path.isfile(configured) else None
+
+
+def write_new_bytes(path, data):
+    """A new file with mode 0600, never through a link: O_EXCL refuses any existing name."""
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0)
+    with os.fdopen(os.open(path, flags, 0o600), "wb") as handle:
+        handle.write(data)
+
+
+def stage_skill(source, folder):
+    """Copy the operator's SKILL.md into folder/impeccable/SKILL.md, byte for byte."""
+    try:
+        with open(source, "rb") as handle:
+            data = handle.read(SKILL_MAX + 1)
+        if len(data) > SKILL_MAX:
+            raise ToolError("bad output")
+        (folder / "impeccable").mkdir()
+        write_new_bytes(folder / "impeccable" / "SKILL.md", data)
+    except OSError:
+        raise ToolError("write error") from None
 
 
 class _McpSession:

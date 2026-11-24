@@ -200,7 +200,7 @@ class KitFilesTests(KitCase):
         self.assertEqual(data["schema"], 1)
         self.assertEqual(data["url"], URL)
         self.assertEqual(data["request"], "a landing page for Tidewater")
-        self.assertEqual(data["stages"]["motion"], "not run")
+        self.assertEqual(data["stages"]["motion"], "done")
         self.assertEqual(data["stages"]["scroll"], "done")
         self.assertEqual(data["browser"]["final_url"], URL)
         for name, digest in data["artifacts"].items():
@@ -360,6 +360,75 @@ def leaves(value):
             yield from leaves(item)
     else:
         yield value
+
+
+FAKE_IMPECCABLE = (
+    "#!{py}\nimport sys\nprint(sys.argv[1] == '--version' and '{version}' or 'nope')\n"
+)
+
+
+@unittest.skipUnless(
+    os.name == "posix", "POSIX only: the fake impeccable is a #! script that must run"
+)
+class KitMotionSkillTests(KitCase):
+    def make(self, skill=None, version="4.10.0"):
+        out = self.root / "kit"
+        binary = self.root / "impeccable"
+        binary.write_text(
+            FAKE_IMPECCABLE.format(py=sys.executable, version=version), encoding="utf-8"
+        )
+        binary.chmod(0o755)
+        env = {"PIGGYBACK_IMPECCABLE": str(binary)}
+        if skill is not None:
+            env["PIGGYBACK_IMPECCABLE_SKILL"] = str(skill)
+        with (
+            mock.patch.dict(os.environ, env),
+            mock.patch("piggyback.kit.write_measure", side_effect=fake_write_measure),
+            mock.patch("piggyback.brief.brief", return_value="# Design brief\n"),
+            mock.patch("piggyback.brief.design_md", return_value="---\nname: x\n---\n"),
+        ):
+            path = kit.make(URL, out, "a landing page")
+        return json.loads(path.read_text(encoding="utf-8")), out
+
+    def test_motion_md_is_written_and_the_motion_stage_is_done(self):
+        data, out = self.make()
+        self.assertTrue((out / "MOTION.md").is_file())
+        self.assertEqual(data["stages"]["motion"], "done")
+        self.assertIn("MOTION.md", data["artifacts"])
+
+    def test_the_skill_is_staged_byte_for_byte(self):
+        skill = self.root / "SKILL.md"
+        skill.write_bytes(b"---\r\nname: impeccable\r\n---\r\n# caf\xc3\xa9\r\n")
+        data, out = self.make(skill=skill)
+        self.assertEqual((out / "impeccable" / "SKILL.md").read_bytes(), skill.read_bytes())
+        self.assertEqual(
+            data["stages"]["impeccable"],
+            {"state": "done", "version": "4.10.0", "skill": "impeccable/SKILL.md"},
+        )
+
+    def test_without_a_configured_skill_the_stage_is_missing_and_the_kit_publishes(self):
+        data, out = self.make()
+        self.assertEqual(data["stages"]["impeccable"], {"state": "missing", "reason": "skill"})
+        self.assertFalse((out / "impeccable").exists())
+
+    def test_a_relative_skill_path_is_not_used(self):
+        data, _ = self.make(skill="SKILL.md")
+        self.assertEqual(data["stages"]["impeccable"]["state"], "missing")
+
+    def test_a_tool_that_does_not_report_a_version_fails_its_stage(self):
+        skill = self.root / "SKILL.md"
+        skill.write_text("---\nname: x\n---\n", encoding="utf-8")
+        data, out = self.make(skill=skill, version="garbage text")
+        self.assertEqual(data["stages"]["impeccable"], {"state": "failed", "reason": "bad output"})
+        self.assertFalse((out / "impeccable").exists())
+
+    def test_no_home_path_reaches_any_kit_file(self):
+        skill = self.root / "SKILL.md"
+        skill.write_text("---\nname: x\n---\n", encoding="utf-8")
+        _, out = self.make(skill=skill)
+        for path in out.rglob("*"):
+            if path.is_file():
+                self.assertNotIn(str(Path.home()), path.read_text(errors="ignore"))
 
 
 class ScrollSanitizerTests(unittest.TestCase):
