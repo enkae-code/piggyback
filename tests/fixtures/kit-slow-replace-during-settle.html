@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Kit probe: slow same-host replacement during the scroll page's settle wait</title>
+</head>
+<body style="margin: 0">
+<main style="min-height: 3200px">
+  <h1>Slow replacement during settle probe</h1>
+</main>
+<!-- Second load in the context (the scroll page): 500 ms after load, before the origin read at
+     SCROLL_WAIT_MS, move to a same-host document that never finishes, so DOMContentLoaded never fires. -->
+<script>
+  if (localStorage.getItem('loaded')) {
+    addEventListener('load', function () {
+      setTimeout(function () { location.href = '/slow-document'; }, 500);
+    });
+  } else {
+    localStorage.setItem('loaded', '1');
+  }
+</script>
+</body>
+</html>

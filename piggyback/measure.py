@@ -542,13 +542,13 @@ def _capture_scroll(ctx, req, first_page):
     response = page.goto(req["url"], wait_until="load", timeout=NAV_MS)
     status = response.status if response else None
     _refuse_if_moved(status, req, page)
+    origin = _document_origin(page)  # the document goto loaded, before anything can replace it
     navigations = []
 
     # Once per new main-frame document: pushState, replaceState and hash changes do not count.
     page.on("domcontentloaded", lambda _page: navigations.append(True))
     page.wait_for_timeout(SCROLL_WAIT_MS)
-    _refuse_if_moved(status, req, page)
-    origin = _document_origin(page)
+    _refuse_if_replaced(page, origin, navigations, status, req)
     scrollable = page.evaluate("document.documentElement.scrollHeight - innerHeight")
     targets = [round(scrollable * k / SCROLL_STEPS) for k in range(SCROLL_STEPS + 1)]
     page.mouse.move(width / 2, height / 2)

@@ -118,6 +118,23 @@ class KitScrollIntegration(unittest.TestCase):
         self.assertFalse((out / "scroll-samples.json").exists())
         self.assertEqual(list((out / "scroll").glob("frame-*.png")), [])
 
+    def test_a_slow_same_host_replacement_during_settle_refuses_and_publishes_nothing(self):
+        # The fixture moves only on its second load (the scroll page), 500 ms in: during settle.
+        # Chromium holds the capture until that document loads, so its DOMContentLoaded also refuses
+        # it; this pins the outcome, and the early timeOrigin read guards engines that do not wait.
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        out = Path(tmp.name) / "kit"
+        with self.assertRaisesRegex(MeasureError, "navigated during its capture"):
+            write_measure(
+                f"{self.base}/kit-slow-replace-during-settle.html",
+                out,
+                allow_loopback=True,
+                scroll=True,
+            )
+        self.assertFalse((out / "scroll-samples.json").exists())
+        self.assertEqual(list((out / "scroll").glob("frame-*.png")), [])
+
     def test_a_denied_request_during_scroll_is_recorded_as_blocked(self):
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
