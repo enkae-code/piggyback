@@ -21,8 +21,14 @@ from bench.c3 import checklist, prompts
 from bench.c3 import manifest as mf
 from bench.c3 import run as runner
 
-# macOS puts the temp folder under a symlink (/var -> /private/var), which the store guard refuses.
-tempfile.tempdir = os.path.realpath(tempfile.gettempdir())
+
+def setUpModule():
+    # macOS puts the temp folder under a symlink (/var -> /private/var), which the store guard
+    # refuses. Resolved for this module's tests only.
+    resolved = mock.patch.object(tempfile, "tempdir", os.path.realpath(tempfile.gettempdir()))
+    resolved.start()
+    unittest.addModuleCleanup(resolved.stop)
+
 
 COMMIT = "b" * 40
 MODEL = "claude-opus-5-5"
@@ -562,10 +568,10 @@ class Transcript(unittest.TestCase):
     def test_slug_matches_the_claude_project_folder(self):
         # A real folder, so resolve() can't add a host prefix (macOS /System/Volumes/Data, drives).
         with tempfile.TemporaryDirectory() as tmp:
-            project = Path(tmp) / ".hermes" / "a_b.c"
+            project = Path(tmp) / ".hermes" / "C3probe2_a.b"
             project.mkdir(parents=True)
             slug = runner.transcript_path(project, "s").parent.name
-            self.assertTrue(slug.endswith("--hermes-a-b-c"), slug)
+            self.assertTrue(slug.endswith("--hermes-C3probe2-a-b"), slug)
             self.assertEqual(len(slug), len(str(project.resolve())))
             self.assertRegex(slug, r"^[A-Za-z0-9-]+$")
 
@@ -893,6 +899,36 @@ class RunLock(unittest.TestCase):
                 first = runner.run_page(str(store), run_id, "T01", "screenshot")
                 second = runner.run_page(str(store), run_id, "T01", "skill-alone")
             self.assertEqual((first["status"], second["status"]), ("pass", "pass"))
+
+    @unittest.skipUnless(os.name == "posix", "flock is POSIX")
+    def test_a_lock_fault_that_is_not_contention_is_not_reported_as_a_busy_run(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            fault = OSError(37, "No locks available")
+            with mock.patch.object(runner.fcntl, "flock", side_effect=fault):
+                with self.assertRaises(OSError) as caught, runner.run_lock(Path(tmp)):
+                    pass
+            self.assertNotIsInstance(caught.exception, SystemExit)
+            self.assertEqual(caught.exception.errno, 37)
+
+    @unittest.skipUnless(os.name == "posix", "needs os.symlink without privileges")
+    def test_without_o_nofollow_a_lock_swapped_for_a_link_after_the_check_is_refused(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            run, outside = Path(tmp) / "run", Path(tmp) / "outside"
+            run.mkdir()
+            outside.write_text("keep")
+            real_open = os.open
+
+            def swap_then_open(path, flags, mode=0o777):
+                os.symlink(outside, path)  # lands between the lstat check and the open
+                return real_open(path, flags, mode)
+
+            with mock.patch.dict(os.__dict__):
+                os.__dict__.pop("O_NOFOLLOW", None)  # as on Windows
+                with mock.patch.object(os, "open", side_effect=swap_then_open):
+                    with self.assertRaises(SystemExit) as caught, runner.run_lock(run):
+                        pass
+            self.assertIn("symbolic link", str(caught.exception))
+            self.assertEqual(outside.read_text(), "keep")
 
 
 class SessionPersistence(unittest.TestCase):

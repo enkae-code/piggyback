@@ -17,6 +17,7 @@ import json
 import os
 import re
 import shutil
+import stat
 import subprocess
 import sys
 import threading
@@ -437,24 +438,43 @@ def locked_run(store, run_id):
 def run_lock(run):
     """One exclusive lock per run, held from admission to publication. The kernel drops it when the
     process dies, so an interrupted run leaves no stale lock."""
-    lock = run / ".runner.lock"
-    # Windows has no O_NOFOLLOW: refuse a link by lstat first, as bench/c1/score.py does.
-    if not hasattr(os, "O_NOFOLLOW") and lock.is_symlink():
-        raise SystemExit(f"refusing: {lock.name} is a symbolic link")
-    fd = os.open(lock, os.O_RDWR | os.O_CREAT | getattr(os, "O_NOFOLLOW", 0), 0o600)
+    fd = _open_lock(run / ".runner.lock")
     try:
         try:
             if os.name == "nt":
                 msvcrt.locking(fd, msvcrt.LK_NBLCK, 1)
             else:
                 fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except OSError:
+        # Only contention: flock raises EWOULDBLOCK, msvcrt EACCES. Anything else is a real fault.
+        except (BlockingIOError, PermissionError):
             raise SystemExit(
                 f"refusing: run {run.name} is active in another process; wait for it to finish"
             ) from None
         yield
+        if os.name == "nt":
+            os.lseek(fd, 0, os.SEEK_SET)
+            msvcrt.locking(fd, msvcrt.LK_UNLCK, 1)  # Windows may release late on close alone
     finally:
         os.close(fd)
+
+
+def _open_lock(lock):
+    """Open the lock file without following a link. Windows has no O_NOFOLLOW, so the file opened
+    must be the one lstat sees, and not a link."""
+    if hasattr(os, "O_NOFOLLOW"):
+        return os.open(lock, os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW, 0o600)
+    if os.path.islink(lock):
+        raise SystemExit(f"refusing: {lock.name} is a symbolic link")
+    # ponytail: a link swapped in after that check can still make the open create an empty file
+    # outside the run; the identity check below refuses to lock it. Upgrade: a reparse-point-aware
+    # open (CreateFile with FILE_FLAG_OPEN_REPARSE_POINT).
+    fd = os.open(lock, os.O_RDWR | os.O_CREAT, 0o600)
+    seen = os.lstat(lock)
+    opened = os.fstat(fd)
+    if stat.S_ISLNK(seen.st_mode) or (seen.st_dev, seen.st_ino) != (opened.st_dev, opened.st_ino):
+        os.close(fd)
+        raise SystemExit(f"refusing: {lock.name} is a symbolic link")
+    return fd
 
 
 def check_page_id(run, task_id, arm):

@@ -13,8 +13,14 @@ from unittest import mock
 from bench.c1 import manifest as c1_manifest
 from bench.c3 import manifest, prompts
 
-# macOS puts the temp folder under a symlink (/var -> /private/var), which the store guard refuses.
-tempfile.tempdir = os.path.realpath(tempfile.gettempdir())
+
+def setUpModule():
+    # macOS puts the temp folder under a symlink (/var -> /private/var), which the store guard
+    # refuses. Resolved for this module's tests only.
+    resolved = mock.patch.object(tempfile, "tempdir", os.path.realpath(tempfile.gettempdir()))
+    resolved.start()
+    unittest.addModuleCleanup(resolved.stop)
+
 
 COMMIT = "a" * 40
 CLI = "2.1.325 (Claude Code)"
