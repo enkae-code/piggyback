@@ -13,6 +13,7 @@ import os
 import queue
 import re
 import shutil
+import signal
 import subprocess
 import threading
 import time
@@ -36,7 +37,6 @@ MAX_RANGES = 40
 MAX_COUNT = 10**9
 CHANGE = 0.01  # ponytail: 1% of pixels, a fixed threshold; tune on fixtures before trusting it.
 TOLERANCE = 8
-DEVTOOLS_WAIT_S = 10  # Chromium writes DevToolsActivePort shortly after it starts
 FUNCTION_NAME = re.compile(r"[A-Za-z_$][A-Za-z0-9_$.]{0,80}")
 EVIDENCE_ID = re.compile(r"ev_[0-9a-f]{64}")
 ENDPOINT = re.compile(r"http://127\.0\.0\.1:\d{1,5}")
@@ -75,20 +75,28 @@ def find(env_name, name):
 
 
 def _spawn(argv, *, stdin, stdout):
-    """A child with PATH and HOME only and stderr discarded. A start failure is a stage error."""
+    """A child with PATH and HOME only and stderr discarded, leading its own process group so a
+    kill reaches whatever it starts. A start failure is a stage error."""
     env = {key: os.environ[key] for key in ENV_KEYS if key in os.environ}
     try:
         return subprocess.Popen(
-            argv, stdin=stdin, stdout=stdout, stderr=subprocess.DEVNULL, env=env
+            argv,
+            stdin=stdin,
+            stdout=stdout,
+            stderr=subprocess.DEVNULL,
+            env=env,
+            start_new_session=True,
         )
     except OSError:
         raise ToolError("cannot start") from None
 
 
 def _reap(proc):
-    """Kill the child if it still runs, then wait for it: no path leaves a child behind."""
-    if proc.poll() is None:
-        proc.kill()
+    """Kill the child's whole process group unless it was already reaped, then wait for it: no
+    path leaves a child or anything it started behind. Unreaped, the group id is still ours."""
+    if proc.returncode is None:
+        with contextlib.suppress(ProcessLookupError):
+            os.killpg(proc.pid, signal.SIGKILL)
     proc.wait()
 
 
@@ -138,9 +146,12 @@ def _unsafe_entry(entry):
 
 
 def unsafe_tree(path):
-    """True if path or anything under it is unsafe: a tool may have left a link out of the tree."""
+    """True unless path is a real folder and everything under it is plain: a tool may have left a
+    link out of the tree, or a file where a folder should be."""
     path = Path(path)
-    return _unsafe_entry(path) or any(_unsafe_entry(entry) for entry in path.rglob("*"))
+    if path.is_symlink() or not path.is_dir():
+        return True
+    return any(_unsafe_entry(entry) for entry in path.rglob("*"))
 
 
 def remove_tree(path):
@@ -355,17 +366,18 @@ def rea_observe(binary, *, endpoint, target_id, url, window_ms, timeout_s):
     return run(argv, timeout=timeout_s, cap=REA_OUT_MAX)
 
 
-def devtools_endpoint(profile):
+def devtools_endpoint(profile, deadline):
     """(endpoint, browser path) from the DevToolsActivePort that Chromium wrote into its profile.
 
+    Polls until the stage deadline (monotonic); a file still missing then is a timeout.
     ponytail: the file is read once it exists; a half-written file reads as bad output.
     """
     path = Path(profile) / "DevToolsActivePort"
-    deadline = time.monotonic() + DEVTOOLS_WAIT_S
     while not path.exists():
-        if time.monotonic() >= deadline:
-            raise ToolError("no debugging port")
-        time.sleep(0.1)
+        left = deadline - time.monotonic()
+        if left <= 0:
+            raise ToolError("timeout")
+        time.sleep(min(0.1, left))
     try:
         lines = path.read_text(encoding="utf-8").split("\n")
     except (OSError, UnicodeDecodeError):
@@ -378,11 +390,14 @@ def devtools_endpoint(profile):
     return f"http://127.0.0.1:{port}", lines[1]
 
 
-def verify_browser(endpoint, path):
+def verify_browser(endpoint, path, deadline):
     """Raise unless the listener on endpoint is the browser that wrote path (loopback, no proxy)."""
+    left = deadline - time.monotonic()
+    if left <= 0:
+        raise ToolError("timeout")
     opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
     try:
-        with opener.open(f"{endpoint}/json/version", timeout=5) as reply:
+        with opener.open(f"{endpoint}/json/version", timeout=min(5, left)) as reply:
             data = json.loads(reply.read(65536), parse_constant=_no_constant)
     except (OSError, ValueError, RecursionError):
         raise ToolError("not our browser") from None
@@ -565,7 +580,10 @@ def craft_steps(binary, folder, host, stops):
     stops: (step, scroll_y, arrival_png, late_png). Returns the step numbers whose frames changed.
     Creates folder exclusively, with Craft's project folder/recon.cany and folder/HANDOFF.md.
     """
-    folder.mkdir()
+    try:
+        folder.mkdir()
+    except OSError:  # something is already at the root: a link or a file, never a folder to use
+        raise ToolError("cannot start") from None
     project = folder / "recon.cany"
     changed, lines = [], []
     with _McpSession(binary, project) as mcp:

@@ -6,6 +6,7 @@ import os
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -547,9 +548,6 @@ class WorkerOutputTests(unittest.TestCase):
                 self.stdout.write(payload)
                 return None, ""
 
-            def kill(self):
-                pass
-
         with mock.patch.object(measure_mod.subprocess, "Popen", FakeProc):
             return measure_mod._run_worker({"scroll_dir": None})
 
@@ -569,6 +567,8 @@ class WorkerBudgetTests(unittest.TestCase):
         seen = []
 
         class FakeProc:
+            pid = -1  # invalid group id, and os.killpg is stubbed below anyway
+
             def __init__(self, *args, **kwargs):
                 pass
 
@@ -578,14 +578,43 @@ class WorkerBudgetTests(unittest.TestCase):
                 seen.append(timeout)
                 raise subprocess.TimeoutExpired("worker", timeout)
 
-            def kill(self):
-                pass
-
-        with mock.patch.object(measure_mod.subprocess, "Popen", FakeProc):
+        with (
+            mock.patch.object(measure_mod.subprocess, "Popen", FakeProc),
+            mock.patch.object(measure_mod.os, "killpg"),
+        ):
             for request, expected in (({"scroll_dir": "x"}, 240), ({"scroll_dir": None}, 90)):
                 with self.subTest(request=request), self.assertRaises(measure_mod.MeasureError):
                     measure_mod._run_worker(request)
                 self.assertEqual(seen[-1], expected)
+
+    def test_a_timed_out_worker_takes_its_browser_with_it(self):
+        # A grandchild holding the worker's stderr stands in for Chromium.
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        pid_file = Path(tmp.name) / "pid"
+        body = (
+            "import subprocess, time\n"
+            "child = subprocess.Popen(['sleep', '30'])\n"
+            f"open({str(pid_file)!r}, 'w').write(str(child.pid))\ntime.sleep(30)\n"
+        )
+        worker = write_script(tmp.name, "worker", body)
+        started = time.monotonic()
+        with (
+            mock.patch.object(measure_mod.sys, "executable", worker),
+            mock.patch.object(measure_mod, "TOTAL_S", 1),
+            self.assertRaisesRegex(measure_mod.MeasureError, "timed out"),
+        ):
+            measure_mod._run_worker({"scroll_dir": None})
+        self.assertLess(time.monotonic() - started, 10)
+        grandchild = int(pid_file.read_text())
+        for _ in range(50):  # init reaps the killed orphan asynchronously
+            try:
+                os.kill(grandchild, 0)
+            except ProcessLookupError:
+                break
+            time.sleep(0.05)
+        else:
+            self.fail("the worker's child outlived the timeout")
 
 
 def write_script(root, name, body):
@@ -1229,6 +1258,39 @@ class KitUnsafeStageTests(KitCase):
         self.assertEqual(outside.read_bytes(), b"outside original\n")
         self.assertFalse((out / "craft").exists())
         self.assertFalse(any(p.is_symlink() for p in out.rglob("*")))
+
+    def test_a_plain_file_at_the_rea_root_fails_the_rea_stage_and_is_removed(self):
+        def write(url, out_dir, *, scroll=False, **_):
+            out = Path(out_dir)
+            fake_write_measure(url, out, scroll=scroll)
+            fp = json.loads((out / "fingerprint.json").read_text(encoding="utf-8"))
+            fp["rea"] = {"state": "captured", "version": "6.7.0"}
+            (out / "fingerprint.json").write_text(json.dumps(fp), encoding="utf-8")
+            (out / "rea").write_text("not a folder", encoding="utf-8")
+            return out / "fingerprint.json", out / "screenshot.png"
+
+        data, out = self.run_kit("kit", write=write)
+        self.assertEqual(
+            data["stages"]["rea"],
+            {"state": "failed", "version": "6.7.0", "reason": "unsafe output"},
+        )
+        self.assertFalse(os.path.lexists(out / "rea"))
+
+    def test_a_link_already_at_the_craft_root_fails_only_the_craft_stage(self):
+        target = self.root / "elsewhere"
+        target.mkdir()
+        (target / "keep.txt").write_text("keep", encoding="utf-8")
+
+        def write(url, out_dir, *, scroll=False, **_):
+            out = Path(out_dir)
+            fake_write_measure(url, out, scroll=scroll)
+            os.symlink(target, out / "craft")
+            return out / "fingerprint.json", out / "screenshot.png"
+
+        data, out = self.run_kit("kit", write=write)
+        self.assertEqual(data["stages"]["craft"], {"state": "failed", "reason": "cannot start"})
+        self.assertFalse(os.path.lexists(out / "craft"))
+        self.assertEqual((target / "keep.txt").read_text(encoding="utf-8"), "keep")
 
     def test_a_rea_folder_that_is_a_symlink_is_removed_and_the_kit_publishes(self):
         target = self.root / "elsewhere"

@@ -81,7 +81,7 @@ class FakeSyncPlaywright:
         return False
 
 
-def run_capture(shot, on_shot):
+def run_capture(shot, on_shot, proxy=FakeProxy, **extra):
     """Run the real _capture with Playwright, the proxy and the browser faked."""
     api = types.SimpleNamespace(sync_playwright=FakeSyncPlaywright)
     fake_modules = {"playwright": types.ModuleType("playwright"), "playwright.sync_api": api}
@@ -90,11 +90,12 @@ def run_capture(shot, on_shot):
         "viewport": [1440, 900],
         "allow_loopback": False,
         "screenshot": str(shot),
+        **extra,
     }
     browser = FakeBrowser(FakePage(on_shot))
     with (
         mock.patch.dict(sys.modules, fake_modules),
-        mock.patch("piggyback.measure.EgressProxy", FakeProxy),
+        mock.patch("piggyback.measure.EgressProxy", proxy),
         mock.patch("piggyback.measure.launch", return_value=(browser, "fake")),
     ):
         return measure_mod._capture(req)
@@ -667,7 +668,7 @@ class ReaVerifyTests(unittest.TestCase):
             p = mock.Mock()
             p.chromium.launch_persistent_context.return_value = rea_context(rea_page())
             measure_mod._rea_pass(p, REA_REQ, mock.Mock(port=1, blocked=[]))
-        verify.assert_called_once_with("http://127.0.0.1:9222", "/devtools/browser/x")
+        verify.assert_called_once_with("http://127.0.0.1:9222", "/devtools/browser/x", mock.ANY)
 
 
 class ReaBranchTests(unittest.TestCase):
@@ -713,6 +714,168 @@ class ReaBranchTests(unittest.TestCase):
             elapsed = time.monotonic() - started
         self.assertEqual(ctx.exception.reason, "timeout")
         self.assertLess(elapsed, 8)
+
+
+SLACK_S = 0.05  # fake clock: the only overrun allowed is ceil to 1 ms per call; 50 ms is the margin
+
+
+class ReaBudgetTests(unittest.TestCase):
+    """One absolute deadline for the REA stage, started before the launch. Every fake call spends
+    time like the real one: Playwright's timeout 0 means no limit, so a call sent 0 runs its full
+    cost."""
+
+    def setUp(self):
+        self.clock = FakeClock()
+        for patcher in (
+            mock.patch("piggyback.measure.time.monotonic", self.clock),
+            mock.patch("piggyback.tools.time.sleep", side_effect=self.advance),
+        ):
+            patcher.start()
+            self.addCleanup(patcher.stop)
+
+    def advance(self, seconds):
+        self.clock.now += seconds
+
+    def spend(self, cost, timeout_ms):
+        if timeout_ms == 0:
+            self.clock.now += cost
+            return
+        limit = timeout_ms / 1000
+        self.clock.now += min(cost, limit)
+        if cost >= limit:
+            raise RuntimeError("Timeout")
+
+    def wait(self, ms):
+        self.clock.now += ms / 1000
+
+    def page(self, goto_cost=0.0):
+        page = rea_page()
+
+        def goto(url, *, wait_until, timeout):
+            self.spend(goto_cost, timeout)
+            return types.SimpleNamespace(status=200)
+
+        page.goto.side_effect = goto
+        page.wait_for_timeout.side_effect = self.wait
+        return page
+
+    def rea(self, page, launch_cost=0.0, devtools=True, real_verify=False):
+        """One REA pass. Returns (result, publish_rea mock)."""
+
+        def launch(profile, *, timeout, **_):
+            if devtools:
+                (Path(profile) / "DevToolsActivePort").write_text(
+                    "9\n/devtools/browser/x\n", encoding="utf-8"
+                )
+            self.spend(launch_cost, timeout)
+            return rea_context(page)
+
+        p = mock.Mock()
+        p.chromium.launch_persistent_context.side_effect = launch
+        patches = [
+            mock.patch.object(tools, "rea_version", return_value="6.7.0"),
+            mock.patch.object(tools, "rea_target", return_value="T1"),
+            mock.patch.object(tools, "rea_observe", return_value=b"{}"),
+            mock.patch.object(tools, "publish_rea"),
+            mock.patch.object(measure_mod, "_refuse_if_moved"),
+            mock.patch.object(measure_mod, "_document_origin", return_value="origin"),
+            mock.patch.object(measure_mod, "_refuse_if_replaced"),
+            mock.patch.object(measure_mod, "_scroll_to"),
+        ]
+        if not real_verify:
+            patches.append(mock.patch.object(tools, "verify_browser"))
+        with contextlib.ExitStack() as stack:
+            for patcher in patches:
+                stack.enter_context(patcher)
+            publish = tools.publish_rea
+            result = measure_mod._rea_pass(p, REA_REQ, mock.Mock(port=1, blocked=[]))
+        return result, publish
+
+    def assert_budget(self, result, started, budget=None):
+        self.assertEqual(result["state"], "failed")
+        self.assertEqual(result["reason"], "timeout")
+        self.assertLessEqual(
+            self.clock.now - started, (budget or measure_mod.REA_STAGE_S) + SLACK_S
+        )
+
+    def test_a_sub_millisecond_navigation_budget_is_never_sent_as_no_timeout(self):
+        started = self.clock.now
+        page = self.page(goto_cost=1000)  # would run unbounded if sent timeout=0
+        result, _ = self.rea(page, launch_cost=measure_mod.REA_STAGE_S - 0.0004)
+        self.assertGreaterEqual(page.goto.call_args.kwargs["timeout"], 1)
+        self.assert_budget(result, started)
+
+    def test_devtools_discovery_shares_the_stage_deadline(self):
+        started = self.clock.now
+        result, _ = self.rea(self.page(), launch_cost=38.5, devtools=False)
+        self.assert_budget(result, started)
+
+    def test_verify_urlopen_is_capped_at_the_time_left(self):
+        started = self.clock.now
+
+        def hang(url, timeout):
+            self.clock.now += timeout  # the listener never answers: the call lasts its timeout
+            raise OSError("timed out")
+
+        opener = mock.Mock()
+        opener.open.side_effect = hang
+        with mock.patch("piggyback.tools.urllib.request.build_opener", return_value=opener):
+            result, _ = self.rea(self.page(), launch_cost=38.5, real_verify=True)
+        self.assert_budget(result, started)
+
+    def test_the_last_wheel_step_cannot_publish_after_the_deadline(self):
+        pre = (
+            measure_mod.SCROLL_WAIT_MS
+            + measure_mod.REA_ARM_MS
+            + (measure_mod.SCROLL_STEPS - 1) * measure_mod.REA_STEP_MS
+        ) / 1000
+        budget = pre + measure_mod.REA_STEP_MS / 2000  # expires halfway through the last wait
+        started = self.clock.now
+        with mock.patch.object(measure_mod, "REA_STAGE_S", budget):
+            result, publish = self.rea(self.page())
+        self.assert_budget(result, started, budget)
+        publish.assert_not_called()
+
+
+class FakeBlockingProxy:
+    port = 1
+
+    def __init__(self):
+        self.blocked = ["http://10.0.0.1/capture"]
+
+    def close(self):
+        pass
+
+
+class BlockedSnapshotTests(unittest.TestCase):
+    """The fingerprint's blocked_requests are the capture's own blocks, taken before REA's pass."""
+
+    def test_a_block_made_during_the_rea_pass_stays_out_of_the_fingerprint(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        root = Path(tmp.name)
+        shot = root / "screenshot.png"
+
+        def rea_pass(_p, _req, egress):
+            egress.blocked.append("http://10.0.0.1/rea")
+            return {"state": "captured", "version": "6.7.0", "blocked": 1}
+
+        def on_shot(_page, path):
+            Path(path).write_bytes(b"PNG")
+
+        with (
+            mock.patch.object(measure_mod, "_rea_pass", side_effect=rea_pass),
+            mock.patch.object(measure_mod, "_capture_scroll", return_value={"steps": []}),
+        ):
+            result = run_capture(
+                shot,
+                on_shot,
+                lambda _allow: FakeBlockingProxy(),
+                scroll_dir=str(root / "scroll"),
+                rea=True,
+            )
+        self.assertEqual(result["blocked_requests"], ["http://10.0.0.1/capture"])
+        self.assertEqual(result["rea"]["state"], "captured")
 
 
 if __name__ == "__main__":

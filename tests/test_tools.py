@@ -211,6 +211,23 @@ class RunTests(unittest.TestCase):
         self.assertEqual(ctx.exception.reason, "timeout")
         self.assertFalse(alive(int(pid_file.read_text())))
 
+    def test_a_killed_tool_takes_the_processes_it_started_with_it(self):
+        pid_file = self.root / "pid"
+        body = (
+            "import subprocess, time\n"
+            "child = subprocess.Popen(['sleep', '30'], stdout=subprocess.DEVNULL)\n"
+            f"open({str(pid_file)!r}, 'w').write(str(child.pid))\ntime.sleep(30)\n"
+        )
+        path = write_script(self.root, "spawner", body)
+        with self.assertRaises(tools.ToolError):
+            tools.run([path], timeout=1, cap=100)
+        grandchild = int(pid_file.read_text())
+        for _ in range(50):  # init reaps the killed orphan asynchronously
+            if not alive(grandchild):
+                break
+            time.sleep(0.05)
+        self.assertFalse(alive(grandchild))
+
     def test_output_over_the_cap_is_refused_while_the_child_writes(self):
         pid_file = self.root / "pid"
         body = (
@@ -243,7 +260,7 @@ class DevToolsEndpointTests(unittest.TestCase):
     def test_the_port_and_browser_path_are_read_from_devtools_active_port(self):
         self.write("9222\n/devtools/browser/abc-DEF_1\n")
         self.assertEqual(
-            tools.devtools_endpoint(self.profile),
+            tools.devtools_endpoint(self.profile, time.monotonic() + 5),
             ("http://127.0.0.1:9222", "/devtools/browser/abc-DEF_1"),
         )
 
@@ -256,16 +273,33 @@ class DevToolsEndpointTests(unittest.TestCase):
             with self.subTest(text=text):
                 self.write(text)
                 with self.assertRaises(tools.ToolError) as ctx:
-                    tools.devtools_endpoint(self.profile)
+                    tools.devtools_endpoint(self.profile, time.monotonic() + 5)
                 self.assertEqual(ctx.exception.reason, "bad output")
 
-    def test_a_missing_file_is_no_debugging_port(self):
+    def test_a_missing_file_is_a_timeout_at_the_stage_deadline(self):
+        clock = [1000.0]
         with (
-            mock.patch.object(tools, "DEVTOOLS_WAIT_S", 0.2),
+            mock.patch.object(tools.time, "monotonic", lambda: clock[0]),
+            mock.patch.object(
+                tools.time, "sleep", side_effect=lambda s: clock.__setitem__(0, clock[0] + s)
+            ),
             self.assertRaises(tools.ToolError) as ctx,
         ):
-            tools.devtools_endpoint(self.profile)
-        self.assertEqual(ctx.exception.reason, "no debugging port")
+            tools.devtools_endpoint(self.profile, 1000.2)
+        self.assertEqual(ctx.exception.reason, "timeout")
+        self.assertLessEqual(clock[0], 1000.2 + 0.1 + 1e-9)  # the deadline, plus one poll step
+
+
+class ExclusiveWriteTests(unittest.TestCase):
+    def test_an_existing_file_is_a_craft_error_and_is_never_overwritten(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        path = Path(tmp.name) / "HANDOFF.md"
+        path.write_text("kept", encoding="utf-8")
+        with self.assertRaises(tools.ToolError) as ctx:
+            tools._write_exclusive(path, "new")
+        self.assertEqual(ctx.exception.reason, "craft error")
+        self.assertEqual(path.read_text(encoding="utf-8"), "kept")
 
 
 class _Version(http.server.BaseHTTPRequestHandler):
@@ -297,17 +331,19 @@ class VerifyBrowserTests(unittest.TestCase):
 
     def test_the_listener_that_answers_with_our_browser_path_is_accepted(self):
         self.answer("/devtools/browser/abc")
-        tools.verify_browser(self.endpoint, "/devtools/browser/abc")
+        tools.verify_browser(self.endpoint, "/devtools/browser/abc", time.monotonic() + 5)
 
     def test_a_listener_with_another_browser_path_is_not_ours(self):
         self.answer("/devtools/browser/other")
         with self.assertRaises(tools.ToolError) as ctx:
-            tools.verify_browser(self.endpoint, "/devtools/browser/abc")
+            tools.verify_browser(self.endpoint, "/devtools/browser/abc", time.monotonic() + 5)
         self.assertEqual(ctx.exception.reason, "not our browser")
 
     def test_a_port_with_nothing_listening_is_not_ours(self):
         with self.assertRaises(tools.ToolError) as ctx:
-            tools.verify_browser("http://127.0.0.1:1", "/devtools/browser/abc")
+            tools.verify_browser(
+                "http://127.0.0.1:1", "/devtools/browser/abc", time.monotonic() + 5
+            )
         self.assertEqual(ctx.exception.reason, "not our browser")
 
 
