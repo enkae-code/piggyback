@@ -99,6 +99,11 @@ class KitScrollIntegration(unittest.TestCase):
         self.assertFalse((out / "scroll-samples.json").exists())
         self.assertEqual(list((out / "scroll").glob("frame-*.png")), [])
 
+    def test_same_document_url_changes_during_scroll_do_not_refuse(self):
+        out, s = self.capture("kit-replacestate-on-scroll.html")
+        self.assertEqual([step["step"] for step in s["steps"]], list(range(6)))
+        self.assertEqual(len(list(out.glob("scroll/frame-*.png"))), 6)
+
     def test_a_denied_request_during_scroll_is_recorded_as_blocked(self):
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)

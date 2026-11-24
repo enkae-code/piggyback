@@ -6,6 +6,7 @@ page is ever put on a command line or evaluated as code: the page script is a fi
 """
 
 import contextlib
+import ipaddress
 import json
 import math
 import os
@@ -15,6 +16,7 @@ import secrets
 import stat
 import subprocess
 import sys
+import tempfile
 import time
 from contextlib import closing
 from datetime import datetime, timezone
@@ -32,6 +34,7 @@ SCROLL_TOTAL_S = 150  # a scroll run also wheels through six steps and samples e
 SCROLL_NUM_LIMIT = (
     1_000_000  # page numbers are clamped to this: no real px, ms or opacity is larger
 )
+WORKER_OUTPUT_MAX = 16 * 1024 * 1024  # the most worker stdout the parent reads
 NAV_MS = 30_000
 SETTLE_MS = 5_000  # a page that never goes idle is still measured
 NAVIGATED = "the scroll page navigated during its capture; measure a page that stays put"
@@ -209,23 +212,30 @@ def _run_worker(request):
     """One JSON request to a Chromium child process; its JSON result, or an error dict."""
     # Playwright's bypass switch would let Chromium skip the proxy for loopback.
     env = {k: v for k, v in os.environ.items() if k != BYPASS_ENV}
-    proc = subprocess.Popen(
-        [sys.executable, "-m", "piggyback.measure"],
-        stdin=subprocess.PIPE,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
-        encoding="utf-8",
-        env=env,
-    )
     timeout = SCROLL_TOTAL_S if request.get("scroll_dir") else TOTAL_S
-    try:
-        out, err = proc.communicate(json.dumps(request), timeout=timeout)
-    except subprocess.TimeoutExpired:
-        proc.kill()
-        proc.communicate()
-        raise MeasureError(f"measure timed out after {timeout}s") from None
-    lines = out.strip().splitlines()
+    # stdout goes to a file: the parent reads at most WORKER_OUTPUT_MAX + 1 bytes of it.
+    # ponytail: one giant page.evaluate result inside the worker is bounded only by the deadline.
+    with tempfile.TemporaryFile() as out_file:
+        proc = subprocess.Popen(
+            [sys.executable, "-m", "piggyback.measure"],
+            stdin=subprocess.PIPE,
+            stdout=out_file,
+            stderr=subprocess.PIPE,
+            text=True,
+            encoding="utf-8",
+            env=env,
+        )
+        try:
+            _, err = proc.communicate(json.dumps(request), timeout=timeout)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            proc.communicate()
+            raise MeasureError(f"measure timed out after {timeout}s") from None
+        out_file.seek(0)
+        raw = out_file.read(WORKER_OUTPUT_MAX + 1)
+    if len(raw) > WORKER_OUTPUT_MAX:
+        raise MeasureError("the page produced too much measurement data")
+    lines = raw.decode("utf-8", errors="replace").strip().splitlines()
     try:
         return json.loads(lines[-1]) if lines else {"error": err.strip() or "no output"}
     except json.JSONDecodeError:
@@ -481,7 +491,8 @@ def _scroll_to(page, delta):
 
 
 def _dense_samples(page, origin):
-    """Samples at DENSE_MS after origin, each with the time it was actually taken."""
+    """Samples at DENSE_MS after origin. actual_ms is when Python requested the sample (Python's
+    monotonic clock), not when the browser painted it."""
     dense = []
     for due in DENSE_MS:
         # The browser's timer can end a fraction early on our clock: wait until ours says due.
@@ -507,11 +518,8 @@ def _capture_scroll(ctx, req, first_page):
     _refuse_if_moved(status, req, page)
     navigations = []
 
-    def record(frame):
-        if frame == page.main_frame:
-            navigations.append(frame.url)
-
-    page.on("framenavigated", record)
+    # Once per new main-frame document: pushState, replaceState and hash changes do not count.
+    page.on("domcontentloaded", lambda _page: navigations.append(True))
     page.wait_for_timeout(SCROLL_WAIT_MS)
     _refuse_if_moved(status, req, page)
     scrollable = page.evaluate("document.documentElement.scrollHeight - innerHeight")
@@ -521,7 +529,7 @@ def _capture_scroll(ctx, req, first_page):
     try:
         previous = 0
         for step, target in enumerate(targets):
-            arrived = _scroll_to(page, target - previous)  # cumulative targets: no drift
+            onset = _scroll_to(page, target - previous)  # cumulative targets: no drift
             previous = target
             dense = _dense_samples(page, time.monotonic())
             settled = _sample(page, True)
@@ -534,11 +542,12 @@ def _capture_scroll(ctx, req, first_page):
                     "step": step,
                     "frame": final.name,
                     "target_scroll_y": target,
-                    "scroll_arrived_ms": arrived,
+                    "scroll_onset_ms": onset,
                     **settled,
                     "dense": dense,
                 }
             )
+        scrollable_end = page.evaluate("document.documentElement.scrollHeight - innerHeight")
         if navigations:
             raise MeasureError(NAVIGATED)
         _refuse_if_moved(status, req, page)
@@ -560,22 +569,28 @@ def _capture_scroll(ctx, req, first_page):
         "viewport": {"width": width, "height": height},
         "media": "no-preference",
         "scrollable_px": round(scrollable),
+        "scrollable_end_px": round(scrollable_end),
         "status": status,
         "final_host": urlsplit(page.url).hostname,
-        "coverage": {"scroll": scroll_coverage(scrollable, steps)},
+        "coverage": {"scroll": scroll_coverage(scrollable, scrollable_end, steps)},
         "steps": steps,
     }
 
 
-def scroll_coverage(scrollable, steps):
-    """done, partial or none: from the wheel steps' arrival times and the final scroll position."""
+def scroll_coverage(scrollable, scrollable_end, steps):
+    """done, partial or none. partial: a wheel step timed out or settled away from its target, or
+    the page stopped short of its live bottom (scrollable_end, read after the last step)."""
     if scrollable <= 0 or not any(step["scroll_y"] != steps[0]["scroll_y"] for step in steps):
         return "none"
+    tolerance = max(2, 0.02 * scrollable)
     final = steps[-1]["scroll_y"]
-    if final is None or any(step["scroll_arrived_ms"] is None for step in steps):
+    if final is None or scrollable_end - final > tolerance:
         return "partial"
-    if scrollable - final > max(2, 0.02 * scrollable):
-        return "partial"
+    for step in steps:
+        if step["scroll_onset_ms"] is None or step["scroll_y"] is None:
+            return "partial"
+        if abs(step["scroll_y"] - step["target_scroll_y"]) > tolerance:
+            return "partial"
     return "done"
 
 
@@ -629,7 +644,15 @@ def _num(value):
 
 
 def _host(value):
-    return value if isinstance(value, str) and HOST.fullmatch(value) else "other"
+    """A DNS name, or a validated IP literal in canonical form; anything else is "other"."""
+    if not isinstance(value, str):
+        return "other"
+    if HOST.fullmatch(value):
+        return value
+    try:
+        return str(ipaddress.ip_address(value))
+    except ValueError:
+        return "other"
 
 
 def _box(value, count):
@@ -695,7 +718,7 @@ def _step(index, raw):
         "step": index,
         "frame": f"frame-{index}.png",  # named here, never taken from the page
         "target_scroll_y": _num(raw.get("target_scroll_y")),
-        "scroll_arrived_ms": _num(raw.get("scroll_arrived_ms")),
+        "scroll_onset_ms": _num(raw.get("scroll_onset_ms")),
         **_clean_sample(raw),
         "dense": _list(raw.get("dense"), 4, _dense),
     }
@@ -718,6 +741,7 @@ def clean_scroll(raw):
         "viewport": {"width": _num(viewport.get("width")), "height": _num(viewport.get("height"))},
         "media": _word(raw.get("media"), {"no-preference"}),
         "scrollable_px": _num(raw.get("scrollable_px")),
+        "scrollable_end_px": _num(raw.get("scrollable_end_px")),
         "status": status if isinstance(status, int) and 100 <= status <= 599 else None,
         "final_host": _host(raw.get("final_host")),
         "coverage": {"scroll": coverage},

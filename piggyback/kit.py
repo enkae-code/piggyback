@@ -4,6 +4,7 @@ The whole kit is built in a private staging folder beside --out, then renamed in
 step. --out holds a complete kit or nothing: a failed stage removes the staging folder.
 """
 
+import contextlib
 import hashlib
 import os
 import shutil
@@ -108,6 +109,10 @@ def make(url, out, request, *, allow_loopback=False):
     try:
         _build(url, staging, text, allow_loopback)
         try:
+            # rmdir removes only an empty folder, so a folder that filled up is never clobbered.
+            # Windows' rename refuses any existing folder, so the empty one must go first.
+            with contextlib.suppress(FileNotFoundError):
+                os.rmdir(out_dir)
             os.rename(staging, out_dir)  # one step; fails if out_dir has become non-empty
         except OSError as exc:
             raise ValueError(f"{out} must be a new or empty folder ({exc.strerror})") from None

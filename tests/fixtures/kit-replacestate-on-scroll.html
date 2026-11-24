@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Kit fixture: same-document URL changes on scroll</title>
+</head>
+<body style="margin: 0">
+<main style="min-height: 3200px">
+  <h1>Same-document URL changes on scroll fixture</h1>
+</main>
+<!-- On the first scroll the URL changes with replaceState; past 1000 px it changes the hash. Neither
+     loads a new document, so the capture must not refuse. -->
+<script>
+  let replaced = false;
+  let hashed = false;
+  addEventListener('scroll', function () {
+    if (!replaced) {
+      replaced = true;
+      history.replaceState(null, '', '#s');
+    }
+    if (!hashed && scrollY > 1000) {
+      hashed = true;
+      location.hash = 't';
+    }
+  });
+</script>
+</body>
+</html>
