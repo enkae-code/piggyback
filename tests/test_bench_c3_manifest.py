@@ -218,6 +218,7 @@ class BuildLayout(unittest.TestCase):
                     text = saved["prompts"][task["id"]][arm]
                     self.assertEqual(text, prompts.expand(task, arm) + "\n")
 
+    @unittest.skipUnless(os.name == "posix", "Windows has no POSIX file modes")
     def test_manifest_file_is_owner_only(self):
         with tempfile.TemporaryDirectory() as tmp, locked_run(tmp) as (run, _):
             self.assertEqual((run / "manifest.json").stat().st_mode & 0o777, 0o600)

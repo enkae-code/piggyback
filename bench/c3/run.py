@@ -437,7 +437,11 @@ def locked_run(store, run_id):
 def run_lock(run):
     """One exclusive lock per run, held from admission to publication. The kernel drops it when the
     process dies, so an interrupted run leaves no stale lock."""
-    fd = os.open(run / ".runner.lock", os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW, 0o600)
+    lock = run / ".runner.lock"
+    # Windows has no O_NOFOLLOW: refuse a link by lstat first, as bench/c1/score.py does.
+    if not hasattr(os, "O_NOFOLLOW") and lock.is_symlink():
+        raise SystemExit(f"refusing: {lock.name} is a symbolic link")
+    fd = os.open(lock, os.O_RDWR | os.O_CREAT | getattr(os, "O_NOFOLLOW", 0), 0o600)
     try:
         try:
             if os.name == "nt":

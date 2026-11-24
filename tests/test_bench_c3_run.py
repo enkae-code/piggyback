@@ -560,11 +560,14 @@ class Transcript(unittest.TestCase):
             self.assertFalse((out / "rounds" / "transcript.jsonl").exists())
 
     def test_slug_matches_the_claude_project_folder(self):
-        project = Path("/home/brodey/.hermes/cache/scratch/c3probe2")
-        slug = runner.transcript_path(project, "s").parent.name
-        self.assertEqual(slug, "-home-brodey--hermes-cache-scratch-c3probe2")
-        underscore = runner.transcript_path(Path("/tmp/a_b.c/x"), "s").parent.name
-        self.assertEqual(underscore, "-tmp-a-b-c-x")
+        # A real folder, so resolve() can't add a host prefix (macOS /System/Volumes/Data, drives).
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp) / ".hermes" / "a_b.c"
+            project.mkdir(parents=True)
+            slug = runner.transcript_path(project, "s").parent.name
+            self.assertTrue(slug.endswith("--hermes-a-b-c"), slug)
+            self.assertEqual(len(slug), len(str(project.resolve())))
+            self.assertRegex(slug, r"^[A-Za-z0-9-]+$")
 
     def test_copy_failure_is_recorded_and_the_receipt_is_still_published(self):
         with tempfile.TemporaryDirectory() as tmp:
