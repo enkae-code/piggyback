@@ -13,11 +13,11 @@ Usage: python -m bench.c3.run --store STORE --run RUN_ID TASK ARM
 
 import argparse
 import contextlib
-import fcntl
 import json
 import os
 import re
 import shutil
+import stat
 import subprocess
 import sys
 import threading
@@ -43,6 +43,11 @@ from bench.c3.manifest import (
     starter_hashes,
 )
 from piggyback.measure import publish_json
+
+if os.name == "nt":
+    import msvcrt
+else:
+    import fcntl
 
 ARM_FILES = {
     "piggyback-brief": ("BRIEF.md",),
@@ -433,17 +438,52 @@ def locked_run(store, run_id):
 def run_lock(run):
     """One exclusive lock per run, held from admission to publication. The kernel drops it when the
     process dies, so an interrupted run leaves no stale lock."""
-    fd = os.open(run / ".runner.lock", os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW, 0o600)
+    fd = _open_lock(run / ".runner.lock")
+    locked = False
     try:
         try:
-            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except BlockingIOError:
+            if os.name == "nt":
+                msvcrt.locking(fd, msvcrt.LK_NBLCK, 1)
+            else:
+                fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        # Only contention: flock raises EWOULDBLOCK, msvcrt EACCES. Anything else is a real fault.
+        except (BlockingIOError, PermissionError):
             raise SystemExit(
                 f"refusing: run {run.name} is active in another process; wait for it to finish"
             ) from None
+        locked = True
         yield
     finally:
+        try:
+            if locked and os.name == "nt":
+                os.lseek(fd, 0, os.SEEK_SET)
+                msvcrt.locking(fd, msvcrt.LK_UNLCK, 1)  # Windows may release late on close alone
+        finally:
+            os.close(fd)
+
+
+def _open_lock(lock):
+    """Open the lock file without following a link. Windows has no O_NOFOLLOW, so the file opened
+    must be the one lstat sees, and not a link."""
+    if hasattr(os, "O_NOFOLLOW"):
+        return os.open(lock, os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW, 0o600)
+    if os.path.islink(lock):
+        raise SystemExit(f"refusing: {lock.name} is a symbolic link")
+    # ponytail: a link swapped in after that check can still make the open create an empty file
+    # outside the run; the identity check below refuses to lock it. Upgrade: a reparse-point-aware
+    # open (CreateFile with FILE_FLAG_OPEN_REPARSE_POINT).
+    fd = os.open(lock, os.O_RDWR | os.O_CREAT, 0o600)
+    try:
+        seen, opened = os.lstat(lock), os.fstat(fd)
+    except OSError:
         os.close(fd)
+        raise
+    if stat.S_ISLNK(seen.st_mode) or (seen.st_dev, seen.st_ino) != (opened.st_dev, opened.st_ino):
+        os.close(fd)
+        raise SystemExit(
+            f"refusing: {lock.name} changed while it was opened (a link or another file)"
+        )
+    return fd
 
 
 def check_page_id(run, task_id, arm):

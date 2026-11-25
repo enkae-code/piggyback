@@ -1,6 +1,7 @@
 """C3 per-page runner, without a browser or a model: the agent call and checklist are stubbed."""
 
 import contextlib
+import errno
 import hashlib
 import io
 import json
@@ -9,6 +10,7 @@ import re
 import shutil
 import socket
 import subprocess
+import sys
 import tempfile
 import unittest
 import urllib.error
@@ -20,6 +22,15 @@ from urllib.parse import urlsplit
 from bench.c3 import checklist, prompts
 from bench.c3 import manifest as mf
 from bench.c3 import run as runner
+
+
+def setUpModule():
+    # macOS puts the temp folder under a symlink (/var -> /private/var), which the store guard
+    # refuses. Resolved for this module's tests only.
+    resolved = mock.patch.object(tempfile, "tempdir", os.path.realpath(tempfile.gettempdir()))
+    resolved.start()
+    unittest.addModuleCleanup(resolved.stop)
+
 
 COMMIT = "b" * 40
 MODEL = "claude-opus-5-5"
@@ -540,7 +551,7 @@ class Transcript(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             home = Path(tmp) / "home"
             agent = FakeAgent(home=home)
-            with mock.patch.dict(os.environ, {"HOME": str(home)}):
+            with mock.patch.dict(os.environ, {"HOME": str(home), "USERPROFILE": str(home)}):
                 result, out = run_with(tmp, agent, lambda *a, **k: report("pass"))
             self.assertEqual(result["transcript"], "kept")
             self.assertEqual(
@@ -551,17 +562,20 @@ class Transcript(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             home = Path(tmp) / "home"
             home.mkdir()
-            with mock.patch.dict(os.environ, {"HOME": str(home)}):
+            with mock.patch.dict(os.environ, {"HOME": str(home), "USERPROFILE": str(home)}):
                 result, out = run_with(tmp, FakeAgent(), lambda *a, **k: report("pass"))
             self.assertEqual(result["transcript"], "missing")
             self.assertFalse((out / "rounds" / "transcript.jsonl").exists())
 
     def test_slug_matches_the_claude_project_folder(self):
-        project = Path("/home/brodey/.hermes/cache/scratch/c3probe2")
-        slug = runner.transcript_path(project, "s").parent.name
-        self.assertEqual(slug, "-home-brodey--hermes-cache-scratch-c3probe2")
-        underscore = runner.transcript_path(Path("/tmp/a_b.c/x"), "s").parent.name
-        self.assertEqual(underscore, "-tmp-a-b-c-x")
+        # A real folder, so resolve() can't add a host prefix (macOS /System/Volumes/Data, drives).
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp) / ".hermes" / "C3probe2_a.b"
+            project.mkdir(parents=True)
+            slug = runner.transcript_path(project, "s").parent.name
+            self.assertTrue(slug.endswith("--hermes-C3probe2-a-b"), slug)
+            self.assertEqual(len(slug), len(str(project.resolve())))
+            self.assertRegex(slug, r"^[A-Za-z0-9-]+$")
 
     def test_copy_failure_is_recorded_and_the_receipt_is_still_published(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -574,7 +588,7 @@ class Transcript(unittest.TestCase):
                 return real_copy(src, dst, *a, **k)
 
             copy = mock.patch.object(runner.shutil, "copyfile", side_effect=fail_transcript)
-            with mock.patch.dict(os.environ, {"HOME": str(home)}), copy:
+            with mock.patch.dict(os.environ, {"HOME": str(home), "USERPROFILE": str(home)}), copy:
                 result, out = run_with(tmp, FakeAgent(home=home), lambda *a, **k: report("pass"))
             self.assertEqual(result["transcript"], "lookup_failed: PermissionError")
             self.assertEqual(result["status"], "pass")
@@ -888,6 +902,91 @@ class RunLock(unittest.TestCase):
                 second = runner.run_page(str(store), run_id, "T01", "skill-alone")
             self.assertEqual((first["status"], second["status"]), ("pass", "pass"))
 
+    @unittest.skipUnless(os.name == "posix", "flock is POSIX")
+    def test_a_lock_fault_that_is_not_contention_is_not_reported_as_a_busy_run(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            fault = OSError(errno.ENOLCK, "No locks available")
+            with mock.patch.object(runner.fcntl, "flock", side_effect=fault):
+                with self.assertRaises(OSError) as caught, runner.run_lock(Path(tmp)):
+                    pass
+            self.assertEqual(caught.exception.errno, errno.ENOLCK)
+
+    @unittest.skipUnless(os.name == "posix", "needs os.symlink without privileges")
+    def test_without_o_nofollow_a_lock_swapped_for_a_link_after_the_check_is_refused(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            run, outside = Path(tmp) / "run", Path(tmp) / "outside"
+            run.mkdir()
+            outside.write_text("keep")
+            real_open = os.open
+
+            def swap_then_open(path, flags, mode=0o777):
+                os.symlink(outside, path)  # lands between the lstat check and the open
+                return real_open(path, flags, mode)
+
+            with mock.patch.dict(os.__dict__):
+                os.__dict__.pop("O_NOFOLLOW", None)  # as on Windows
+                with mock.patch.object(os, "open", side_effect=swap_then_open):
+                    with self.assertRaises(SystemExit) as caught, runner.run_lock(run):
+                        pass
+            self.assertIn("a link or another file", str(caught.exception))
+            self.assertEqual(outside.read_text(), "keep")
+
+    @unittest.skipUnless(os.name == "posix", "counts open descriptors in /dev/fd")
+    def test_without_o_nofollow_a_failed_identity_read_closes_the_lock_file(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            run = Path(tmp)
+            before = len(os.listdir("/dev/fd"))
+            fault = OSError(errno.EIO, "I/O error")
+            with mock.patch.dict(os.__dict__):
+                os.__dict__.pop("O_NOFOLLOW", None)  # as on Windows
+                with mock.patch.object(os, "lstat", side_effect=fault):
+                    with self.assertRaises(OSError) as caught, runner.run_lock(run):
+                        pass
+            self.assertEqual(caught.exception.errno, errno.EIO)
+            self.assertEqual(len(os.listdir("/dev/fd")), before)
+
+    def test_a_failed_windows_unlock_still_closes_the_lock_file(self):
+        fake = mock.Mock(LK_NBLCK=1, LK_UNLCK=0)
+
+        def locking(fd, mode, nbytes):
+            if mode == fake.LK_UNLCK:
+                raise OSError(errno.EIO, "I/O error")
+
+        fake.locking.side_effect = locking
+        with tempfile.TemporaryDirectory() as tmp:
+            run = Path(tmp)
+            closed = []
+            real_close = os.close
+            with (
+                mock.patch.object(runner, "msvcrt", fake, create=True),
+                mock.patch.object(runner.os, "name", "nt"),
+                mock.patch.object(
+                    runner.os, "close", side_effect=lambda fd: (closed.append(fd), real_close(fd))
+                ),
+            ):
+                with self.assertRaises(OSError) as caught, runner.run_lock(run):
+                    pass
+            self.assertEqual(caught.exception.errno, errno.EIO)
+            self.assertEqual(len(closed), 1)
+
+
+class TempdirScope(unittest.TestCase):
+    def test_the_resolved_temp_folder_is_set_only_while_this_module_runs(self):
+        self.assertEqual(tempfile.gettempdir(), os.path.realpath(tempfile.gettempdir()))
+        outside = subprocess.run(
+            [
+                sys.executable,
+                "-c",
+                "import tempfile, tests.test_bench_c3_run as m, "
+                "tests.test_bench_c3_manifest as n; print(tempfile.tempdir)",
+            ],
+            capture_output=True,
+            text=True,
+            check=True,
+            cwd=Path(__file__).resolve().parents[1],
+        )
+        self.assertEqual(outside.stdout.strip(), "None")
+
 
 class SessionPersistence(unittest.TestCase):
     def test_reconcile_of_an_arm_killed_before_agent0_uses_the_persisted_session(self):
@@ -898,7 +997,7 @@ class SessionPersistence(unittest.TestCase):
             (out / "rounds").mkdir(parents=True)
             (out / "project").mkdir()
             (out / "rounds" / "session.txt").write_text("persisted-sess", encoding="utf-8")
-            with mock.patch.dict(os.environ, {"HOME": str(home)}):
+            with mock.patch.dict(os.environ, {"HOME": str(home), "USERPROFILE": str(home)}):
                 transcript = runner.transcript_path(out / "project", "persisted-sess")
                 transcript.parent.mkdir(parents=True)
                 transcript.write_text("{}\n", encoding="utf-8")
