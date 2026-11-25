@@ -451,6 +451,47 @@ class PinRulingTests(unittest.TestCase):
         self.assertIn("box, header (observed/runtime)", rows_with(text, "held at top")[0])
         self.assertNotIn("full-width bar", text)
 
+    def test_a_fixed_header_that_jumps_is_two_rows_and_no_row_spans_the_jump(self):
+        text = motion.build(data(self.held([10.0, 10.0, 50.0, 50.0], scrolls=(0, 200, 400, 600))))
+        rows = rows_with(text, "held at top")
+        self.assertEqual(len(rows), 2)
+        self.assertIn("held at top 10 px", rows[0])
+        self.assertIn("0-200 px (observed/runtime)", rows[0])
+        self.assertIn("held at top 50 px", rows[1])
+        self.assertIn("400-600 px (observed/runtime)", rows[1])
+        self.assertNotIn("| 0-600 px", text)
+        self.assertIn("moving seen 200-400 px", rows[0])
+        self.assertIn("moving seen 200-400 px", rows[1])
+
+    def test_a_sticky_that_leaves_its_top_between_two_stuck_scrolls_is_two_singletons(self):
+        steps = [
+            step(0, 0.0, elements=[stuck_nav(200.0, 500.0)]),
+            step(1, 200.0, elements=[stuck_nav(200.0, 200.0)]),
+            step(2, 400.0, elements=[stuck_nav(200.0, 500.0)]),
+            step(3, 600.0, elements=[stuck_nav(200.0, 200.0)]),
+        ]
+        text = motion.build(data(steps))
+        rows = rows_with(text, "CSS top")
+        self.assertEqual(len(rows), 2)
+        self.assertIn("at its CSS top 200 px at scroll 200 px", rows[0])
+        self.assertIn("at its CSS top 200 px at scroll 600 px", rows[1])
+        self.assertNotIn("| 200-600 px", text)
+
+    def test_an_unsettled_unstuck_sample_does_not_split_a_stuck_sticky(self):
+        steps = [
+            step(0, 0.0, elements=[stuck_nav(200.0, 200.0)]),
+            step(
+                1,
+                200.0,
+                dense=[sample(200.0, elements=[stuck_nav(200.0, 500.0)])],
+                elements=[stuck_nav(200.0, 200.0)],
+            ),
+            step(2, 400.0, elements=[stuck_nav(200.0, 200.0)]),
+        ]
+        rows = rows_with(motion.build(data(steps)), "stuck at top 200 px")
+        self.assertEqual(len(rows), 1)
+        self.assertIn("| 0-400 px (observed/runtime)", rows[0])
+
     def test_a_hostile_sticky_top_is_dropped_before_the_table(self):
         def raw_nav(top, y=0.0):
             nav = {

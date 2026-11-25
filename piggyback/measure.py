@@ -80,7 +80,7 @@ _SCROLL_SAMPLE = """(withAnimations) => {
   const elements = [];
   const nodes = document.body ? document.body.querySelectorAll('*') : [];
   // The first @PLAIN_MAX@ visible elements in DOM order, then up to @PIN_MAX@ fixed or sticky ones
-  // that are on screen, among the next @PIN_SCAN@ nodes.
+  // that are on screen and not transparent, among the next @PIN_SCAN@ nodes.
   let prefix = 0;
   let pins = 0;
   let scanned = 0;
@@ -93,7 +93,7 @@ _SCROLL_SAMPLE = """(withAnimations) => {
     const pinned = s.position === 'fixed' || s.position === 'sticky';
     if (pinned && (r.width <= 0 || r.height <= 0 || r.right <= 0 || r.left >= innerWidth)) continue;
     if (prefix < @PLAIN_MAX@) prefix++;
-    else if (pinned) pins++;
+    else if (pinned && Number(s.opacity) > 0) pins++;
     else continue;
     const m = s.transform === 'none' ? null : new DOMMatrixReadOnly(s.transform);
     elements.push({
@@ -952,7 +952,6 @@ EASINGS = frozenset(
 )
 PLAY_STATES = frozenset({"idle", "running", "paused", "finished"})
 POSITIONS = frozenset({"static", "relative", "absolute", "fixed", "sticky"})
-PINNED = frozenset({"fixed", "sticky"})  # the positions the sampler caps apart from the first 40
 TAGS = frozenset(
     {
         "html", "body", "main", "header", "footer", "nav", "section", "article", "aside",
@@ -1023,7 +1022,7 @@ def _elements(value):
         raw = _shape(raw, dict)
         if prefix < PLAIN_MAX:
             prefix += 1
-        elif _word(raw.get("position"), POSITIONS) in PINNED and pins < PIN_MAX:
+        elif _word(raw.get("position"), POSITIONS) in PINNED:
             pins += 1
         else:
             continue

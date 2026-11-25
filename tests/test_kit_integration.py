@@ -90,6 +90,15 @@ class KitScrollIntegration(unittest.TestCase):
             fixed = [e["box"] for e in step["elements"] if e["position"] == "fixed"]
             self.assertIn(toolbar, fixed)
             self.assertFalse(any(box[0] == -5000.0 for box in fixed))
+        self.assertIn(f"held at top {toolbar[1]:g} px, 200 x 40 px", motion.build(s))
+
+    def test_a_fixed_bar_past_the_pin_scan_bound_is_not_sampled(self):
+        # Only the top of the page has a full first-40 prefix; once it scrolls away the footer
+        # is one of the first 40 visible elements, which is sampled by design.
+        _, s = self.capture("kit-pin-scan.html")
+        top = s["steps"][0]
+        self.assertEqual((top["scroll_y"], len(top["elements"])), (0, 40))
+        self.assertNotIn([0.0, 0.0, 300.0, 30.0], [e["box"] for e in top["elements"]])
 
     def test_scroll_triggered_element_fades_in_by_900_ms(self):
         _, s = self.capture("kit-motion.html")

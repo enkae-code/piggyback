@@ -14,6 +14,7 @@
   }
   .crowd span { display: block; height: 2px; }
   .toolbar { position: fixed; bottom: 0; left: 0; width: 200px; height: 40px; background: #eee; }
+  .ghost { position: fixed; top: 0; left: 0; width: 100px; height: 10px; opacity: 0; }
   .offscreen { position: fixed; top: 0; left: -5000px; width: 100px; height: 20px; }
   @keyframes drift { from { transform: translateX(0); } to { transform: translateX(120px); } }
   aside {
@@ -35,6 +36,7 @@
   <section class="drift" aria-hidden="true"></section>
   <p style="position:absolute; top: 500px; left: 40px;">Visible text <!-- kit-marker-7f3a9c --> kit-marker-7f3a9c</p>
   <aside>Entry panel</aside>
+<div class="ghost"></div><div class="ghost"></div><div class="ghost"></div><div class="ghost"></div><div class="ghost"></div><div class="ghost"></div><div class="ghost"></div><div class="ghost"></div><div class="ghost"></div><div class="ghost"></div><div class="ghost"></div><div class="ghost"></div><div class="ghost"></div><div class="ghost"></div><div class="ghost"></div><div class="ghost"></div><div class="ghost"></div><div class="ghost"></div><div class="ghost"></div><div class="ghost"></div>
   <div class="toolbar">Toolbar</div>
   <div class="offscreen">Hidden</div>
 </main>

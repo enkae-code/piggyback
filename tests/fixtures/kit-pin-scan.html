@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kit fixture: pin scan</title>
+<style>
+  body { margin: 0; min-height: 3200px; font: 16px/1.5 sans-serif; }
+  .crowd span { display: block; height: 2px; }
+  footer { position: fixed; top: 0; left: 0; width: 300px; height: 30px; background: #eee; }
+</style>
+</head>
+<body>
+<div class="crowd"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>
+<div class="deep"></div>
+<footer>Late bar</footer>
+<script>
+  // More plain nodes than the sampler scans after its first 40: the fixed footer lies beyond it.
+  const deep = document.querySelector('.deep');
+  for (let i = 0; i < 4100; i++) deep.appendChild(document.createElement('i'));
+</script>
+</body>
+</html>

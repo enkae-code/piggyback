@@ -111,6 +111,8 @@ def _pin_key(element):
     A fixed element's top is not in the key, so a header that moves a little stays one pin.
     # ponytail: geometry is the match key, not node identity; a same-size twin can join a run.
     # ponytail: a header that changes size is one row per size.
+    # ponytail: a same-size twin either joins a run, or, when both are on screen in one sample,
+    # both are dropped as ambiguous (same-size top and bottom bars give no row).
     None if a number is missing: such an element is not matched.
     """
     x, _, width, height = element["box"]
@@ -170,6 +172,33 @@ def _stuck(element):
     return top is not None and y is not None and abs(y - top) <= HELD_PX
 
 
+def _segments(run, sticky):
+    """Split a run where its place changes, so each part gets its own row.
+
+    A fixed pin ends a segment at a jump: a pair whose top moved more than HELD_PX, or has no top;
+    the later sample starts the next. A sticky pin ends one at a settled sample that is not stuck,
+    and that sample is in neither part. Unsettled samples never split.
+    """
+    segments, current = [], []
+    for item in run:
+        element, settled = item[2], item[3]
+        if sticky and settled and not _stuck(element):
+            segments.append(current)
+            current = []
+            continue
+        if not sticky and current and not _same_top(current[-1][2], element):
+            segments.append(current)
+            current = []
+        current.append(item)
+    segments.append(current)
+    return [segment for segment in segments if segment]
+
+
+def _same_top(before, after):
+    top, prev_top = after["box"][1], before["box"][1]
+    return None not in (top, prev_top) and abs(top - prev_top) <= HELD_PX
+
+
 def _role(element, viewport):
     """A phrase from geometry only: a full-width bar at the top or bottom, else a box."""
     _, top, width, height = element["box"]
@@ -210,10 +239,9 @@ def _held_view(held):
     return scrolls, held[0][2], False
 
 
-def _pin_row(run, viewport, floor):
+def _pin_row(run, viewport, floor, moving):
     sticky = run[0][2]["position"] == "sticky"
-    held, moving = _pairs(run)
-    view = _stuck_view(run, floor) if sticky else _held_view(held)
+    view = _stuck_view(run, floor) if sticky else _held_view(_pairs(run)[0])
     if view is None:
         return None
     scrolls, element, single = view
@@ -247,8 +275,15 @@ def _pin_row(run, viewport, floor):
 def _pin_rows(samples, viewport):
     scrolls = [sample.get("scroll_y") for _, sample, _ in samples]
     floor = min((s for s in scrolls if isinstance(s, (int, float))), default=None)
-    rows = (_pin_row(run, viewport, floor) for run in _pin_runs(samples))
-    return [row for row in rows if row]
+    rows = []
+    for run in _pin_runs(samples):
+        sticky = run[0][2]["position"] == "sticky"
+        moving = _pairs(run)[1]  # the whole run: each part still says the element was seen moving
+        for segment in _segments(run, sticky):
+            row = _pin_row(segment, viewport, floor, moving)
+            if row:
+                rows.append(row)
+    return rows
 
 
 def _elements(samples):
