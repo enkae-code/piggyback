@@ -463,6 +463,12 @@ class PinRulingTests(unittest.TestCase):
         self.assertIn("moving seen 200-400 px", rows[0])
         self.assertIn("moving seen 200-400 px", rows[1])
 
+    def test_a_fixed_header_with_a_missing_top_between_holds_is_two_rows(self):
+        steps = self.held([10.0, 10.0, None, 10.0, 10.0], scrolls=(0, 200, 400, 600, 800))
+        rows = rows_with(motion.build(data(steps)), "held at top 10 px")
+        self.assertEqual(len(rows), 2)
+        self.assertNotIn("| 0-800 px", "\n".join(rows))
+
     def test_a_sticky_that_leaves_its_top_between_two_stuck_scrolls_is_two_singletons(self):
         steps = [
             step(0, 0.0, elements=[stuck_nav(200.0, 500.0)]),
@@ -475,6 +481,7 @@ class PinRulingTests(unittest.TestCase):
         self.assertEqual(len(rows), 2)
         self.assertIn("at its CSS top 200 px at scroll 200 px", rows[0])
         self.assertIn("at its CSS top 200 px at scroll 600 px", rows[1])
+        self.assertIn("steps 3-3, 1 samples", rows[1])  # the unstuck step 2 is in neither row
         self.assertNotIn("| 200-600 px", text)
 
     def test_an_unsettled_unstuck_sample_does_not_split_a_stuck_sticky(self):

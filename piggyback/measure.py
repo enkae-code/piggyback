@@ -92,8 +92,10 @@ _SCROLL_SAMPLE = """(withAnimations) => {
     const s = getComputedStyle(el);
     const pinned = s.position === 'fixed' || s.position === 'sticky';
     if (pinned && (r.width <= 0 || r.height <= 0 || r.right <= 0 || r.left >= innerWidth)) continue;
+    // The recorded (rounded) opacity decides: 0.004 is recorded as 0, so it spends no pin slot.
+    const opacity = num(Number(s.opacity));
     if (prefix < @PLAIN_MAX@) prefix++;
-    else if (pinned && Number(s.opacity) > 0) pins++;
+    else if (pinned && opacity > 0) pins++;
     else continue;
     const m = s.transform === 'none' ? null : new DOMMatrixReadOnly(s.transform);
     elements.push({
@@ -101,7 +103,7 @@ _SCROLL_SAMPLE = """(withAnimations) => {
       tag: TAG.test(el.localName) ? el.localName : 'other',
       box: [r.x, r.y, r.width, r.height].map(num),
       transform: m ? [m.a, m.b, m.c, m.d, m.e, m.f].map(num) : null,
-      opacity: num(Number(s.opacity)),
+      opacity,
       clip_path: s.clipPath === 'none' ? 'none' : 'other',
       position: ['static', 'relative', 'absolute', 'fixed', 'sticky'].includes(s.position)
         ? s.position : 'other',

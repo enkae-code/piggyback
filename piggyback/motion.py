@@ -177,7 +177,7 @@ def _segments(run, sticky):
 
     A fixed pin ends a segment at a jump: a pair whose top moved more than HELD_PX, or has no top;
     the later sample starts the next. A sticky pin ends one at a settled sample that is not stuck,
-    and that sample is in neither part. Unsettled samples never split.
+    and that sample is in neither part. An unsettled sample never splits a sticky pin.
     """
     segments, current = [], []
     for item in run:
