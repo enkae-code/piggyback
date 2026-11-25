@@ -413,7 +413,9 @@ class KitCheckTests(unittest.TestCase):
 
         def spy(path):  # counts only the workspace's listing; other scans (cleanup) pass through
             listing = real_scandir(path)
-            return Counting(listing) if path == self.workspace else listing
+            if isinstance(path, (str, os.PathLike)) and Path(path) == self.workspace:
+                return Counting(listing)
+            return listing
 
         with (
             mock.patch.object(kit, "WORKSPACE_ENTRIES", 10),
@@ -421,6 +423,7 @@ class KitCheckTests(unittest.TestCase):
         ):
             text = self.check().read_text(encoding="utf-8")
         self.assertIn("Impeccable: skipped: workspace too large", text)
+        self.assertTrue(seen, "the spy must observe the workspace listing")
         self.assertLessEqual(len(seen), 11)
 
     def test_a_finding_that_names_the_staging_folder_shows_no_stage_path(self):
@@ -435,6 +438,85 @@ class KitCheckTests(unittest.TestCase):
         text = self.check().read_text(encoding="utf-8")
         self.assertNotIn("a.html", text)
         self.assertIn("\\[path\\]", text)
+
+    def test_a_root_design_md_folder_is_ignored_not_a_collision(self):
+        (self.workspace / "DESIGN.md").mkdir()
+        text = self.check().read_text(encoding="utf-8")
+        self.assertIn("workspace DESIGN.md ignored", text)
+        self.assertIn("## Attempt 1", text)
+
+    def test_a_root_design_md_over_the_byte_budget_is_ignored_and_impeccable_still_runs(self):
+        (self.workspace / "DESIGN.md").write_text("x" * 100, encoding="utf-8")
+        with mock.patch.object(kit, "WORKSPACE_MAX", 20):
+            text = self.check().read_text(encoding="utf-8")
+        self.assertIn("workspace DESIGN.md ignored", text)
+        self.assertNotIn("skipped: workspace too large", text)
+        self.assertIn("Impeccable: ran", text)
+
+    def test_the_cli_error_names_no_absolute_temp_path(self):
+        full = OSError(28, "No space left", str(self.root / "stage" / "DESIGN.md"))
+        err = io.StringIO()
+        with mock.patch("piggyback.kit.write_measure", side_effect=fake_write_measure):
+            with mock.patch.object(kit.tools, "write_new_bytes", side_effect=full):
+                with contextlib.redirect_stderr(err):
+                    code = main(
+                        [
+                            "kit",
+                            "check",
+                            "--kit",
+                            str(self.kit),
+                            "--build",
+                            BUILD,
+                            "--workspace",
+                            str(self.workspace),
+                            "--allow-loopback",
+                        ]
+                    )
+        self.assertEqual(code, 1)
+        self.assertIn("DESIGN.md could not be written", err.getvalue())
+        self.assertNotIn(str(self.root), err.getvalue())
+
+    def test_an_unreadable_workspace_subfolder_is_skipped_and_counted(self):
+        locked = self.workspace / "locked"
+        locked.mkdir()
+        (locked / "a.html").write_text("x", encoding="utf-8")
+        real_scandir = os.scandir
+
+        def deny(path):
+            if isinstance(path, (str, os.PathLike)) and Path(path) == locked:
+                raise PermissionError(13, "denied", str(path))
+            return real_scandir(path)
+
+        with mock.patch.object(kit.os, "scandir", side_effect=deny):
+            text = self.check().read_text(encoding="utf-8")
+        self.assertIn("1 workspace files skipped", text)
+        self.assertIn("## Attempt 1", text)
+
+    def test_a_finding_outside_the_stage_shows_only_its_last_name(self):
+        self.fake.write_text(
+            f"#!{sys.executable}\n"
+            "import json\n"
+            "item = {'name': 'n', 'severity': 'warning', 'snippet': ''}\n"
+            "item['file'] = '/elsewhere/deep/outside.html'\n"
+            "print(json.dumps([item]))\n",
+            encoding="utf-8",
+        )
+        text = self.check().read_text(encoding="utf-8")
+        self.assertIn("at outside.html", text)
+        self.assertNotIn("/elsewhere", text)
+
+    def test_relative_impeccable_file_names_render_as_stage_relative_paths(self):
+        self.fake.write_text(
+            f"#!{sys.executable}\n"
+            "import json, sys\n"
+            "item = {'name': 'n', 'severity': 'warning', 'snippet': ''}\n"
+            "item['file'] = 'pages/index.html'\n"
+            "print(json.dumps([item]))\n",
+            encoding="utf-8",
+        )
+        text = self.check().read_text(encoding="utf-8")
+        self.assertIn("at pages/index.html", text)
+        self.assertNotIn("at ?", text)
 
     def test_a_changed_design_md_refuses_the_check_before_measuring(self):
         (self.kit / "DESIGN.md").write_text("edited", encoding="utf-8")
@@ -480,10 +562,33 @@ class TextRedactionTests(unittest.TestCase):
         self.assertNotIn("/home", out)
         self.assertIn("here", out)
 
-    def test_a_windows_path_with_spaces_is_removed(self):
-        out = kit._text("C:\\Users\\A B\\x.html")
+    def test_an_apostrophe_inside_a_double_quoted_path_is_removed(self):
+        out = kit._text('bad "/home/u/Bob\'s Site/x.html" here')
+        self.assertNotIn("Bob", out)
+        self.assertNotIn("x.html", out)
+        self.assertIn("here", out)
+
+    def test_a_double_quote_inside_a_single_quoted_path_is_removed(self):
+        out = kit._text("bad '/home/u/Say \"hi\"/x.html' here")
+        self.assertNotIn("Say", out)
+        self.assertNotIn("x.html", out)
+        self.assertIn("here", out)
+
+    def test_an_unquoted_path_stops_at_whitespace(self):
+        self.assertEqual(kit._text("see /etc/passwd here"), r"see \[path\] here")
+
+    def test_slash_numbers_and_comments_are_not_paths(self):
+        self.assertEqual(kit._text("see /etc/passwd here and more"), r"see \[path\] here and more")
+        self.assertEqual(kit._text("grid-area: 1 /2 / 3"), "grid-area: 1 /2 / 3")
+        self.assertEqual(kit._text("calc(100% /3)"), "calc(100% /3)")
+        self.assertEqual(kit._text("a // comment"), "a // comment")
+
+    def test_a_quoted_windows_path_with_spaces_is_removed(self):
+        # ponytail: an unquoted Windows path with spaces is cut at the first space; quote it.
+        out = kit._text('bad "C:\\Users\\A B\\x.html" here')
         for leak in ("Users", "A B", "x.html"):
             self.assertNotIn(leak, out)
+        self.assertIn("here", out)
 
     def test_the_home_and_staging_folders_are_removed_literally(self):
         # After "(" the regex sees no path, so only the literal roots can remove these.

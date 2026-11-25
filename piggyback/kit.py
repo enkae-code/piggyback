@@ -47,11 +47,14 @@ CHECK_MAX = 4 * 1024 * 1024
 HISTORY_UNREADABLE = "Earlier history in CHECK.md could not be read; starting attempt 1."
 IDS = ("open", "fixed", "uncomparable")
 CONCEPTS = frozenset(glossary.TERMS)
-RUN = r"""[^<>"'`()\r\n]*"""  # a path runs to a delimiter or the end of its line
-# Quoted: through the closing quote. Unquoted: only at the start of text or after whitespace, so
-# markup ("</div>"), URLs ("https://") and "url(/x)" are not paths.
+ROOT = r"(?:[A-Za-z]:\\|~/|/)"
+RUN = r"""[^<>"'`()\r\n]*"""  # a literal root takes the path to a delimiter or end of line
+# A quoted path runs through the quote that opened it, so the other quote may sit inside it. An
+# unquoted path starts after whitespace, stops at whitespace, and needs a path-like first segment,
+# so markup ("</div>"), URLs ("https://"), "url(/x)", "1 /2" and "//" are not paths.
 ABS_PATH = re.compile(
-    r"""(["'`])(?:[A-Za-z]:\\|~/|/)[^"'`\r\n]*\1|(?<![^\s])(?:[A-Za-z]:\\|~/|/)(?=\S)""" + RUN
+    rf"""(?P<q>["'`]){ROOT}[^\r\n]*?(?P=q)"""
+    rf"""|(?<![^\s]){ROOT}[\w.~-][^\s"'`<>()]*/[^\s"'`<>()]*"""
 )
 MARKER = "<!-- piggyback-check "
 CHECK_NOT_RUN = (
@@ -311,12 +314,23 @@ def _copy_file(entry, dest_dir, state):
     if data is None:
         state["skipped"] += 1
         return
-    dest = dest_dir / entry.name
-    if os.path.lexists(dest):  # only the kit's DESIGN.md is staged before the workspace
-        state["design"] = True
-        return
     state["bytes"] += len(data)
-    _write_name(dest, data)
+    _write_name(dest_dir / entry.name, data)
+
+
+def _copy_entry(entry, rel, target, state, folders):
+    """One workspace entry: counted against the bound, then a folder to walk or a file to copy.
+    A name already in the stage is the kit's frozen DESIGN.md and wins, checked before any read."""
+    state["entries"] += 1
+    if state["entries"] > WORKSPACE_ENTRIES:
+        raise WorkspaceTooLarge(SKIPPED_WORKSPACE)
+    if os.path.lexists(target / rel / entry.name):
+        state["design"] = True
+    elif entry.is_dir(follow_symlinks=False):
+        folders.append(rel / entry.name)
+        (target / rel / entry.name).mkdir(exist_ok=True)
+    else:
+        _copy_file(entry, target / rel, state)
 
 
 def _copy_tree(source, target):
@@ -342,14 +356,7 @@ def _copy_tree(source, target):
             continue
         with listing:
             for entry in listing:
-                state["entries"] += 1
-                if state["entries"] > WORKSPACE_ENTRIES:
-                    raise WorkspaceTooLarge(SKIPPED_WORKSPACE)
-                if entry.is_dir(follow_symlinks=False):
-                    folders.append(rel / entry.name)
-                    (target / rel / entry.name).mkdir(exist_ok=True)
-                else:
-                    _copy_file(entry, target / rel, state)
+                _copy_entry(entry, rel, target, state, folders)
     notes = []
     if state["design"]:
         notes.append("workspace DESIGN.md ignored; the kit's frozen DESIGN.md is used.")
@@ -369,12 +376,15 @@ def _text(value, limit=TEXT_MAX, roots=()):
 
 
 def _relative(path, stage):
-    if not isinstance(path, str):
+    """The finding's file inside the stage. A relative name is taken as the stage's, and a name
+    outside the stage falls back to its last part, so no absolute path is shown."""
+    if not isinstance(path, str) or not path:
         return "?"
+    candidate = Path(path) if Path(path).is_absolute() else stage / path
     try:
-        return Path(path).resolve().relative_to(stage.resolve()).as_posix()
+        return candidate.resolve().relative_to(stage.resolve()).as_posix()
     except (OSError, ValueError):
-        return "?"
+        return Path(path).name or "?"
 
 
 def _finding(item, stage):
