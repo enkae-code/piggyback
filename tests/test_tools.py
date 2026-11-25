@@ -572,7 +572,7 @@ class ImpeccableToolTests(unittest.TestCase):
         out = tools.run(
             self.py("print('[]'); raise SystemExit(2)"), timeout=30, cap=4096, ok=(0, 2)
         )
-        self.assertEqual(out, b"[]\n")
+        self.assertEqual(out.strip(), b"[]")  # Windows prints \r\n
 
     def test_a_nonzero_exit_outside_the_allowed_codes_is_a_failure(self):
         with self.assertRaises(tools.ToolError):
