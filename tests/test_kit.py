@@ -301,7 +301,7 @@ ALLOWED_KEYS = {
     "due_ms", "actual_ms",
     "kind", "duration",
     "delay", "iterations", "easing", "play_state", "index", "tag", "box", "transform", "opacity",
-    "clip_path", "position",
+    "clip_path", "position", "top",
 }  # fmt: skip
 ALLOWED_WORDS = {
     "animation", "transition", "other", "linear", "ease", "ease-in", "ease-out", "ease-in-out",

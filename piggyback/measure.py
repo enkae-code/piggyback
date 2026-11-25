@@ -75,11 +75,17 @@ SCROLL_SAMPLE = """(withAnimations) => {
   }) : null;
   const elements = [];
   const nodes = document.body ? document.body.querySelectorAll('*') : [];
-  for (let index = 0; index < nodes.length && elements.length < 40; index++) {
+  // The first 40 visible elements in DOM order, then up to 20 more that are fixed or sticky.
+  let plain = 0;
+  let pins = 0;
+  for (let index = 0; index < nodes.length && (plain < 40 || pins < 20); index++) {
     const el = nodes[index];
     const r = el.getBoundingClientRect();
     if (r.bottom <= 0 || r.top >= innerHeight) continue;
     const s = getComputedStyle(el);
+    const pinned = s.position === 'fixed' || s.position === 'sticky';
+    if (pinned ? pins >= 20 : plain >= 40) continue;
+    if (pinned) pins++; else plain++;
     const m = s.transform === 'none' ? null : new DOMMatrixReadOnly(s.transform);
     elements.push({
       index,
@@ -90,6 +96,7 @@ SCROLL_SAMPLE = """(withAnimations) => {
       clip_path: s.clipPath === 'none' ? 'none' : 'other',
       position: ['static', 'relative', 'absolute', 'fixed', 'sticky'].includes(s.position)
         ? s.position : 'other',
+      top: s.position === 'sticky' && s.top.endsWith('px') ? num(parseFloat(s.top)) : null,
     });
   }
   return {scroll_y: num(scrollY), animations, elements, count: nodes.length};
@@ -931,6 +938,7 @@ EASINGS = frozenset(
 )
 PLAY_STATES = frozenset({"idle", "running", "paused", "finished"})
 POSITIONS = frozenset({"static", "relative", "absolute", "fixed", "sticky"})
+PINNED = frozenset({"fixed", "sticky"})  # capped at 20 on their own, apart from the 40 others
 TAGS = frozenset(
     {
         "html", "body", "main", "header", "footer", "nav", "section", "article", "aside",
@@ -989,6 +997,26 @@ def _list(value, cap, item):
     return [item(v) for v in _shape(value, list)[:cap]]
 
 
+def _elements(value):
+    """The first 40 elements, then up to 20 fixed or sticky ones, in page order.
+
+    Only the kept elements are checked: a page's extra elements are dropped unread, as before.
+    """
+    kept, plain, pins = [], 0, 0
+    for raw in _shape(value, list):
+        raw = _shape(raw, dict)
+        if _word(raw.get("position"), POSITIONS) in PINNED:
+            if pins >= 20:
+                continue
+            pins += 1
+        else:
+            if plain >= 40:
+                continue
+            plain += 1
+        kept.append(_element(raw))
+    return kept
+
+
 def _animation(raw):
     raw = _shape(raw, dict)
     iterations = raw.get("iterations")
@@ -1002,9 +1030,17 @@ def _animation(raw):
     }
 
 
+def _sticky_top(value, position):
+    """A sticky element's computed top in px: a finite number within SCROLL_NUM_LIMIT, else None."""
+    if position != "sticky" or _num(value) is None or abs(value) > SCROLL_NUM_LIMIT:
+        return None
+    return _num(value)
+
+
 def _element(raw):
     raw = _shape(raw, dict)
     transform = raw.get("transform")
+    position = _word(raw.get("position"), POSITIONS)
     return {
         "index": _num(raw.get("index")),
         "tag": _word(raw.get("tag"), TAGS),
@@ -1012,7 +1048,8 @@ def _element(raw):
         "transform": None if transform is None else _box(transform, 6),
         "opacity": _num(raw.get("opacity")),
         "clip_path": _word(raw.get("clip_path"), {"none"}),
-        "position": _word(raw.get("position"), POSITIONS),
+        "position": position,
+        "top": _sticky_top(raw.get("top"), position),
     }
 
 
@@ -1023,7 +1060,7 @@ def _clean_sample(raw):
         "scroll_y": _num(raw.get("scroll_y")),
         "count": _num(raw.get("count")),
         "animations": None if animations is None else _list(animations, 40, _animation),
-        "elements": _list(raw.get("elements"), 40, _element),
+        "elements": _elements(raw.get("elements")),
     }
 
 

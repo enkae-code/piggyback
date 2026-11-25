@@ -23,15 +23,16 @@ def anim(duration=300.0, delay=0.0, easing="ease-out"):
     }
 
 
-def element(index=0, tag="div", transform=None, opacity=1.0):
+def element(index=0, tag="div", transform=None, opacity=1.0, box=None, position="static", top=None):
     return {
         "index": index,
         "tag": tag,
-        "box": [0.0, 0.0, 10.0, 10.0],
+        "box": box or [0.0, 0.0, 10.0, 10.0],
         "transform": transform,
         "opacity": opacity,
         "clip_path": "none",
-        "position": "fixed",
+        "position": position,
+        "top": top,
     }
 
 
@@ -188,3 +189,158 @@ class MotionTableTests(unittest.TestCase):
         c = [1.0, 0.0, 0.0, 1.0, 9.0, 0.0]
         self.assertEqual(motion._spread("transform", [a, b, c]), "; 3 distinct transforms")
         self.assertEqual(motion._spread("transform", [a, b, a]), "")
+
+
+def pinned(box, position="fixed", tag="div", top=None):
+    return element(tag=tag, box=box, position=position, top=top)
+
+
+def pin_rows(text):
+    return rows_with(text, "scroll (position:")
+
+
+class PinRowTests(unittest.TestCase):
+    def test_a_fixed_full_width_header_held_at_the_top_is_one_pin_row(self):
+        header = pinned([0.0, 0.0, 1440.0, 60.0], tag="header")
+        steps = [step(i, 200.0 * i, elements=[header]) for i in range(6)]
+        text = motion.build(data(steps))
+        rows = pin_rows(text)
+        self.assertEqual(len(rows), 1)
+        self.assertIn("full-width bar at the top, header (observed/runtime)", rows[0])
+        self.assertIn("held at top 0 px, 1440 x 60 px, at left 0 px (observed/runtime)", rows[0])
+        self.assertIn("200-1000 px (observed/runtime)", rows[0])
+
+    def test_a_sticky_column_is_stuck_across_the_scrolls_it_holds_its_top(self):
+        ys = [400.0, 200.0, 0.0, 0.0, 0.0, -200.0]
+        steps = [
+            step(i, 200.0 * i, elements=[pinned([1200.0, y, 200.0, 400.0], "sticky", "aside", 0.0)])
+            for i, y in enumerate(ys)
+        ]
+        rows = pin_rows(motion.build(data(steps)))
+        self.assertEqual(len(rows), 1)
+        self.assertIn("box, aside (observed/runtime)", rows[0])
+        self.assertIn("scroll (position: sticky) (observed/runtime)", rows[0])
+        self.assertIn("stuck at top 0 px, 200 x 400 px, at left 1200 px", rows[0])
+        self.assertIn("400-800 px (observed/runtime)", rows[0])
+        self.assertIn("moving seen 200-1000 px (observed/runtime)", rows[0])
+
+    def test_a_sticky_element_stuck_once_at_its_top_is_one_row(self):
+        steps = [
+            step(0, 0, elements=[pinned([0.0, 500.0, 300.0, 200.0], "sticky", "aside", 130.0)]),
+            step(
+                1, 2419.0, elements=[pinned([0.0, 130.0, 300.0, 200.0], "sticky", "aside", 130.0)]
+            ),
+            step(
+                2, 3628.0, elements=[pinned([0.0, -580.0, 300.0, 200.0], "sticky", "aside", 130.0)]
+            ),
+        ]
+        rows = pin_rows(motion.build(data(steps)))
+        self.assertEqual(len(rows), 1)
+        self.assertIn("stuck at top 130 px, 300 x 200 px, at left 0 px (observed/runtime)", rows[0])
+        self.assertIn("at 2419 px (observed/runtime)", rows[0])
+
+    def test_a_sticky_top_within_one_pixel_of_its_computed_top_is_stuck(self):
+        steps = [
+            step(0, 0, elements=[pinned([0.0, 500.0, 300.0, 200.0], "sticky", "aside", 130.0)]),
+            step(
+                1, 2419.0, elements=[pinned([0.0, 130.5, 300.0, 200.0], "sticky", "aside", 130.0)]
+            ),
+        ]
+        self.assertEqual(len(pin_rows(motion.build(data(steps)))), 1)
+
+    def test_a_sticky_element_whose_y_never_equals_its_top_gets_no_row(self):
+        steps = [
+            step(i, 200.0 * i, elements=[pinned([0.0, y, 300.0, 200.0], "sticky", "aside", 130.0)])
+            for i, y in enumerate([500.0, 400.0, 300.0, 200.0])
+        ]
+        self.assertEqual(pin_rows(motion.build(data(steps))), [])
+
+    def test_a_sticky_element_stuck_only_in_a_dense_sample_gets_no_row(self):
+        dense = [
+            sample(2419.0, elements=[pinned([0.0, 130.0, 300.0, 200.0], "sticky", "aside", 130.0)])
+        ]
+        steps = [
+            step(0, 0, elements=[pinned([0.0, 500.0, 300.0, 200.0], "sticky", "aside", 130.0)]),
+            step(
+                1,
+                2419.0,
+                dense=dense,
+                elements=[pinned([0.0, 500.0, 300.0, 200.0], "sticky", "aside", 130.0)],
+            ),
+        ]
+        self.assertEqual(pin_rows(motion.build(data(steps))), [])
+
+    def test_a_sticky_element_with_no_top_gets_no_stuck_row(self):
+        steps = [
+            step(i, 200.0 * i, elements=[pinned([0.0, 130.0, 300.0, 200.0], "sticky", "aside")])
+            for i in range(3)
+        ]
+        self.assertEqual(pin_rows(motion.build(data(steps))), [])
+
+    def test_a_fixed_header_across_a_count_change_is_one_row_over_both_ranges(self):
+        header = pinned([0.0, 0.0, 1440.0, 60.0], tag="header")
+        steps = [
+            step(i, 200.0 * i, count=1103 if i < 3 else 1111, elements=[header]) for i in range(6)
+        ]
+        rows = pin_rows(motion.build(data(steps)))
+        self.assertEqual(len(rows), 1)
+        self.assertIn("200-1000 px (observed/runtime)", rows[0])
+
+    def test_a_fixed_element_that_moves_gets_no_pin_row(self):
+        steps = [
+            step(i, 200.0 * i, elements=[pinned([0.0, 10.0 * i, 10.0, 10.0])]) for i in range(6)
+        ]
+        self.assertEqual(pin_rows(motion.build(data(steps))), [])
+
+    def test_a_fixed_bottom_box_is_a_box_not_a_column(self):
+        widget = pinned([0.0, 675.0, 392.0, 205.0])
+        steps = [step(i, 200.0 * i, elements=[widget]) for i in range(6)]
+        rows = pin_rows(motion.build(data(steps)))
+        self.assertEqual(len(rows), 1)
+        self.assertIn("box, div (observed/runtime)", rows[0])
+        self.assertNotIn("column", rows[0])
+
+    def test_a_full_width_bar_at_the_bottom_is_named_as_one(self):
+        bar = pinned([0.0, 896.0, 1440.0, 4.0], tag="footer")
+        steps = [step(i, 200.0 * i, elements=[bar]) for i in range(6)]
+        rows = pin_rows(motion.build(data(steps)))
+        self.assertIn("full-width bar at the bottom, footer (observed/runtime)", rows[0])
+
+    def test_a_drift_within_one_pixel_still_counts_as_held(self):
+        ys = [0.0, 0.5, 0.0, 0.5, 0.0, 0.5]
+        steps = [
+            step(i, 200.0 * i, elements=[pinned([0.0, y, 1440.0, 60.0])]) for i, y in enumerate(ys)
+        ]
+        self.assertEqual(len(pin_rows(motion.build(data(steps)))), 1)
+
+    def test_an_element_seen_in_one_sample_only_is_not_a_pin(self):
+        steps = [step(0, 0, elements=[pinned([0.0, 0.0, 1440.0, 60.0])]), step(1, 200)]
+        self.assertEqual(pin_rows(motion.build(data(steps))), [])
+
+    def test_pin_rows_come_before_animation_rows(self):
+        header = pinned([0.0, 0.0, 1440.0, 60.0])
+        steps = [
+            step(0, 0, animations=[anim()], elements=[header]),
+            step(1, 200, animations=[anim()], elements=[header]),
+        ]
+        lines = motion.build(data(steps)).splitlines()
+        pin = next(i for i, line in enumerate(lines) if "scroll (position:" in line)
+        animation = next(i for i, line in enumerate(lines) if "not linked" in line)
+        self.assertLess(pin, animation)
+
+    def test_pin_rows_have_their_own_cap_that_animations_cannot_take(self):
+        pins = [
+            element(index=i, box=[0.0, 0.0, 10.0 + i, 10.0], position="fixed") for i in range(30)
+        ]
+        steps = [
+            step(0, 0, animations=[anim(duration=d) for d in range(40)], elements=pins),
+            step(1, 200, animations=[anim(duration=d) for d in range(40)], elements=pins),
+        ]
+        text = motion.build(data(steps))
+        self.assertEqual(len(pin_rows(text)), 10)
+        self.assertEqual(len(rows_with(text, "not linked")), 20)
+        self.assertIn("40 more rows not shown", text)
+
+
+if __name__ == "__main__":
+    unittest.main()

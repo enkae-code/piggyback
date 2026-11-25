@@ -1125,5 +1125,57 @@ def _kill_quietly(pid):
         os.kill(pid, 9)
 
 
+def scroll_element(index, position="static", box=None, tag="div"):
+    return {
+        "index": index,
+        "tag": tag,
+        "box": box or [0.0, 0.0, 10.0, 10.0],
+        "transform": None,
+        "opacity": 1.0,
+        "clip_path": "none",
+        "position": position,
+    }
+
+
+class ScrollElementCleanTests(unittest.TestCase):
+    def cleaned(self, elements):
+        raw = {"viewport": {"width": 1440, "height": 900}, "coverage": {"scroll": "none"}}
+        raw["steps"] = [{"step": 0, "scroll_y": 0, "count": 99, "elements": elements, "dense": []}]
+        return measure_mod.clean_scroll(raw)["steps"][0]["elements"]
+
+    def test_a_fixed_or_sticky_element_past_the_first_forty_survives(self):
+        plain = [scroll_element(i) for i in range(45)]
+        deep = [
+            scroll_element(60, "sticky", tag="aside"),
+            scroll_element(61, "fixed", tag="header"),
+        ]
+        kept = self.cleaned(plain + deep)
+        self.assertEqual([e["position"] for e in kept[-2:]], ["sticky", "fixed"])
+        self.assertEqual([e["index"] for e in kept[-2:]], [60, 61])
+
+    def test_plain_elements_stay_capped_at_forty_and_pinned_at_twenty(self):
+        plain = [scroll_element(i) for i in range(80)]
+        pinned = [scroll_element(100 + i, "fixed") for i in range(30)]
+        kept = self.cleaned(plain + pinned)
+        self.assertEqual(len(kept), 60)
+        self.assertEqual(sum(e["position"] == "fixed" for e in kept), 20)
+
+    def test_a_sticky_top_is_kept_only_as_a_finite_bounded_number(self):
+        def sticky(top, position="sticky"):
+            return {**scroll_element(0, position), "top": top}
+
+        tops = [130.0, float("nan"), 1e9, "130px", None]
+        kept = [self.cleaned([sticky(top)])[0]["top"] for top in tops]
+        self.assertEqual(kept, [130.0, None, None, None, None])
+        self.assertIsNone(self.cleaned([sticky(130.0, "fixed")])[0]["top"])
+
+    def test_an_unknown_position_or_tag_is_other_and_a_bad_box_is_refused(self):
+        kept = self.cleaned([scroll_element(0, "bogus", tag="x|y")])
+        self.assertEqual(kept[0]["position"], "other")
+        self.assertEqual(kept[0]["tag"], "other")
+        with self.assertRaises(MeasureError):
+            self.cleaned([scroll_element(0, "sticky", box=[0.0, 0.0, 10.0])])
+
+
 if __name__ == "__main__":
     unittest.main()
