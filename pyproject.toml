@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "piggyback-design"
-version = "0.1.0"
+version = "0.2.0"
 description = "Measure a page's design fingerprint and keep reference files in spec v1."
 readme = "README.md"
 license = "MIT"
