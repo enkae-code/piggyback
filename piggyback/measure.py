@@ -106,13 +106,19 @@ class MeasureError(RuntimeError):
         self.screenshot = screenshot  # set only when a failure screenshot was requested and taken
 
 
+def pinned(url, allow_loopback):
+    """The loopback origin a measure of url may reach: its own address and port, and only when
+    allow_loopback is set. The proxy and the route guard both check against this one origin."""
+    return netpolicy.origin(url) if allow_loopback else None
+
+
 def check_url(url, allow_loopback=False):
     """The URL to fetch (localhost rewritten to 127.0.0.1), or MeasureError."""
     url = netpolicy.local_name(url)
-    if netpolicy.url_allowed(url, allow_loopback):
+    if netpolicy.url_allowed(url, pinned(url, allow_loopback)):
         return url
     hint = ""
-    if not allow_loopback and netpolicy.url_allowed(url, allow_loopback=True):
+    if not allow_loopback and netpolicy.url_allowed(url, netpolicy.origin(url)):
         hint = " (use --allow-loopback for your own local build)"
     raise MeasureError(f"url is not a public http(s) address{hint}")
 
@@ -291,6 +297,20 @@ def _stop_worker(proc):
         kill_tree(proc)
 
 
+def _communicate(proc, request, timeout):
+    """Send the request; the worker's stderr. On any failure the worker is stopped first."""
+    try:
+        return proc.communicate(json.dumps(request), timeout=timeout)[1]
+    except subprocess.TimeoutExpired:
+        _stop_worker(proc)  # a worker alone left open would leave Chromium holding stderr
+        proc.communicate()
+        raise MeasureError(f"measure timed out after {timeout}s") from None
+    except BaseException:  # SIGTERM or Ctrl-C: the worker and its browser end with this process
+        kill_tree(proc)
+        proc.wait()
+        raise
+
+
 def _run_worker(request, timeout=None):
     """One JSON request to a Chromium child process; its JSON result, or an error dict."""
     # Playwright's bypass switch would let Chromium skip the proxy for loopback.
@@ -309,12 +329,7 @@ def _run_worker(request, timeout=None):
             env=env,
             start_new_session=True,
         )
-        try:
-            _, err = proc.communicate(json.dumps(request), timeout=timeout)
-        except subprocess.TimeoutExpired:
-            _stop_worker(proc)  # a worker alone left open would leave Chromium holding stderr
-            proc.communicate()
-            raise MeasureError(f"measure timed out after {timeout}s") from None
+        err = _communicate(proc, request, timeout)
         out_file.seek(0)
         raw = out_file.read(WORKER_OUTPUT_MAX + 1)
     if len(raw) > WORKER_OUTPUT_MAX:
@@ -347,7 +362,7 @@ def measure(
     request = {
         "url": url,
         "viewport": list(viewport),
-        "allow_loopback": allow_loopback,
+        "loopback": pinned(url, allow_loopback),
         "screenshot": _path_or_none(screenshot),
         "evidence": _path_or_none(evidence),
         "failure_screenshot": bool(failure_screenshot),
@@ -501,12 +516,17 @@ def _capture(req):
             Path(tmp).unlink(missing_ok=True)
 
 
-def _guard(egress, allow_loopback):
+def _pinned(req):
+    """The loopback origin a worker request pins: a JSON array, or None."""
+    return tuple(req["loopback"]) if req["loopback"] else None
+
+
+def _guard(egress, loopback):
     """Second layer for page requests, redirect hops included; the proxy is authoritative."""
 
     def guard(route):
         url = route.request.url
-        if netpolicy.url_allowed(url, allow_loopback):
+        if netpolicy.url_allowed(url, loopback):
             route.continue_()
         else:
             egress.record(url)
@@ -519,10 +539,10 @@ def _capture_page(req, tmp):
     from playwright.sync_api import sync_playwright
 
     width, height = req["viewport"]
-    allow_loopback = req["allow_loopback"]
+    loopback = _pinned(req)
     # The proxy is the enforcement point: every connection Chromium makes goes through it.
-    with closing(EgressProxy(allow_loopback)) as egress, sync_playwright() as p:
-        guard = _guard(egress, allow_loopback)
+    with closing(EgressProxy(loopback)) as egress, sync_playwright() as p:
+        guard = _guard(egress, loopback)
         proxy = {"server": f"http://127.0.0.1:{egress.port}"}  # loopback is proxied by Playwright
         browser, label = launch(
             p, proxy=proxy
@@ -582,7 +602,7 @@ def _capture_rea(req):
     """The REA worker: a fresh load in its own browser, after the capture worker has returned."""
     from playwright.sync_api import sync_playwright
 
-    with closing(EgressProxy(req["allow_loopback"])) as egress, sync_playwright() as p:
+    with closing(EgressProxy(_pinned(req))) as egress, sync_playwright() as p:
         return {"rea": _rea_pass(p, req, egress)}
 
 
@@ -627,7 +647,7 @@ def _launch_rea(p, profile, egress, req, deadline):
             )
         except Exception:  # the next channel
             continue
-        ctx.route("**/*", _guard(egress, req["allow_loopback"]))
+        ctx.route("**/*", _guard(egress, _pinned(req)))
         ctx.add_init_script(NO_WEBRTC)
         return ctx
     raise ToolError("browser unavailable")

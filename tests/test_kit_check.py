@@ -141,6 +141,20 @@ class KitCheckTests(unittest.TestCase):
         self.assertIn("## Attempt 1", text)
         self.assertNotIn("## Attempt 2", text)
 
+    def test_an_out_of_range_viewport_refuses_before_measuring(self):
+        data = json.loads((self.kit / "fingerprint.json").read_text(encoding="utf-8"))
+        data["viewport"]["width"] = 10**6
+        (self.kit / "fingerprint.json").write_text(json.dumps(data), encoding="utf-8")
+        digests = {
+            name: hashlib.sha256((self.kit / name).read_bytes()).hexdigest()
+            for name in ("fingerprint.json", "DESIGN.md")
+        }
+        (self.kit / "kit.json").write_text(json.dumps({"artifacts": digests}), encoding="utf-8")
+        with mock.patch("piggyback.kit.write_measure") as measure:
+            with self.assertRaisesRegex(ValueError, "the reference viewport is out of range"):
+                self.check()
+        measure.assert_not_called()
+
     def test_the_third_attempt_stops_and_a_fourth_is_refused(self):
         for _ in range(3):
             self.check()

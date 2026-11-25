@@ -138,6 +138,14 @@ Add this to your MCP client config (Claude Desktop, or `.mcp.json` for Claude Co
 - The Claude Code skill in `skills/piggyback/SKILL.md` tells the agent when to call these tools.
 - This is a config you edit. Your agent does not install or run it. Install Chromium once first, as in [Install](#install).
 
+### Read-only kit mode
+
+`piggyback mcp --kit DIR [--build URL]` serves a folder from [Build kit](#build-kit) instead of `--ref`. The kit is checked at startup and again on every call, and the server refuses to start if a file changed since the kit was made.
+
+- `get_brief` and `get_design_md` return the kit's frozen `BRIEF.md` and `DESIGN.md`. `get_brief` has no `refresh` in this mode.
+- `check` measures `--build` against the kit's frozen fingerprint and lists open, fixed and uncomparable items. It writes nothing. Without `--build`, it refuses.
+- `get_kit` returns readiness, the kit's file names and short summaries. It never returns paths or whole files. Its only digest claim is `Kit ready: fingerprint.json, DESIGN.md, BRIEF.md and MOTION.md match kit.json.`; other files are listed as present. `kit.json` is pinned when the server starts, so a rewrite during the session is refused.
+
 ## Works with design skills
 
 Piggyback measures. A design skill judges. Piggyback does not score taste; it gives a skill the numbers to check against.

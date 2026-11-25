@@ -1,9 +1,11 @@
 """`piggyback` command line: measure, check-refs and doctor."""
 
 import argparse
+import contextlib
 import json
 import os
 import re
+import signal
 import sys
 from pathlib import Path
 
@@ -187,13 +189,38 @@ def run_open(port, out):
     return 0
 
 
-def run_mcp(refs, build):
+def run_mcp(refs, build, kit=None):
     try:
-        refs, build = server._slots({"references": refs, "build": build})
-    except (ValueError, MeasureError) as exc:
+        if kit is None:
+            refs, build = server._slots({"references": refs, "build": build})
+        else:  # a kit needs no reference; --build is optional here and only check uses it
+            build = server._slots({"references": [], "build": build})[1] if build else None
+            refs = []
+        session = mcp.Session(refs, build, kit=kit)  # a kit is checked and pinned here
+    except (ValueError, MeasureError, OSError) as exc:
         print(f"mcp failed: {exc}", file=sys.stderr)
         return 1
-    return mcp.serve(sys.stdin.buffer, sys.stdout.buffer, mcp.Session(refs, build))
+    return mcp.serve(sys.stdin.buffer, sys.stdout.buffer, session)
+
+
+@contextlib.contextmanager
+def _unwind_on_stop():
+    """SIGTERM and SIGHUP unwind like Ctrl-C, as `piggyback serve` does: with and finally blocks
+    run, so a kit's measure workers are reaped and its staging folder is removed. The previous
+    handlers come back afterwards."""
+
+    def stop(*_):
+        raise SystemExit(1)
+
+    sigs = (signal.SIGTERM, getattr(signal, "SIGHUP", None))
+    saved = {sig: signal.getsignal(sig) for sig in sigs if sig is not None}
+    for sig in saved:
+        signal.signal(sig, stop)
+    try:
+        yield
+    finally:
+        for sig, old in saved.items():
+            signal.signal(sig, signal.SIG_DFL if old is None else old)
 
 
 def doctor():
@@ -230,9 +257,15 @@ def doctor():
 
 def main(argv=None):
     argv = sys.argv[1:] if argv is None else list(argv)
-    if argv[:2] == ["kit", "check"]:  # `kit` takes a URL positional, so check is dispatched first
-        return run_kit_check(argv[2:])
-    return _main(argv)
+    if argv[:1] != ["kit"]:
+        return _main(argv)
+    with _unwind_on_stop():
+        if argv[:2] == [
+            "kit",
+            "check",
+        ]:  # `kit` takes a URL positional, so check is dispatched first
+            return run_kit_check(argv[2:])
+        return _main(argv)
 
 
 def _main(argv):
@@ -282,11 +315,15 @@ def _main(argv):
     mc = sub.add_parser(
         "mcp", help="read-only MCP server on stdio: get_brief, get_design_md and check"
     )
-    mc.add_argument(
+    source = mc.add_mutually_exclusive_group()
+    source.add_argument(
         "--ref",
         action="append",
         metavar="URL",
         help="public reference, or starter:<id> from list_starters (1 to 3)",
+    )
+    source.add_argument(
+        "--kit", metavar="DIR", help="read-only: a folder from piggyback kit, instead of --ref"
     )
     mc.add_argument("--build", metavar="URL", help="your build: localhost, or a public preview")
     args = parser.parse_args(argv)
@@ -305,5 +342,5 @@ def _main(argv):
     if args.command == "defaults":
         return run_defaults(args.build)
     if args.command == "mcp":
-        return run_mcp(args.ref or [], args.build)
+        return run_mcp(args.ref or [], args.build, args.kit)
     return doctor()

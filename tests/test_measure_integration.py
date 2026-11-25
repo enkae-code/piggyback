@@ -133,10 +133,11 @@ class MeasureIntegration(unittest.TestCase):
             self.assertEqual(result["anchors"]["card"]["count"], 3)
             self.assertTrue(any(m["duration"] == 1000 for m in result["motion"]))
             self.assertTrue(shot.read_bytes().startswith(b"\x89PNG"))
-            # Loopback sibling reached (flag on); 10.0.0.1 aborted before it left the browser.
-            self.assertTrue(any(p == "/" for p in self.other_hits))
+            # The flag pins loopback to the measured origin: the sibling port and 10.0.0.1 are
+            # both aborted before they leave the browser.
+            self.assertFalse(any(p == "/" for p in self.other_hits))
             self.assertIn("http://10.0.0.1/", result["blocked_requests"])
-            self.assertFalse(any(f":{self.other_port}" in u for u in result["blocked_requests"]))
+            self.assertTrue(any(f":{self.other_port}" in u for u in result["blocked_requests"]))
 
     def test_page_canvas_background_leads_the_palette(self):
         # The light body paints the canvas; the dark footer and button are small boxes.
@@ -408,7 +409,7 @@ class MeasureIntegration(unittest.TestCase):
             finally:
                 control.close()
             control_count = drain(listener)
-            egress = EgressProxy(allow_loopback=True)
+            egress = EgressProxy()
             self.addCleanup(egress.close)
             with mock.patch.dict(os.environ):
                 os.environ.pop(

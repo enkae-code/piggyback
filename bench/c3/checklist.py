@@ -164,6 +164,11 @@ def origin_of(url):
         return None
 
 
+def _origin_url(origin):
+    host, port = origin
+    return f"http://[{host}]:{port}" if ":" in host else f"http://{host}:{port}"
+
+
 class TargetProxy(EgressProxy):
     """The enforcement point for every connection Chromium makes (http, ws, CONNECT, preconnect).
 
@@ -172,7 +177,8 @@ class TargetProxy(EgressProxy):
 
     def __init__(self, origin):
         self.origin = origin
-        super().__init__(allow_loopback=origin is not None)
+        # The base proxy then reaches loopback only at this target's own address and port.
+        super().__init__(loopback=None if origin is None else netpolicy.origin(_origin_url(origin)))
 
     def _open(self, client, host, port, shown):
         if self.origin is None or (host.lower(), port) != self.origin:

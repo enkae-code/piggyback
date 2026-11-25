@@ -3,6 +3,8 @@ import hashlib
 import io
 import json
 import os
+import shutil
+import signal
 import subprocess
 import sys
 import tempfile
@@ -1513,6 +1515,113 @@ class KitUnsafeStageTests(KitCase):
         self.assertEqual(data["stages"]["rea"]["state"], "failed")
         self.assertFalse(os.path.lexists(out / "rea"))
         self.assertEqual((target / "keep.txt").read_text(encoding="utf-8"), "keep")
+
+
+ROOT = Path(__file__).resolve().parent.parent
+REF_FIXTURE = ROOT / "tests" / "fixtures" / "fingerprints" / "ref.json"
+
+
+@unittest.skipUnless(os.name == "posix", "POSIX only: signals and process groups")
+class SigtermUnwinds(unittest.TestCase):
+    """SIGTERM unwinds `piggyback kit` and `piggyback kit check`: the measure worker is reaped and
+    the staging folder is removed. A driver swaps the worker for a stub that records its pid, then
+    sleeps, so the test needs no browser."""
+
+    DRIVER = (
+        "import sys\n"
+        "from unittest import mock\n"
+        "from piggyback import measure\n"
+        "from piggyback.cli import main\n"
+        "with mock.patch.object(measure.sys, 'executable', sys.argv[1]):\n"
+        "    sys.exit(main(sys.argv[2:]))\n"
+    )
+    STUB = (
+        "#!{python}\n"
+        "import os, time\n"
+        "with open(os.environ['STUB_PID_FILE'], 'w') as handle:\n"
+        "    handle.write(str(os.getpid()))\n"
+        "time.sleep(600)\n"
+    )
+
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.root = Path(tmp.name)
+        self.stub = self.root / "stub"
+        self.stub.write_text(self.STUB.format(python=sys.executable), encoding="utf-8")
+        self.stub.chmod(0o755)
+        self.driver = self.root / "driver.py"
+        self.driver.write_text(self.DRIVER, encoding="utf-8")
+        self.pid_file = self.root / "worker.pid"
+
+    def run_then_sigterm(self, *argv):
+        """Start the CLI, wait for the stub worker to start, send SIGTERM. Returns (proc, pid)."""
+        env = {**os.environ, "STUB_PID_FILE": str(self.pid_file), "PYTHONPATH": str(ROOT)}
+        proc = subprocess.Popen(
+            [sys.executable, str(self.driver), str(self.stub), *argv],
+            cwd=self.root,
+            env=env,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+        self.addCleanup(proc.kill)
+        deadline, text = time.monotonic() + 60, ""
+        while time.monotonic() < deadline and not text:
+            with contextlib.suppress(OSError):
+                text = self.pid_file.read_text(encoding="utf-8").strip()
+            time.sleep(0.05)
+        pid = int(text)
+        self.addCleanup(lambda: _kill_quietly(pid))
+        proc.send_signal(signal.SIGTERM)
+        proc.communicate(timeout=60)
+        return proc, pid
+
+    def assert_unwound(self, proc, pid):
+        self.assertNotEqual(proc.returncode, 0)
+        with self.assertRaises(ProcessLookupError):
+            os.kill(pid, 0)  # the worker was killed and reaped
+
+    def test_kit_unwinds_on_sigterm_and_removes_its_staging_folder(self):
+        out = self.root / "kit"
+        proc, pid = self.run_then_sigterm(
+            "kit",
+            "http://127.0.0.1:9/",
+            "--out",
+            str(out),
+            "--request",
+            "a landing page",
+            "--allow-loopback",
+        )
+        self.assert_unwound(proc, pid)
+        self.assertEqual([p for p in self.root.iterdir() if p.name.startswith(".kit-")], [])
+        self.assertFalse(out.exists())
+
+    def test_kit_check_unwinds_on_sigterm_and_writes_no_check_md(self):
+        kit_dir = self.root / "kit"
+        kit_dir.mkdir()
+        shutil.copy(REF_FIXTURE, kit_dir / "fingerprint.json")
+        (kit_dir / "DESIGN.md").write_text("---\nname: x\n---\n", encoding="utf-8")
+        digests = {
+            name: hashlib.sha256((kit_dir / name).read_bytes()).hexdigest()
+            for name in ("fingerprint.json", "DESIGN.md")
+        }
+        (kit_dir / "kit.json").write_text(json.dumps({"artifacts": digests}), encoding="utf-8")
+        proc, pid = self.run_then_sigterm(
+            "kit",
+            "check",
+            "--kit",
+            str(kit_dir),
+            "--build",
+            "http://127.0.0.1:9/",
+            "--allow-loopback",
+        )
+        self.assert_unwound(proc, pid)
+        self.assertFalse((kit_dir / "CHECK.md").exists())
+
+
+def _kill_quietly(pid):
+    with contextlib.suppress(OSError):
+        os.killpg(pid, signal.SIGKILL)
 
 
 if __name__ == "__main__":

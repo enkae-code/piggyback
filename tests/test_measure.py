@@ -90,7 +90,7 @@ def run_capture(shot, on_shot):
     req = {
         "url": URL,
         "viewport": [1440, 900],
-        "allow_loopback": False,
+        "loopback": None,
         "screenshot": str(shot),
     }
     browser = FakeBrowser(FakePage(on_shot))
@@ -379,7 +379,7 @@ REA_REQ = {
     "url": "http://127.0.0.1:8123/kit-motion.html",
     "viewport": (100, 100),
     "scroll_dir": "/tmp/unused/scroll",
-    "allow_loopback": True,
+    "loopback": ["127.0.0.1", 8123],
 }
 
 

@@ -34,6 +34,9 @@ from .server import write_new
 SCHEMA = 1
 MAX_REQUEST = 500
 CAP = 3  # correction attempts per build; the attempt that reaches it ends the history
+CAP_REACHED = f"correction cap reached ({CAP} attempts): restart with a new build"
+MIN_WIDTH, MIN_HEIGHT, MAX_WIDTH, MAX_HEIGHT = 320, 320, 3840, 4320  # the reference's bounds
+UNSUMMARISED = "present (not summarised)"
 DETECT_MAX = 64  # findings listed per attempt
 DETECT_S = 120
 TEXT_MAX = 120  # one finding's name, file or snippet, in CHECK.md
@@ -43,7 +46,29 @@ WORKSPACE_DEPTH = 32
 SKIPPED_WORKSPACE = "skipped: workspace too large"
 DESIGN_MAX = 1024 * 1024
 KIT_JSON_MAX = 1024 * 1024
+BRIEF_MAX = 1024 * 1024
+MOTION_MAX = 1024 * 1024
 CHECK_MAX = 4 * 1024 * 1024
+CHECK_FILES = ("fingerprint.json", "DESIGN.md")  # what kit check verifies before measuring
+MCP_FILES = (*CHECK_FILES, "BRIEF.md")  # what the read-only MCP kit mode serves
+FROZEN = (*MCP_FILES, "MOTION.md")  # every file kit.json pins; get_kit names them, never others
+FROZEN_MAX = {
+    "fingerprint.json": fingerprints.MAX_BYTES,
+    "DESIGN.md": DESIGN_MAX,
+    "BRIEF.md": BRIEF_MAX,
+    "MOTION.md": MOTION_MAX,
+}
+SUMMARY_LINES = 6  # BRIEF.md lines in get_kit
+KIT_ARTIFACTS = (  # logical names only: get_kit reports which exist, never a path
+    "screenshot.png",
+    *(f"scroll/frame-{n}.png" for n in range(6)),
+    "BRIEF.md",
+    "DESIGN.md",
+    "MOTION.md",
+    "BUILD-PROMPT.md",
+    "CHECK.md",
+    "impeccable/SKILL.md",
+)
 HISTORY_UNREADABLE = "Earlier history in CHECK.md could not be read; starting attempt 1."
 IDS = ("open", "fixed", "uncomparable")
 CONCEPTS = frozenset(glossary.TERMS)
@@ -233,12 +258,27 @@ def make(url, out, request, *, allow_loopback=False):
     return out_dir / "kit.json"
 
 
-def _viewport(ref):
+def ref_viewport(ref):
     width = fingerprints.get(ref, "viewport", "width")
     height = fingerprints.get(ref, "viewport", "height")
     if type(width) is not int or type(height) is not int:
         raise ValueError("the reference has no viewport size")
+    # The fingerprint is agent-writable: an absurd size would reach the browser, so it is bounded.
+    if not (MIN_WIDTH <= width <= MAX_WIDTH and MIN_HEIGHT <= height <= MAX_HEIGHT):
+        raise ValueError("the reference viewport is out of range")
     return width, height
+
+
+def digest(raw):
+    return hashlib.sha256(raw).hexdigest()
+
+
+def brief_text(raw):
+    """BRIEF.md as text. One decode rule for startup and get_brief: strict UTF-8."""
+    try:
+        return raw.decode("utf-8")
+    except UnicodeDecodeError:
+        raise ValueError("BRIEF.md is not UTF-8: this kit can't be checked") from None
 
 
 def _measure_build(url, viewport, allow_loopback):
@@ -251,13 +291,16 @@ def _measure_build(url, viewport, allow_loopback):
 
 def _read(folder, name, cap):
     """A kit file's bytes. A link, a special file or a file with another name refuses the check."""
-    data = read_plain(folder / name, cap)
+    try:
+        data = read_plain(folder / name, cap)
+    except OSError:
+        raise ValueError(f"{name} is missing or unreadable: this kit can't be checked") from None
     if data is None:
         raise ValueError(f"{name} is not a plain file: this kit can't be checked")
     return data
 
 
-def _fingerprint(raw):
+def parse_fingerprint(raw):
     """The reference fingerprint from checked bytes, with the rules of fingerprints.load."""
     try:
         data = json.loads(raw.decode("utf-8"))
@@ -289,6 +332,97 @@ def _frozen(kit_data, files):
         digest = hashlib.sha256(raw).hexdigest()
         if not isinstance(artifacts, dict) or artifacts.get(name) != digest:
             raise ValueError(f"{name} changed since the kit was made: this kit can't be checked")
+
+
+def verified(kit_dir, names):
+    """{name: bytes} for names, plus kit.json's bytes, each checked against kit.json's digests.
+
+    Shared by kit check and the MCP kit mode. The kit folder is agent-writable, so every use
+    checks again.
+    """
+    folder = Path(kit_dir)
+    try:
+        is_dir = stat.S_ISDIR(os.lstat(folder).st_mode)
+    except OSError:
+        raise ValueError("the kit folder can't be read: this kit can't be checked") from None
+    if not is_dir:
+        raise ValueError("the kit must be a real folder, not a link")
+    files = {name: _read(folder, name, FROZEN_MAX[name]) for name in names}
+    kit_raw = _read(folder, "kit.json", KIT_JSON_MAX)
+    _frozen(_kit_json(kit_raw), files)
+    return {**files, "kit.json": kit_raw}
+
+
+def _is_file(folder, name):
+    """A plain file at name in folder. Every folder on the way must be a real directory, not a link.
+
+    ponytail: these are path-based lstat calls, so a folder swapped for a link between a check and
+    the read keeps a small race. Upgrade: openat from a directory descriptor (dir_fd).
+    """
+    path = folder
+    try:
+        for part in name.split("/")[:-1]:
+            path = path / part
+            if not stat.S_ISDIR(os.lstat(path).st_mode):
+                return False
+        return stat.S_ISREG(os.lstat(folder / name).st_mode)
+    except OSError:
+        return False
+
+
+def _count(block, key):
+    """How many ids the '<key>: ' line of an attempt lists, or None if the line is missing."""
+    line = next((line for line in block if line.startswith(f"{key}:")), None)
+    if line is None:
+        return None
+    names = line.split(":", 1)[1].strip()
+    return 0 if names in ("", "none") else len(names.split(", "))
+
+
+def _check_summary(folder):
+    """The latest attempt's number and counts, from one '## Attempt ' block: the number and the
+    counts always belong to the same attempt. None when no attempt is recorded."""
+    if not os.path.lexists(folder / "CHECK.md"):
+        return None
+    try:
+        raw = read_plain(folder / "CHECK.md", CHECK_MAX)
+    except (OSError, ValueError):
+        return UNSUMMARISED
+    if raw is None:
+        return UNSUMMARISED
+    lines = raw.decode("utf-8", "replace").splitlines()
+    starts = [i for i, line in enumerate(lines) if line.startswith("## Attempt ")]
+    if not starts:
+        return None
+    block = lines[starts[-1] :]
+    number = block[0][len("## Attempt ") :].strip()
+    counts = {key: _count(block, key) for key in ("Fixed", "Still open", "Uncomparable")}
+    if not number.isdigit() or None in counts.values():
+        return UNSUMMARISED
+    return (
+        f"Attempt {number}: open {counts['Still open']}, fixed {counts['Fixed']}, "
+        f"uncomparable {counts['Uncomparable']}"
+    )
+
+
+def readiness(kit_dir):
+    """What get_kit shows and what startup checks: the kit's version, the artifact names present
+    and short summaries. Every frozen digest is checked first, then the reference's viewport and
+    BRIEF.md's text. Nothing here is a path or a whole file."""
+    folder = Path(kit_dir)
+    files = verified(folder, FROZEN)
+    data = _kit_json(files["kit.json"])
+    ref_viewport(parse_fingerprint(files["fingerprint.json"]))  # refuse a kit it cannot serve
+    motion = files["MOTION.md"].decode("utf-8", "replace").splitlines()
+    brief = brief_text(files["BRIEF.md"]).splitlines()
+    return {
+        "schema": data.get("schema"),
+        "piggyback": data.get("piggyback"),
+        "artifacts": [n for n in KIT_ARTIFACTS if n not in FROZEN and _is_file(folder, n)],
+        "brief": brief[:SUMMARY_LINES],
+        "motion_rows": sum(line.startswith("| M") for line in motion),
+        "check": _check_summary(folder),
+    }
 
 
 class WorkspaceTooLarge(ValueError):
@@ -373,6 +507,11 @@ def _text(value, limit=TEXT_MAX, roots=()):
         if len(root) > 1:
             text = re.sub(re.escape(root) + RUN, "[path]", text)
     return fingerprints.clean(ABS_PATH.sub("[path]", text), limit)
+
+
+def redact(message, limit=TEXT_MAX):
+    """An error message safe for a kit-mode reply: absolute paths removed, markdown escaped."""
+    return _text(str(message), limit)
 
 
 def _relative(path, stage):
@@ -493,7 +632,7 @@ def _summary(attempt):
     )
 
 
-def _stop_line(attempt):
+def stop_line(attempt):
     if not attempt["open"] and not attempt["uncomparable"]:
         return "Stop: no actionable gaps remain."
     if attempt["n"] >= CAP:
@@ -503,7 +642,7 @@ def _stop_line(attempt):
     return "Stop: nothing open, but some items could not be compared. Check them by hand."
 
 
-def _attempt_text(attempt):
+def attempt_text(attempt):
     lines = [
         f"## Attempt {attempt['n']}",
         "",
@@ -531,9 +670,22 @@ def _check_text(digest, earlier, current, note, host):
         "fingerprint.json (checks never refresh it).\n\n"
     )
     body = head + "".join(f"{line}\n" for line in past) + ("\n" if past else "")
-    body += (f"{note}\n\n" if note else "") + _attempt_text(current) + _stop_line(current) + "\n"
+    body += (f"{note}\n\n" if note else "") + attempt_text(current) + stop_line(current) + "\n"
     state = {"build": digest, "attempts": [*earlier, _stored(current)]}
     return body + MARKER + json.dumps(state) + " -->\n"
+
+
+def compare(ref, build, before):
+    """The gap check: differences open now, those fixed since before, and those not comparable.
+    An open difference is actionable even when another metric of it is missing."""
+    pins = gap_mod.gap(ref, build)
+    now = gap_mod.differing(pins)
+    return {
+        "open": sorted(now),
+        "fixed": sorted(gap_mod.fixed(before, now, ref, build)),
+        "uncomparable": sorted(gap_mod.compared(ref, ref) - gap_mod.compared(ref, build) - now),
+        "diffs": gap_mod.render(pins),
+    }
 
 
 def check(kit_dir, build_url, *, workspace=None, allow_loopback=False):
@@ -545,25 +697,18 @@ def check(kit_dir, build_url, *, workspace=None, allow_loopback=False):
     workspace is copied and bounded before the build is measured.
     """
     folder = Path(kit_dir)
-    if not stat.S_ISDIR(os.lstat(folder).st_mode):
-        raise ValueError("the kit must be a real folder, not a link")
-    ref_raw = _read(folder, "fingerprint.json", fingerprints.MAX_BYTES)
-    design = _read(folder, "DESIGN.md", DESIGN_MAX)
-    _frozen(
-        _kit_json(_read(folder, "kit.json", KIT_JSON_MAX)),
-        {"fingerprint.json": ref_raw, "DESIGN.md": design},
-    )
-    ref = _fingerprint(ref_raw)
-    viewport = _viewport(ref)
+    files = verified(folder, CHECK_FILES)
+    ref = parse_fingerprint(files["fingerprint.json"])
+    viewport = ref_viewport(ref)
     url = check_url(build_url, allow_loopback)
     digest = hashlib.sha256(url.encode("utf-8")).hexdigest()
     earlier, note = _history(folder, digest)
     if len(earlier) >= CAP:
-        raise ValueError(f"correction cap reached ({CAP} attempts): start a new build URL")
+        raise ValueError(CAP_REACHED)
     with tempfile.TemporaryDirectory() as tmp:
         stage = Path(tmp) / "site"
         stage.mkdir()
-        _write_name(stage / "DESIGN.md", design)
+        _write_name(stage / "DESIGN.md", files["DESIGN.md"])
         skipped = None
         copy_notes = ""
         if workspace is not None:
@@ -572,16 +717,10 @@ def check(kit_dir, build_url, *, workspace=None, allow_loopback=False):
             except WorkspaceTooLarge as exc:
                 skipped = str(exc)
         build = _measure_build(url, viewport, allow_loopback)
-        pins = gap_mod.gap(ref, build)
-        now = gap_mod.differing(pins)
         before = set(earlier[-1]["open"]) if earlier else set()
         current = {
             "n": len(earlier) + 1,
-            "open": sorted(now),
-            "fixed": sorted(gap_mod.fixed(before, now, ref, build)),
-            # An open difference is actionable even when another metric of it is missing.
-            "uncomparable": sorted(gap_mod.compared(ref, ref) - gap_mod.compared(ref, build) - now),
-            "diffs": gap_mod.render(pins),
+            **compare(ref, build, before),
             **_detect(stage, workspace, skipped),
         }
     notes = " ".join(filter(None, [note, copy_notes]))

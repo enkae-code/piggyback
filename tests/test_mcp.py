@@ -161,6 +161,8 @@ class Protocol(unittest.TestCase):
 
     def test_unexpected_tool_exception_is_an_error_result_and_the_loop_continues(self):
         class Broken:
+            kit = None  # the session attribute every Session has; the stub has no kit mode
+
             def check(self):
                 raise RuntimeError("boom")
 

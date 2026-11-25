@@ -52,6 +52,13 @@ def send(port, raw):
     return data
 
 
+def keepalive_origin():
+    origin = http.server.ThreadingHTTPServer(("127.0.0.1", 0), KeepAlive)
+    origin.seen = []
+    threading.Thread(target=origin.serve_forever, daemon=True).start()
+    return origin
+
+
 class EgressProxyTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -65,10 +72,15 @@ class EgressProxyTests(unittest.TestCase):
         cls.origin.server_close()
 
     def setUp(self):
-        self.proxy = EgressProxy(allow_loopback=False)
+        self.proxy = EgressProxy(loopback=None)
 
     def tearDown(self):
         self.proxy.close()
+
+    def pin(self, origin):
+        """Replace the proxy with one that allows only this origin's loopback address and port."""
+        self.proxy.close()
+        self.proxy = EgressProxy(loopback=("127.0.0.1", origin.server_address[1]))
 
     def test_plain_loopback_refused_and_recorded(self):
         reply = send(self.proxy.port, f"GET {self.origin_url} HTTP/1.1\r\nHost: x\r\n\r\n".encode())
@@ -121,7 +133,7 @@ class EgressProxyTests(unittest.TestCase):
     def test_connections_over_the_cap_are_closed(self):
         self.proxy.close()
         with mock.patch.object(proxy_module, "MAX_CONNECTIONS", 1):
-            self.proxy = EgressProxy(allow_loopback=False)
+            self.proxy = EgressProxy(loopback=None)
         # The accept loop is serial, so the first connection holds the only slot before the
         # second is accepted.
         holder = socket.create_connection(("127.0.0.1", self.proxy.port), timeout=10)
@@ -133,17 +145,48 @@ class EgressProxyTests(unittest.TestCase):
         self.assertEqual(reply, b"")
         self.assertEqual(self.proxy.blocked, [])
 
+    def test_approved_origin_forwarded(self):
+        self.pin(self.origin)
+        reply = send(self.proxy.port, f"GET {self.origin_url} HTTP/1.1\r\nHost: x\r\n\r\n".encode())
+        self.assertIn(b" 200 OK", reply)
+        self.assertTrue(reply.endswith(b"hello"))
+        self.assertEqual(self.proxy.blocked, [])
+
+    def test_other_loopback_port_refused_without_dialing(self):
+        self.pin(self.origin)
+        other = self.origin.server_address[1] + 1
+        with mock.patch.object(proxy_module.socket, "create_connection") as dial:
+            reply = send(
+                self.proxy.port, f"GET http://127.0.0.1:{other}/ HTTP/1.1\r\n\r\n".encode()
+            )
+        dial.assert_not_called()
+        self.assertTrue(reply.startswith(b"HTTP/1.1 403"), reply)
+        self.assertEqual(self.proxy.blocked, [f"http://127.0.0.1:{other}/"])
+
+    def test_loopback_alias_refused_without_dialing(self):
+        self.pin(self.origin)
+        port = self.origin.server_address[1]
+        with mock.patch.object(proxy_module.socket, "create_connection") as dial:
+            reply = send(self.proxy.port, f"GET http://127.0.0.2:{port}/ HTTP/1.1\r\n\r\n".encode())
+        dial.assert_not_called()
+        self.assertTrue(reply.startswith(b"HTTP/1.1 403"), reply)
+
+    def test_connect_to_other_loopback_port_refused_without_dialing(self):
+        self.pin(self.origin)
+        other = self.origin.server_address[1] + 1
+        with mock.patch.object(proxy_module.socket, "create_connection") as dial:
+            reply = send(self.proxy.port, f"CONNECT 127.0.0.1:{other} HTTP/1.1\r\n\r\n".encode())
+        dial.assert_not_called()
+        self.assertTrue(reply.startswith(b"HTTP/1.1 403"), reply)
+
     def test_upstream_gets_close_and_no_proxy_headers(self):
-        self.proxy.close()
-        self.proxy = EgressProxy(allow_loopback=True)
-        origin = http.server.ThreadingHTTPServer(("127.0.0.1", 0), KeepAlive)
-        origin.seen = []
-        threading.Thread(target=origin.serve_forever, daemon=True).start()
+        origin = keepalive_origin()
         self.addCleanup(origin.server_close)
         self.addCleanup(origin.shutdown)
+        self.pin(origin)
         raw = (
             f"GET http://127.0.0.1:{origin.server_address[1]}/ HTTP/1.1\r\nHost: x\r\n"
-            "Connection: keep-alive\r\nProxy-Authorization: secret\r\n"
+            "Connection: keep-alive\r\nProxy-Authorization: ***\r\n"
             "Proxy-Connection: keep-alive\r\n\r\n"
         ).encode()
         self.assertIn(b" 200 OK", send(self.proxy.port, raw))
@@ -153,8 +196,7 @@ class EgressProxyTests(unittest.TestCase):
         self.assertNotIn("proxy-", headers.lower())
 
     def test_unframeable_bodies_refused(self):
-        self.proxy.close()
-        self.proxy = EgressProxy(allow_loopback=True)
+        self.pin(self.origin)
         bad = {
             "chunked": "Transfer-Encoding: chunked\r\n",
             "duplicate": "Content-Length: 1\r\nContent-Length: 1\r\n",
@@ -167,13 +209,10 @@ class EgressProxyTests(unittest.TestCase):
                 self.assertIn(b" 400 ", send(self.proxy.port, raw))
 
     def test_second_request_on_same_connection_never_reaches_upstream(self):
-        self.proxy.close()
-        self.proxy = EgressProxy(allow_loopback=True)
-        origin = http.server.ThreadingHTTPServer(("127.0.0.1", 0), KeepAlive)
-        origin.seen = []
-        threading.Thread(target=origin.serve_forever, daemon=True).start()
+        origin = keepalive_origin()
         self.addCleanup(origin.server_close)
         self.addCleanup(origin.shutdown)
+        self.pin(origin)
         base = f"http://127.0.0.1:{origin.server_address[1]}"
         raw = (
             f"GET {base}/ HTTP/1.1\r\nHost: x\r\n\r\n"
@@ -185,10 +224,10 @@ class EgressProxyTests(unittest.TestCase):
 
     def test_origin_ignoring_close_still_gets_only_one_request(self):
         # An origin that keeps serving after Connection: close: only the proxy stops the reuse.
-        self.proxy.close()
-        self.proxy = EgressProxy(allow_loopback=True)
         origin = socket.create_server(("127.0.0.1", 0))
         self.addCleanup(origin.close)
+        self.proxy.close()
+        self.proxy = EgressProxy(loopback=("127.0.0.1", origin.getsockname()[1]))
         seen = []
 
         def serve():
@@ -209,14 +248,6 @@ class EgressProxyTests(unittest.TestCase):
         ).encode()
         send(self.proxy.port, raw)
         self.assertEqual(seen, [b"GET / HTTP/1.1"])
-
-    def test_loopback_forwarded_with_flag(self):
-        self.proxy.close()
-        self.proxy = EgressProxy(allow_loopback=True)
-        reply = send(self.proxy.port, f"GET {self.origin_url} HTTP/1.1\r\nHost: x\r\n\r\n".encode())
-        self.assertIn(b" 200 OK", reply)
-        self.assertTrue(reply.endswith(b"hello"))
-        self.assertEqual(self.proxy.blocked, [])
 
     def test_name_resolved_once_and_connect_uses_checked_address(self):
         # The second answer would rebind to loopback; the proxy must never ask for it.

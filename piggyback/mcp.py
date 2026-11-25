@@ -13,6 +13,7 @@ from . import brief as brief_mod
 from . import defaults as defaults_mod
 from . import fingerprint as fp
 from . import gap as gap_mod
+from . import kit as kit_mod
 from .glossary import TERMS
 from .measure import MeasureError, measure
 
@@ -52,6 +53,15 @@ ARGUMENTS = {
     "get_design_md": set(),
     "list_starters": set(),
 }
+KIT_TOOLS = [  # only in kit mode (piggyback mcp --kit)
+    {
+        "name": "get_kit",
+        "description": "Readiness of the frozen kit: its files, and short summaries of its brief.",
+        "inputSchema": {"type": "object", "properties": {}, "additionalProperties": False},
+    },
+]
+KIT_ARGUMENTS = {"get_kit": set()}
+KIT_CHECK_IMPECCABLE = "not run (read-only check)"
 REFRESH_HINT = "call get_brief with refresh: true to measure again"
 
 
@@ -68,12 +78,19 @@ class RpcError(Exception):
 class Session:
     """The references are measured once per process; the build is measured on every check."""
 
-    def __init__(self, refs, build, measure_page=measure):
+    def __init__(self, refs, build, measure_page=measure, kit=None):
         self.refs, self.build = refs, build
         self.measure_page = measure_page
+        # The frozen kit folder in kit mode: the reference is read from it, never measured.
+        self.kit = kit
+        self.kit_pin = None  # kit.json's digest at startup: a later rewrite is refused
+        if kit is not None:
+            kit_mod.readiness(kit)  # refuses a kit it cannot serve, before any call
+            self.kit_pin = kit_mod.digest(kit_mod.verified(kit, kit_mod.MCP_FILES)["kit.json"])
         self.ref_pages = None
         self.ref_failure = None  # the error of a reference capture that failed, until refresh
         self.differing = set()  # concepts that differed at the previous check
+        self.kit_attempts = 0
 
     def _refs(self, refresh=False):
         if refresh:
@@ -95,17 +112,57 @@ class Session:
             return starters.fingerprint(url)
         return self.measure_page(url)
 
+    def _frozen(self):
+        # Every kit-mode call checks the digests and the startup pin: the folder is agent-writable.
+        files = kit_mod.verified(self.kit, kit_mod.MCP_FILES)
+        if kit_mod.digest(files["kit.json"]) != self.kit_pin:
+            raise ValueError(
+                "kit.json changed since the session started: this kit can't be checked"
+            )
+        return files
+
     def get_brief(self, refresh):
+        if self.kit is not None:
+            if refresh:
+                raise ValueError("the reference is frozen in kit mode: refresh is not available")
+            return kit_mod.brief_text(self._frozen()["BRIEF.md"])
         return brief_mod.brief(self._refs(refresh))
 
     def get_design_md(self):
+        if self.kit is not None:
+            return self._frozen()["DESIGN.md"].decode("utf-8")
         if not self.refs:
             raise ValueError("no reference configured: start the server with a reference URL")
         return brief_mod.design_md(self._refs()[0])
 
+    def get_kit(self):
+        self._frozen()
+        return kit_summary(kit_mod.readiness(self.kit))
+
+    def _kit_check(self):
+        files = self._frozen()
+        ref = kit_mod.parse_fingerprint(files["fingerprint.json"])
+        viewport = kit_mod.ref_viewport(ref)
+        if self.kit_attempts >= kit_mod.CAP:
+            raise ValueError(kit_mod.CAP_REACHED)
+        allow = server._on_this_machine(self.build)
+        build = self.measure_page(self.build, viewport=viewport, allow_loopback=allow)
+        self.kit_attempts += 1
+        found = kit_mod.compare(ref, build, self.differing)
+        attempt = {
+            "n": self.kit_attempts,
+            **found,
+            "impeccable": KIT_CHECK_IMPECCABLE,
+            "warnings": [],
+        }
+        self.differing = set(found["open"])
+        return kit_mod.attempt_text(attempt) + kit_mod.stop_line(attempt) + "\n"
+
     def check(self):
         if self.build is None:
             raise ValueError("no build configured: start the server with --build")
+        if self.kit is not None:
+            return self._kit_check()
         build = self.measure_page(self.build, allow_loopback=server._on_this_machine(self.build))
         if not self.refs:
             return defaults_mod.render(defaults_mod.find(build))
@@ -126,11 +183,33 @@ def _text(text, error=False):
     return {"content": [{"type": "text", "text": f"{FRAMING}\n\n{text}"}], "isError": error}
 
 
+def _tables(session):
+    """(tools, arguments) for this session: get_kit exists only in kit mode."""
+    if session.kit is None:
+        return TOOLS, ARGUMENTS
+    return TOOLS + KIT_TOOLS, ARGUMENTS | KIT_ARGUMENTS
+
+
+def kit_summary(info):
+    """get_kit's text from kit_mod.readiness: short, cleaned, and no paths or whole files."""
+    lines = [
+        "Kit ready: fingerprint.json, DESIGN.md, BRIEF.md and MOTION.md match kit.json.",
+        f"Piggyback {fp.clean(info['piggyback'], 40)}, kit schema {fp.clean(info['schema'], 40)}.",
+        f"Other files present: {', '.join(info['artifacts']) or 'none'}.",
+        f"MOTION.md: {info['motion_rows']} rows.",
+        "BRIEF.md, first lines:",
+        *[fp.clean(line, 120) for line in info["brief"]],
+        f"Latest CHECK.md: {info['check'] or 'none yet'}.",
+    ]
+    return "\n".join(lines) + "\n"
+
+
 def _call(session, params):
     name, args = params.get("name"), params.get("arguments", {})
-    if not isinstance(name, str) or name not in ARGUMENTS:
+    _, arguments = _tables(session)
+    if not isinstance(name, str) or name not in arguments:
         raise RpcError(BAD_PARAMS, "unknown tool")
-    if not isinstance(args, dict) or set(args) - ARGUMENTS[name]:
+    if not isinstance(args, dict) or set(args) - arguments[name]:
         raise RpcError(
             BAD_PARAMS, "arguments must be an object with the tool's own parameters only"
         )
@@ -143,11 +222,14 @@ def _call(session, params):
             "check": session.check,
             "get_design_md": session.get_design_md,
             "list_starters": starters.listing,
+            "get_kit": session.get_kit,
         }
         return _text(handlers[name]())
     except RefFailed as exc:  # the hint is ours, so it is added after the page text is cleaned
         return _text(f"{fp.clean(exc, 200)}; {REFRESH_HINT}", error=True)
     except (ValueError, MeasureError) as exc:
+        if session.kit is not None:  # kit-mode errors may carry a path: redacted like CHECK.md
+            return _text(kit_mod.redact(exc, 200), error=True)
         return _text(fp.clean(exc, 200), error=True)
     except Exception:  # noqa: BLE001 - answer the agent instead of dropping the connection
         traceback.print_exc()
@@ -164,7 +246,7 @@ def _dispatch(method, params, session):
     if method == "ping":
         return {}
     if method == "tools/list":
-        return {"tools": TOOLS}
+        return {"tools": _tables(session)[0]}
     if method == "tools/call":
         return _call(session, params)
     raise RpcError(NOT_FOUND, "method not found")

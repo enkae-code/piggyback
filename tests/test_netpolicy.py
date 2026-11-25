@@ -2,7 +2,7 @@ import socket
 import unittest
 from unittest import mock
 
-from piggyback.netpolicy import host_allowed, local_name, resolve_allowed, url_allowed
+from piggyback.netpolicy import host_allowed, local_name, origin, resolve_allowed, url_allowed
 
 # Literal IPs and fixed names only: no DNS, so the table runs offline.
 PUBLIC = ["93.184.216.34", "2606:4700:4700::1111"]
@@ -43,6 +43,7 @@ BLOCKED_URLS = [
     "http://localhost/",
     "http:///nohost",
 ]
+PIN = ("127.0.0.1", 8123)
 
 
 class NetPolicyTests(unittest.TestCase):
@@ -62,17 +63,39 @@ class NetPolicyTests(unittest.TestCase):
             with self.subTest(url=url):
                 self.assertFalse(url_allowed(url))
 
-    def test_loopback_allowed_only_with_flag(self):
-        self.assertTrue(host_allowed("127.0.0.1", allow_loopback=True))
-        self.assertTrue(host_allowed("::1", allow_loopback=True))
-        self.assertTrue(url_allowed("http://127.0.0.1:8123/", allow_loopback=True))
-        self.assertTrue(host_allowed("::ffff:127.0.0.1", allow_loopback=True))
-        # The flag permits loopback only; other private ranges stay blocked.
+    def test_loopback_allowed_only_for_the_pinned_origin(self):
+        self.assertTrue(url_allowed("http://127.0.0.1:8123/", loopback=PIN))
+        self.assertTrue(host_allowed("127.0.0.1", 8123, loopback=PIN))
+        self.assertTrue(host_allowed("::ffff:127.0.0.1", 8123, loopback=PIN))
+
+    def test_other_loopback_port_and_alias_refused_under_a_pin(self):
+        for host, port in (("127.0.0.1", 9000), ("127.0.0.2", 8123), ("::1", 8123)):
+            with self.subTest(host=host, port=port):
+                self.assertFalse(host_allowed(host, port, loopback=PIN))
+        self.assertFalse(url_allowed("http://127.0.0.1:9000/", loopback=PIN))
+        self.assertFalse(url_allowed("http://127.0.0.2:8123/", loopback=PIN))
+
+    def test_loopback_refused_without_a_pin(self):
+        self.assertFalse(host_allowed("127.0.0.1", 8123))
+        self.assertFalse(url_allowed("http://127.0.0.1:8123/"))
+
+    def test_other_private_ranges_and_localhost_stay_blocked_under_a_pin(self):
         for host in ("10.0.0.1", "192.168.1.1", "169.254.1.1", "100.64.0.1", "fc00::1"):
             with self.subTest(host=host):
-                self.assertFalse(host_allowed(host, allow_loopback=True))
-        # "localhost" stays blocked even with the flag.
-        self.assertFalse(host_allowed("localhost", allow_loopback=True))
+                self.assertFalse(host_allowed(host, 8123, loopback=PIN))
+        self.assertFalse(host_allowed("localhost", 8123, loopback=PIN))
+
+    def test_origin_of_a_url_is_its_literal_host_and_port(self):
+        self.assertEqual(origin("http://127.0.0.1:8123/a?b"), ("127.0.0.1", 8123))
+        self.assertEqual(origin("https://[::1]/"), ("::1", 443))
+        self.assertEqual(origin("http://[::ffff:127.0.0.1]:81/"), ("127.0.0.1", 81))
+
+    def test_a_name_pins_the_loopback_address_it_resolves_to(self):
+        with mock.patch("socket.getaddrinfo", return_value=infos("127.0.0.1")):
+            pin = origin("http://svc.example:8123/")
+            self.assertEqual(pin, ("127.0.0.1", 8123))
+            self.assertTrue(url_allowed("http://svc.example:8123/", loopback=pin))
+            self.assertFalse(url_allowed("http://svc.example:9000/", loopback=pin))
 
     def test_every_resolved_address_must_pass(self):
         with mock.patch("socket.getaddrinfo", return_value=infos("93.184.216.34")):
@@ -82,7 +105,7 @@ class NetPolicyTests(unittest.TestCase):
         with mock.patch("socket.getaddrinfo", return_value=infos("93.184.216.34", "fe80::1%eth0")):
             self.assertIsNone(resolve_allowed("scoped.example"))
         with mock.patch("socket.getaddrinfo", return_value=infos("127.0.0.1", "10.0.0.1")):
-            self.assertIsNone(resolve_allowed("mixed.example", allow_loopback=True))
+            self.assertIsNone(resolve_allowed("mixed.example", 8123, loopback=PIN))
 
     def test_lookup_failure_and_empty_answer_block(self):
         with mock.patch("socket.getaddrinfo", side_effect=socket.gaierror("no such host")):
@@ -90,10 +113,11 @@ class NetPolicyTests(unittest.TestCase):
         with mock.patch("socket.getaddrinfo", return_value=[]):
             self.assertIsNone(resolve_allowed("empty.example"))
 
-    def test_hostname_resolving_to_loopback_needs_flag(self):
+    def test_hostname_resolving_to_the_pinned_address_needs_the_pin(self):
         with mock.patch("socket.getaddrinfo", return_value=infos("127.0.0.1")):
-            self.assertIsNone(resolve_allowed("svc.example"))
-            self.assertEqual(resolve_allowed("svc.example", allow_loopback=True), "127.0.0.1")
+            self.assertIsNone(resolve_allowed("svc.example", 8123))
+            self.assertEqual(resolve_allowed("svc.example", 8123, loopback=PIN), "127.0.0.1")
+            self.assertIsNone(resolve_allowed("svc.example", 9000, loopback=PIN))
 
     def test_names_blocked_even_when_dns_says_public(self):
         # The name rules must not depend on what DNS answers.
@@ -110,8 +134,8 @@ class NetPolicyTests(unittest.TestCase):
         self.assertEqual(local_name("http://localhost:99999x/"), "http://localhost:99999x/")
         self.assertEqual(local_name("http://localhost:0/"), "http://127.0.0.1:0/")
 
-    def test_subdomain_of_localhost_stays_refused_with_loopback_allowed(self):
-        self.assertFalse(url_allowed("http://app.localhost:3000", allow_loopback=True))
+    def test_subdomain_of_localhost_stays_refused_under_a_pin(self):
+        self.assertFalse(url_allowed("http://app.localhost:3000", loopback=("127.0.0.1", 3000)))
 
 
 def infos(*ips):

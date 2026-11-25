@@ -28,8 +28,8 @@ BAD_REQUEST = b"HTTP/1.1 400 Bad Request\r\nContent-Length: 0\r\nConnection: clo
 
 
 class EgressProxy:
-    def __init__(self, allow_loopback):
-        self.allow_loopback = allow_loopback
+    def __init__(self, loopback=None):
+        self.loopback = loopback  # the one (address, port) origin loopback may reach, or None
         self.blocked = []
         self._slots = threading.BoundedSemaphore(MAX_CONNECTIONS)
         self._server = socket.create_server(("127.0.0.1", 0))
@@ -112,7 +112,7 @@ class EgressProxy:
 
     def _open(self, client, host, port, shown):
         """Connect to a checked address, or answer 403/502 and return None."""
-        address = netpolicy.resolve_allowed(host, self.allow_loopback)
+        address = netpolicy.resolve_allowed(host, port, self.loopback)
         if address is None:
             self.record(shown)
             client.sendall(FORBIDDEN)
