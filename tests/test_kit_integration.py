@@ -11,7 +11,7 @@ from pathlib import Path
 if importlib.util.find_spec("playwright") is None:
     raise unittest.SkipTest("playwright not installed; run with the measure extra")
 
-from piggyback import kit, tools  # noqa: E402
+from piggyback import kit, motion, tools  # noqa: E402
 from piggyback.measure import MeasureError, write_measure  # noqa: E402
 from tests.test_measure_integration import serve  # noqa: E402
 
@@ -75,6 +75,21 @@ class KitScrollIntegration(unittest.TestCase):
         seen = [t[0] for t in tops if t]
         self.assertGreaterEqual(len(seen), 2)
         self.assertEqual(len(set(seen)), 1)
+
+    def test_the_sticky_nav_has_a_numeric_top_and_a_stuck_pin_row(self):
+        out, s = self.capture("kit-motion.html")
+        navs = [e for step in s["steps"] for e in step["elements"] if e["tag"] == "nav"]
+        self.assertTrue(navs)
+        self.assertEqual({e["top"] for e in navs}, {0.0})
+        self.assertIn("stuck at top 0 px", motion.build(s))
+
+    def test_a_fixed_element_after_forty_plain_ones_is_sampled_and_off_screen_fixed_is_not(self):
+        _, s = self.capture("kit-motion.html")
+        toolbar = [0.0, s["viewport"]["height"] - 40.0, 200.0, 40.0]  # bottom: 0 of a 40 px bar
+        for step in s["steps"]:
+            fixed = [e["box"] for e in step["elements"] if e["position"] == "fixed"]
+            self.assertIn(toolbar, fixed)
+            self.assertFalse(any(box[0] == -5000.0 for box in fixed))
 
     def test_scroll_triggered_element_fades_in_by_900_ms(self):
         _, s = self.capture("kit-motion.html")

@@ -39,6 +39,10 @@ REA_SLACK_S = 5  # the REA worker's start-up and teardown, on top of REA_STAGE_S
 SCROLL_NUM_LIMIT = (
     1_000_000  # page numbers are clamped to this: no real px, ms or opacity is larger
 )
+PLAIN_MAX = 40  # the first visible elements, of any position, in page order
+PIN_MAX = 20  # then up to this many fixed or sticky elements found after them
+PIN_SCAN = 4000  # ponytail: pins are looked for only in the next 4000 nodes; a deeper pin is missed
+PINNED = frozenset({"fixed", "sticky"})
 WORKER_OUTPUT_MAX = 16 * 1024 * 1024  # the most worker stdout the parent reads
 NAV_MS = 30_000
 SETTLE_MS = 5_000  # a page that never goes idle is still measured
@@ -54,7 +58,7 @@ REA_WINDOW_MS = REA_ARM_MS + SCROLL_STEPS * (SCROLL_ARRIVE_MS + REA_STEP_MS)
 REA_STAGE_S = 40  # REA version, target and observation together: a slow REA fails only REA
 REA_BROWSER_ARGS = ["--remote-debugging-port=0", "--remote-debugging-address=127.0.0.1"]
 # Numbers and fixed words only: no text, HTML, URLs or class names leave the page.
-SCROLL_SAMPLE = """(withAnimations) => {
+_SCROLL_SAMPLE = """(withAnimations) => {
   const EASES = ['linear', 'ease', 'ease-in', 'ease-out', 'ease-in-out', 'step-start', 'step-end'];
   const TAG = /^[a-z][a-z0-9]{0,19}$/;
   const num = (n) => (Number.isFinite(n) ? Math.round(n * 100) / 100 : null);
@@ -75,17 +79,22 @@ SCROLL_SAMPLE = """(withAnimations) => {
   }) : null;
   const elements = [];
   const nodes = document.body ? document.body.querySelectorAll('*') : [];
-  // The first 40 visible elements in DOM order, then up to 20 more that are fixed or sticky.
-  let plain = 0;
+  // The first @PLAIN_MAX@ visible elements in DOM order, then up to @PIN_MAX@ fixed or sticky ones
+  // that are on screen, among the next @PIN_SCAN@ nodes.
+  let prefix = 0;
   let pins = 0;
-  for (let index = 0; index < nodes.length && (plain < 40 || pins < 20); index++) {
+  let scanned = 0;
+  for (let index = 0; index < nodes.length; index++) {
+    if (prefix === @PLAIN_MAX@ && (pins === @PIN_MAX@ || ++scanned > @PIN_SCAN@)) break;
     const el = nodes[index];
     const r = el.getBoundingClientRect();
     if (r.bottom <= 0 || r.top >= innerHeight) continue;
     const s = getComputedStyle(el);
     const pinned = s.position === 'fixed' || s.position === 'sticky';
-    if (pinned ? pins >= 20 : plain >= 40) continue;
-    if (pinned) pins++; else plain++;
+    if (pinned && (r.width <= 0 || r.height <= 0 || r.right <= 0 || r.left >= innerWidth)) continue;
+    if (prefix < @PLAIN_MAX@) prefix++;
+    else if (pinned) pins++;
+    else continue;
     const m = s.transform === 'none' ? null : new DOMMatrixReadOnly(s.transform);
     elements.push({
       index,
@@ -101,6 +110,11 @@ SCROLL_SAMPLE = """(withAnimations) => {
   }
   return {scroll_y: num(scrollY), animations, elements, count: nodes.length};
 }"""
+SCROLL_SAMPLE = (
+    _SCROLL_SAMPLE.replace("@PLAIN_MAX@", str(PLAIN_MAX))
+    .replace("@PIN_MAX@", str(PIN_MAX))
+    .replace("@PIN_SCAN@", str(PIN_SCAN))
+)
 
 
 class MeasureError(RuntimeError):
@@ -938,7 +952,7 @@ EASINGS = frozenset(
 )
 PLAY_STATES = frozenset({"idle", "running", "paused", "finished"})
 POSITIONS = frozenset({"static", "relative", "absolute", "fixed", "sticky"})
-PINNED = frozenset({"fixed", "sticky"})  # capped at 20 on their own, apart from the 40 others
+PINNED = frozenset({"fixed", "sticky"})  # the positions the sampler caps apart from the first 40
 TAGS = frozenset(
     {
         "html", "body", "main", "header", "footer", "nav", "section", "article", "aside",
@@ -998,21 +1012,21 @@ def _list(value, cap, item):
 
 
 def _elements(value):
-    """The first 40 elements, then up to 20 fixed or sticky ones, in page order.
+    """The first PLAIN_MAX elements of any position, then up to PIN_MAX fixed or sticky ones.
 
     Only the kept elements are checked: a page's extra elements are dropped unread, as before.
     """
-    kept, plain, pins = [], 0, 0
+    kept, prefix, pins = [], 0, 0
     for raw in _shape(value, list):
+        if prefix == PLAIN_MAX and pins == PIN_MAX:
+            break
         raw = _shape(raw, dict)
-        if _word(raw.get("position"), POSITIONS) in PINNED:
-            if pins >= 20:
-                continue
+        if prefix < PLAIN_MAX:
+            prefix += 1
+        elif _word(raw.get("position"), POSITIONS) in PINNED and pins < PIN_MAX:
             pins += 1
         else:
-            if plain >= 40:
-                continue
-            plain += 1
+            continue
         kept.append(_element(raw))
     return kept
 

@@ -1,6 +1,6 @@
 import unittest
 
-from piggyback import motion
+from piggyback import measure, motion
 
 
 def sample(scroll_y, *, animations=None, elements=None, count=10):
@@ -208,7 +208,7 @@ class PinRowTests(unittest.TestCase):
         self.assertEqual(len(rows), 1)
         self.assertIn("full-width bar at the top, header (observed/runtime)", rows[0])
         self.assertIn("held at top 0 px, 1440 x 60 px, at left 0 px (observed/runtime)", rows[0])
-        self.assertIn("200-1000 px (observed/runtime)", rows[0])
+        self.assertIn("0-1000 px (observed/runtime)", rows[0])
 
     def test_a_sticky_column_is_stuck_across_the_scrolls_it_holds_its_top(self):
         ys = [400.0, 200.0, 0.0, 0.0, 0.0, -200.0]
@@ -222,7 +222,7 @@ class PinRowTests(unittest.TestCase):
         self.assertIn("scroll (position: sticky) (observed/runtime)", rows[0])
         self.assertIn("stuck at top 0 px, 200 x 400 px, at left 1200 px", rows[0])
         self.assertIn("400-800 px (observed/runtime)", rows[0])
-        self.assertIn("moving seen 200-1000 px (observed/runtime)", rows[0])
+        self.assertIn("moving seen 0-1000 px (observed/runtime)", rows[0])
 
     def test_a_sticky_element_stuck_once_at_its_top_is_one_row(self):
         steps = [
@@ -236,8 +236,12 @@ class PinRowTests(unittest.TestCase):
         ]
         rows = pin_rows(motion.build(data(steps)))
         self.assertEqual(len(rows), 1)
-        self.assertIn("stuck at top 130 px, 300 x 200 px, at left 0 px (observed/runtime)", rows[0])
-        self.assertIn("at 2419 px (observed/runtime)", rows[0])
+        self.assertIn(
+            "at its CSS top 130 px at scroll 2419 px, 300 x 200 px, at left 0 px "
+            "(observed/runtime)",
+            rows[0],
+        )
+        self.assertIn("sticking across scroll not measured", rows[0])
 
     def test_a_sticky_top_within_one_pixel_of_its_computed_top_is_stuck(self):
         steps = [
@@ -284,7 +288,7 @@ class PinRowTests(unittest.TestCase):
         ]
         rows = pin_rows(motion.build(data(steps)))
         self.assertEqual(len(rows), 1)
-        self.assertIn("200-1000 px (observed/runtime)", rows[0])
+        self.assertIn("0-1000 px (observed/runtime)", rows[0])
 
     def test_a_fixed_element_that_moves_gets_no_pin_row(self):
         steps = [
@@ -340,6 +344,153 @@ class PinRowTests(unittest.TestCase):
         self.assertEqual(len(pin_rows(text)), 10)
         self.assertEqual(len(rows_with(text, "not linked")), 20)
         self.assertIn("40 more rows not shown", text)
+
+
+def stuck_nav(top, box_y):
+    return pinned([0.0, box_y, 1440.0, 60.0], "sticky", "nav", top)
+
+
+class PinRulingTests(unittest.TestCase):
+    def header(self, y, x=0.0, width=1440.0, height=60.0, opacity=1.0):
+        return element(tag="header", box=[x, y, width, height], position="fixed", opacity=opacity)
+
+    def held(self, tops, scrolls=(0.0, 200.0, 400.0)):
+        return [
+            step(i, s, elements=[self.header(y)])
+            for i, (s, y) in enumerate(zip(scrolls, tops, strict=True))
+        ]
+
+    def test_a_page_that_never_scrolls_gives_no_fixed_pin(self):
+        steps = [step(i, 0.0, elements=[self.header(0.0)]) for i in range(3)]
+        self.assertEqual(rows_with(motion.build(data(steps)), "held at top"), [])
+
+    def test_an_ambiguous_duplicate_pin_key_gives_no_row(self):
+        twins = [self.header(0.0), self.header(0.0)]
+        steps = [step(0, 0.0, elements=twins), step(1, 200.0, elements=twins)]
+        self.assertEqual(rows_with(motion.build(data(steps)), "held at top"), [])
+
+    def test_same_size_buttons_at_different_x_are_two_rows(self):
+        left = element(tag="button", box=[0.0, 10.0, 100.0, 40.0], position="fixed")
+        right = element(tag="button", box=[200.0, 10.0, 100.0, 40.0], position="fixed")
+        steps = [step(0, 0.0, elements=[left, right]), step(1, 200.0, elements=[left, right])]
+        self.assertEqual(len(rows_with(motion.build(data(steps)), "held at top")), 2)
+
+    def test_stacked_sticky_cards_with_tops_100_and_120_are_two_rows(self):
+        def card(top, y):
+            return pinned([0.0, y, 300.0, 200.0], "sticky", "div", top)
+
+        steps = [
+            step(0, 0.0, elements=[card(100.0, 300.0), card(120.0, 320.0)]),
+            step(1, 200.0, elements=[card(100.0, 100.0), card(120.0, 120.0)]),
+            step(2, 400.0, elements=[card(100.0, 100.0), card(120.0, 120.0)]),
+        ]
+        self.assertEqual(len(rows_with(motion.build(data(steps)), "stuck at top")), 2)
+
+    def test_a_header_that_wobbles_under_a_pixel_is_one_row(self):
+        rows = rows_with(motion.build(data(self.held([0.4, 0.6, 0.4]))), "held at top")
+        self.assertEqual(len(rows), 1)
+
+    def test_a_drift_across_the_rounding_boundary_is_one_row(self):
+        rows = rows_with(
+            motion.build(data(self.held([10.49, 10.51], scrolls=(0.0, 200.0)))), "held at top"
+        )
+        self.assertEqual(len(rows), 1)
+
+    def test_a_missing_middle_sample_breaks_the_hold(self):
+        steps = [
+            step(0, 0.0, elements=[self.header(0.0)]),
+            step(1, 200.0, elements=[]),
+            step(2, 400.0, elements=[self.header(0.0)]),
+        ]
+        self.assertEqual(rows_with(motion.build(data(steps)), "held at top"), [])
+
+    def test_a_held_pair_puts_both_of_its_scrolls_in_the_range(self):
+        text = motion.build(data(self.held([0.0, 0.0], scrolls=(0.0, 200.0))))
+        self.assertIn("0-200 px (observed/runtime)", rows_with(text, "held at top")[0])
+
+    def test_a_sticky_top_only_at_scroll_zero_gives_no_row(self):
+        steps = [
+            step(0, 0.0, elements=[stuck_nav(0.0, 0.0)]),
+            step(1, 200.0, elements=[stuck_nav(0.0, -200.0)]),
+            step(2, 400.0, elements=[stuck_nav(0.0, -400.0)]),
+        ]
+        self.assertEqual(rows_with(motion.build(data(steps)), "CSS top"), [])
+        self.assertEqual(rows_with(motion.build(data(steps)), "stuck at top"), [])
+
+    def test_a_singleton_sticky_says_its_sticking_is_not_measured(self):
+        steps = [
+            step(0, 0.0, elements=[stuck_nav(0.0, 300.0)]),
+            step(1, 200.0, elements=[stuck_nav(0.0, 0.0)]),
+            step(2, 400.0, elements=[stuck_nav(0.0, -400.0)]),
+        ]
+        row = rows_with(motion.build(data(steps)), "CSS top")[0]
+        self.assertIn("at its CSS top 0 px at scroll 200 px, 1440 x 60 px, at left 0 px", row)
+        self.assertIn("sticking across scroll not measured", row)
+
+    def test_a_sticky_stuck_at_two_scrolls_is_stuck_with_no_such_note(self):
+        steps = [
+            step(0, 0.0, elements=[stuck_nav(0.0, 300.0)]),
+            step(1, 200.0, elements=[stuck_nav(0.0, 0.0)]),
+            step(2, 400.0, elements=[stuck_nav(0.0, 0.0)]),
+        ]
+        row = rows_with(motion.build(data(steps)), "stuck at top")[0]
+        self.assertNotIn("sticking across scroll not measured", row)
+
+    def test_an_opacity_zero_overlay_is_not_a_pin(self):
+        steps = [
+            step(0, 0.0, elements=[self.header(0.0, opacity=0.0)]),
+            step(1, 200.0, elements=[self.header(0.0, opacity=0.0)]),
+        ]
+        self.assertEqual(rows_with(motion.build(data(steps)), "held at top"), [])
+
+    def test_a_full_height_fixed_panel_is_a_box_not_a_bar(self):
+        panel = self.header(0.0, height=900.0)
+        text = motion.build(
+            data([step(0, 0.0, elements=[panel]), step(1, 200.0, elements=[panel])])
+        )
+        self.assertIn("box, header (observed/runtime)", rows_with(text, "held at top")[0])
+        self.assertNotIn("full-width bar", text)
+
+    def test_a_hostile_sticky_top_is_dropped_before_the_table(self):
+        def raw_nav(top, y=0.0):
+            nav = {
+                "index": 0,
+                "tag": "nav",
+                "box": [0.0, y, 1440.0, 60.0],
+                "transform": None,
+                "opacity": 1.0,
+                "clip_path": "none",
+                "position": "sticky",
+                "top": top,
+            }
+            steps = [
+                {
+                    "step": i,
+                    "target_scroll_y": 200.0 * i,
+                    "scroll_onset_ms": 1.0,
+                    "scroll_y": 200.0 * i,
+                    "count": 5,
+                    "animations": None,
+                    "elements": [nav],
+                    "dense": [],
+                }
+                for i in range(3)
+            ]
+            raw = {
+                "viewport": {"width": 1440, "height": 900},
+                "coverage": {"scroll": "done"},
+                "steps": steps,
+            }
+            return measure.clean_scroll(raw)
+
+        # At 1e6 px the box sits where the clamped top would be: only a dropped bound shows a row.
+        for hostile, y in (("<img src=x onerror=1>", 0.0), (1e300, 1e6), ("1e9px", 0.0)):
+            with self.subTest(top=hostile):
+                text = motion.build(raw_nav(hostile, y))
+                self.assertNotIn("<", text)
+                self.assertEqual(rows_with(text, "stuck at top"), [])
+                self.assertEqual(rows_with(text, "CSS top"), [])
+        self.assertTrue(rows_with(motion.build(raw_nav(0.0)), "stuck at top"))
 
 
 if __name__ == "__main__":

@@ -1160,6 +1160,20 @@ class ScrollElementCleanTests(unittest.TestCase):
         self.assertEqual(len(kept), 60)
         self.assertEqual(sum(e["position"] == "fixed" for e in kept), 20)
 
+    def test_a_pin_inside_the_first_forty_counts_toward_the_forty(self):
+        prefix = [scroll_element(i) for i in range(39)] + [scroll_element(39, "fixed")]
+        kept = self.cleaned(prefix + [scroll_element(i) for i in range(40, 90)])
+        self.assertEqual([e["index"] for e in kept], list(range(40)))
+        pins = [scroll_element(100 + i, "fixed") for i in range(30)]
+        kept = self.cleaned(prefix + pins)
+        self.assertEqual(len(kept), 60)  # the 40 prefix, then 20 pins found after it
+        self.assertEqual(sum(e["position"] == "fixed" for e in kept), 21)  # one is in the prefix
+
+    def test_the_page_script_has_the_quotas_filled_in_once(self):
+        self.assertNotIn("@", measure_mod.SCROLL_SAMPLE)
+        self.assertIn(f"prefix === {measure_mod.PLAIN_MAX}", measure_mod.SCROLL_SAMPLE)
+        self.assertIn(f"pins === {measure_mod.PIN_MAX}", measure_mod.SCROLL_SAMPLE)
+
     def test_a_sticky_top_is_kept_only_as_a_finite_bounded_number(self):
         def sticky(top, position="sticky"):
             return {**scroll_element(0, position), "top": top}

@@ -12,6 +12,9 @@
     width: 200px; height: 80px; background: #36c;
     animation: drift 1600ms ease 200ms infinite;
   }
+  .crowd span { display: block; height: 2px; }
+  .toolbar { position: fixed; bottom: 0; left: 0; width: 200px; height: 40px; background: #eee; }
+  .offscreen { position: fixed; top: 0; left: -5000px; width: 100px; height: 20px; }
   @keyframes drift { from { transform: translateX(0); } to { transform: translateX(120px); } }
   aside {
     position: absolute; top: 1100px; left: 40px; width: 300px; padding: 16px; background: #eee;
@@ -28,9 +31,12 @@
 <body>
 <main>
   <nav>Fixture navigation</nav>
+  <div class="crowd"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>
   <section class="drift" aria-hidden="true"></section>
   <p style="position:absolute; top: 500px; left: 40px;">Visible text <!-- kit-marker-7f3a9c --> kit-marker-7f3a9c</p>
   <aside>Entry panel</aside>
+  <div class="toolbar">Toolbar</div>
+  <div class="offscreen">Hidden</div>
 </main>
 <script>
   // kit-marker-7f3a9c

@@ -7,12 +7,14 @@ transform and opacity changes.
 """
 
 from . import fingerprint as fp
+from .measure import PINNED
 
 MAX_ROWS = 40
 PIN_ROWS = MAX_ROWS // 4  # pins get their own cap, so animations cannot crowd them out
 ANIMATION_ROWS = MAX_ROWS // 2  # animations never take more than half the table
-PINNED = frozenset({"fixed", "sticky"})
 HELD_PX = 1  # a pin's top that moves this little between two samples is held
+BAR_SHARE = 0.5  # a full-width bar is shorter than this share of the viewport height
+PLACE_MAX = 120  # a pin's place text holds bounded numbers only; it is never cut short
 FULL_WIDTH = 0.9  # a bar at least this share of the viewport wide, at the top, is full-width
 EDGE_PX = 4  # a bar within this many px of the viewport's top or bottom is at that edge
 NOT_MEASURED = "not measured"
@@ -38,11 +40,11 @@ def _num(value):
     return f"{round(value, 2):g}"
 
 
-def _cell(value, unit=""):
+def _cell(value, unit="", limit=fp.MAX_TEXT):
     """One table cell: a value and its label, escaped. None is not measured."""
     if value is None:
         return NOT_MEASURED
-    text = _num(value) if isinstance(value, (int, float)) else fp.clean(value)
+    text = _num(value) if isinstance(value, (int, float)) else fp.clean(value, limit)
     return f"{text}{unit} ({OBSERVED})"
 
 
@@ -104,46 +106,61 @@ def _animation_rows(samples):
 
 
 def _pin_key(element):
-    """What one pin is across samples: its tag, position and size, and a fixed one's top.
+    """What one pin is across samples: its tag, position, size and x, and a sticky one's CSS top.
 
-    A sticky element's top moves with the scroll, so it is not part of its key. None if a number is
-    missing: such an element is not matched.
+    A fixed element's top is not in the key, so a header that moves a little stays one pin.
+    # ponytail: geometry is the match key, not node identity; a same-size twin can join a run.
+    # ponytail: a header that changes size is one row per size.
+    None if a number is missing: such an element is not matched.
     """
-    _, top, width, height = element["box"]
-    if None in (top, width, height):
+    x, _, width, height = element["box"]
+    if None in (x, width, height):
         return None
-    fixed_top = round(top) if element["position"] == "fixed" else None
-    return (element["tag"], element["position"], round(width), round(height), fixed_top)
+    return (
+        element["tag"],
+        element["position"],
+        round(width),
+        round(height),
+        round(x),
+        element["top"],
+    )
 
 
-def _pin_series(samples):
-    """pin key -> [(step, scroll, element, settled)] for fixed and sticky elements.
+def _pinned_by_key(sample):
+    """key -> element for one sample's fixed and sticky elements.
 
-    A key found twice in one sample is ambiguous and skipped for that sample.
+    A key found twice is ambiguous and dropped. An opacity-0 element is not on screen, so not a pin.
     """
-    series = {}
+    found = {}
+    for element in sample.get("elements") or []:
+        if element["position"] in PINNED and element["opacity"] != 0:
+            found.setdefault(_pin_key(element), []).append(element)
+    return {key: group[0] for key, group in found.items() if key is not None and len(group) == 1}
+
+
+def _pin_runs(samples):
+    """Each pin's run: its samples in capture order. A sample without the key ends the run."""
+    runs, open_runs = [], {}
     for step, sample, settled in samples:
-        by_key = {}
-        for element in sample.get("elements") or []:
-            if element["position"] in PINNED:
-                by_key.setdefault(_pin_key(element), []).append(element)
-        for key, found in by_key.items():
-            if key is not None and len(found) == 1:
-                series.setdefault(key, []).append((step, sample.get("scroll_y"), found[0], settled))
-    return series
+        found = _pinned_by_key(sample)
+        for key in [key for key in open_runs if key not in found]:
+            runs.append(open_runs.pop(key))
+        for key, element in found.items():
+            open_runs.setdefault(key, []).append((step, sample.get("scroll_y"), element, settled))
+    return runs + list(open_runs.values())
 
 
-def _top_moves(obs):
-    """(held, moving): each [(scroll, element)] where the scroll moved and the top did or did not.
+def _pairs(run):
+    """(held, moving): adjacent samples of a run where the scroll moved: (before, after, element).
 
-    A sample counts only against the sample before it. Missing numbers count for neither.
+    A pair is held when the top moved HELD_PX or less. Missing numbers count for neither.
     """
     held, moving = [], []
-    for (_, before, prev, _), (_, scroll, element, _) in zip(obs, obs[1:], strict=False):
+    for (_, before, prev, _), (_, scroll, element, _) in zip(run, run[1:], strict=False):
         top, prev_top = element["box"][1], prev["box"][1]
         if None in (scroll, before, top, prev_top) or scroll == before:
             continue
-        (held if abs(top - prev_top) <= HELD_PX else moving).append((scroll, element))
+        (held if abs(top - prev_top) <= HELD_PX else moving).append((before, scroll, element))
     return held, moving
 
 
@@ -157,11 +174,12 @@ def _role(element, viewport):
     """A phrase from geometry only: a full-width bar at the top or bottom, else a box."""
     _, top, width, height = element["box"]
     vw, vh = viewport.get("width") or 0, viewport.get("height") or 0
-    if vw > 0 and None not in (top, width) and width >= FULL_WIDTH * vw:
-        if top <= EDGE_PX:
-            return f"full-width bar at the top, {element['tag']}"
-        if vh > 0 and height is not None and abs(top + height - vh) <= EDGE_PX:
-            return f"full-width bar at the bottom, {element['tag']}"
+    if vw > 0 and vh > 0 and None not in (top, width, height):
+        if width >= FULL_WIDTH * vw and height < BAR_SHARE * vh:
+            if top <= EDGE_PX:
+                return f"full-width bar at the top, {element['tag']}"
+            if abs(top + height - vh) <= EDGE_PX:
+                return f"full-width bar at the bottom, {element['tag']}"
     return f"box, {element['tag']}"
 
 
@@ -169,43 +187,67 @@ def _px(value):
     return NOT_MEASURED if value is None else _num(value)
 
 
-def _held(obs):
-    """(held, moving) for one pin. A sticky element is held only where it is stuck at its top."""
-    held_across, moving = _top_moves(obs)
-    if obs[0][2]["position"] == "sticky":
-        return [(s, el) for _, s, el, settled in obs if settled and _stuck(el)], moving
-    return held_across, moving
+def _stuck_view(run, floor):
+    """(scrolls, element, single) for a sticky pin, or None.
+
+    Stuck at two or more scrolls is "stuck". One stuck scroll above the smallest scroll seen is
+    single: its sticking is not measured. Stuck only at the smallest scroll is no row.
+    """
+    shown = [(s, el) for _, s, el, settled in run if settled and _stuck(el) and s is not None]
+    scrolls = sorted({s for s, _ in shown})
+    if len(scrolls) >= 2:
+        return scrolls, shown[0][1], False
+    if scrolls and scrolls[0] > floor:
+        return scrolls, shown[0][1], True
+    return None
 
 
-def _pin_row(obs, viewport):
-    held, moving = _held(obs)
+def _held_view(held):
+    """(scrolls, element, single) for a fixed pin with a held pair, or None."""
     if not held:
         return None
-    sticky = obs[0][2]["position"] == "sticky"
-    _, element = held[0]
-    _, _, width, height = element["box"]
-    verb = "stuck" if sticky else "held"
-    top = element["top"] if sticky else element["box"][1]
-    place = f"{verb} at top {_px(top)} px, {_px(width)} x {_px(height)} px"
-    limits = "pin start/release between samples; element matched by tag, position and size"
+    scrolls = sorted({s for before, after, _ in held for s in (before, after)})
+    return scrolls, held[0][2], False
+
+
+def _pin_row(run, viewport, floor):
+    sticky = run[0][2]["position"] == "sticky"
+    held, moving = _pairs(run)
+    view = _stuck_view(run, floor) if sticky else _held_view(held)
+    if view is None:
+        return None
+    scrolls, element, single = view
+    x, top, width, height = element["box"]
+    if not sticky:
+        place = f"held at top {_px(top)} px"
+    elif single:
+        place = f"at its CSS top {_px(element['top'])} px at scroll {_num(scrolls[0])} px"
+    else:
+        place = f"stuck at top {_px(element['top'])} px"
+    place += f", {_px(width)} x {_px(height)} px, at left {_px(x)} px"
+    limits = "pin start/release between samples; element matched by tag, position, size and x"
+    if single:
+        limits += "; sticking across scroll not measured"
     if moving:
-        limits += f"; moving seen {_scroll_range([s for s, _ in moving])}"
+        limits += f"; moving seen {_scroll_range([s for b, a, _ in moving for s in (b, a)])}"
     return [
         _cell(_role(element, viewport)),
         _cell(f"scroll (position: {element['position']})"),
         _cell("position"),
-        _cell(f"{place}, at left {_px(element['box'][0])} px"),
+        _cell(place, limit=PLACE_MAX),
         NOT_MEASURED,
         NOT_MEASURED,
         NOT_MEASURED,
-        _scroll_range([s for s, _ in held]),
-        _receipt([step for step, _, _, _ in obs], len(obs)),
+        _scroll_range(scrolls),
+        _receipt([step for step, _, _, _ in run], len(run)),
         limits,
     ]
 
 
 def _pin_rows(samples, viewport):
-    rows = (_pin_row(obs, viewport) for obs in _pin_series(samples).values())
+    scrolls = [sample.get("scroll_y") for _, sample, _ in samples]
+    floor = min((s for s in scrolls if isinstance(s, (int, float))), default=None)
+    rows = (_pin_row(run, viewport, floor) for run in _pin_runs(samples))
     return [row for row in rows if row]
 
 
