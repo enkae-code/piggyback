@@ -10,6 +10,7 @@ import re
 import shutil
 import socket
 import subprocess
+import sys
 import tempfile
 import unittest
 import urllib.error
@@ -908,7 +909,6 @@ class RunLock(unittest.TestCase):
             with mock.patch.object(runner.fcntl, "flock", side_effect=fault):
                 with self.assertRaises(OSError) as caught, runner.run_lock(Path(tmp)):
                     pass
-            self.assertNotIsInstance(caught.exception, SystemExit)
             self.assertEqual(caught.exception.errno, errno.ENOLCK)
 
     @unittest.skipUnless(os.name == "posix", "needs os.symlink without privileges")
@@ -928,8 +928,40 @@ class RunLock(unittest.TestCase):
                 with mock.patch.object(os, "open", side_effect=swap_then_open):
                     with self.assertRaises(SystemExit) as caught, runner.run_lock(run):
                         pass
-            self.assertIn("symbolic link", str(caught.exception))
+            self.assertIn("a link or another file", str(caught.exception))
             self.assertEqual(outside.read_text(), "keep")
+
+    @unittest.skipUnless(os.name == "posix", "counts open descriptors in /dev/fd")
+    def test_without_o_nofollow_a_failed_identity_read_closes_the_lock_file(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            run = Path(tmp)
+            before = len(os.listdir("/dev/fd"))
+            fault = OSError(errno.EIO, "I/O error")
+            with mock.patch.dict(os.__dict__):
+                os.__dict__.pop("O_NOFOLLOW", None)  # as on Windows
+                with mock.patch.object(os, "lstat", side_effect=fault):
+                    with self.assertRaises(OSError) as caught, runner.run_lock(run):
+                        pass
+            self.assertEqual(caught.exception.errno, errno.EIO)
+            self.assertEqual(len(os.listdir("/dev/fd")), before)
+
+
+class TempdirScope(unittest.TestCase):
+    def test_the_resolved_temp_folder_is_set_only_while_this_module_runs(self):
+        self.assertEqual(tempfile.gettempdir(), os.path.realpath(tempfile.gettempdir()))
+        outside = subprocess.run(
+            [
+                sys.executable,
+                "-c",
+                "import tempfile, tests.test_bench_c3_run as m, "
+                "tests.test_bench_c3_manifest as n; print(tempfile.tempdir)",
+            ],
+            capture_output=True,
+            text=True,
+            check=True,
+            cwd=Path(__file__).resolve().parents[1],
+        )
+        self.assertEqual(outside.stdout.strip(), "None")
 
 
 class SessionPersistence(unittest.TestCase):

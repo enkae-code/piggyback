@@ -439,6 +439,7 @@ def run_lock(run):
     """One exclusive lock per run, held from admission to publication. The kernel drops it when the
     process dies, so an interrupted run leaves no stale lock."""
     fd = _open_lock(run / ".runner.lock")
+    locked = False
     try:
         try:
             if os.name == "nt":
@@ -450,11 +451,12 @@ def run_lock(run):
             raise SystemExit(
                 f"refusing: run {run.name} is active in another process; wait for it to finish"
             ) from None
+        locked = True
         yield
-        if os.name == "nt":
+    finally:
+        if locked and os.name == "nt":
             os.lseek(fd, 0, os.SEEK_SET)
             msvcrt.locking(fd, msvcrt.LK_UNLCK, 1)  # Windows may release late on close alone
-    finally:
         os.close(fd)
 
 
@@ -469,11 +471,16 @@ def _open_lock(lock):
     # outside the run; the identity check below refuses to lock it. Upgrade: a reparse-point-aware
     # open (CreateFile with FILE_FLAG_OPEN_REPARSE_POINT).
     fd = os.open(lock, os.O_RDWR | os.O_CREAT, 0o600)
-    seen = os.lstat(lock)
-    opened = os.fstat(fd)
+    try:
+        seen, opened = os.lstat(lock), os.fstat(fd)
+    except OSError:
+        os.close(fd)
+        raise
     if stat.S_ISLNK(seen.st_mode) or (seen.st_dev, seen.st_ino) != (opened.st_dev, opened.st_ino):
         os.close(fd)
-        raise SystemExit(f"refusing: {lock.name} is a symbolic link")
+        raise SystemExit(
+            f"refusing: {lock.name} changed while it was opened (a link or another file)"
+        )
     return fd
 
 
