@@ -104,7 +104,9 @@ def run_kit_check(argv):
         "--workspace", metavar="DIR", help="your project folder: Impeccable checks its files"
     )
     parser.add_argument(
-        "--allow-loopback", action="store_true", help="allow 127.0.0.0/8 and ::1 only"
+        "--allow-loopback",
+        action="store_true",
+        help="let this local URL be measured; the page may reach only its own address and port",
     )
     args = parser.parse_args(argv)
     try:
@@ -200,7 +202,8 @@ def run_mcp(refs, build, kit=None):
     except (ValueError, MeasureError, OSError) as exc:
         print(f"mcp failed: {exc}", file=sys.stderr)
         return 1
-    return mcp.serve(sys.stdin.buffer, sys.stdout.buffer, session)
+    with _unwind_on_stop():  # a SIGTERM during a check reaps the measure worker, as kit does
+        return mcp.serve(sys.stdin.buffer, sys.stdout.buffer, session)
 
 
 @contextlib.contextmanager
@@ -278,12 +281,20 @@ def _main(argv):
     m.add_argument("url")
     m.add_argument("--out", default=".", help="output directory (default: current directory)")
     m.add_argument("--viewport", type=viewport_arg, default=(1440, 900), help="WIDTHxHEIGHT")
-    m.add_argument("--allow-loopback", action="store_true", help="allow 127.0.0.0/8 and ::1 only")
+    m.add_argument(
+        "--allow-loopback",
+        action="store_true",
+        help="let this local URL be measured; the page may reach only its own address and port",
+    )
     ml = sub.add_parser("measure-list", help="measure each URL in a list file, one at a time")
     ml.add_argument("list", metavar="LIST", help="text file: one URL per line, # lines ignored")
     ml.add_argument("--out", required=True, help="directory: one folder per URL, plus batch.json")
     ml.add_argument("--viewport", type=viewport_arg, default=(1440, 900), help="WIDTHxHEIGHT")
-    ml.add_argument("--allow-loopback", action="store_true", help="allow 127.0.0.0/8 and ::1 only")
+    ml.add_argument(
+        "--allow-loopback",
+        action="store_true",
+        help="let this local URL be measured; the page may reach only its own address and port",
+    )
     k = sub.add_parser(
         "kit",
         help="build kit from one URL: screenshot, scroll frames, BRIEF.md, DESIGN.md, prompt",
@@ -293,7 +304,11 @@ def _main(argv):
     k.add_argument("url")
     k.add_argument("--out", required=True, help="new or empty folder for the kit")
     k.add_argument("--request", required=True, help="what to build (1 to 500 characters)")
-    k.add_argument("--allow-loopback", action="store_true", help="allow 127.0.0.0/8 and ::1 only")
+    k.add_argument(
+        "--allow-loopback",
+        action="store_true",
+        help="let this local URL be measured; the page may reach only its own address and port",
+    )
     refs = sub.add_parser("check-refs", help="validate spec v1 reference files")
     refs.add_argument("directory")
     b = sub.add_parser("brief", help="write BRIEF.md from 1 to 3 reference fingerprints")

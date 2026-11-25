@@ -97,10 +97,12 @@ SCROLL_SAMPLE = """(withAnimations) => {
 
 
 class MeasureError(RuntimeError):
-    """A refused or failed measure. status and final_url are set when the refusal knows them."""
+    """A refused or failed measure. kind names the failure for kit-mode replies (see
+    kit.measure_message); status and final_url are set when the refusal knows them."""
 
-    def __init__(self, message="", *, status=None, final_url=None, screenshot=None):
+    def __init__(self, message="", *, kind=None, status=None, final_url=None, screenshot=None):
         super().__init__(message)
+        self.kind = kind
         self.status = status
         self.final_url = final_url
         self.screenshot = screenshot  # set only when a failure screenshot was requested and taken
@@ -117,10 +119,15 @@ def check_url(url, allow_loopback=False):
     url = netpolicy.local_name(url)
     if netpolicy.url_allowed(url, pinned(url, allow_loopback)):
         return url
+    if allow_loopback and netpolicy.several_loopback(url):
+        raise MeasureError(
+            "this name resolves to more than one local address: use 127.0.0.1 or [::1] in the URL",
+            kind="address",
+        )
     hint = ""
     if not allow_loopback and netpolicy.url_allowed(url, netpolicy.origin(url)):
         hint = " (use --allow-loopback for your own local build)"
-    raise MeasureError(f"url is not a public http(s) address{hint}")
+    raise MeasureError(f"url is not a public http(s) address{hint}", kind="address")
 
 
 def receipt_refusal(status, requested, final):
@@ -144,7 +151,7 @@ def _refuse_if_moved(status, req, page, tmp=None):
         page.screenshot(path=tmp, type="png")
         os.replace(tmp, req["screenshot"])
         shot = req["screenshot"]
-    raise MeasureError(refusal, status=status, final_url=page.url, screenshot=shot)
+    raise MeasureError(refusal, kind="load", status=status, final_url=page.url, screenshot=shot)
 
 
 def refuse_links(*paths):
@@ -304,7 +311,7 @@ def _communicate(proc, request, timeout):
     except subprocess.TimeoutExpired:
         _stop_worker(proc)  # a worker alone left open would leave Chromium holding stderr
         proc.communicate()
-        raise MeasureError(f"measure timed out after {timeout}s") from None
+        raise MeasureError(f"measure timed out after {timeout}s", kind="timeout") from None
     except BaseException:  # SIGTERM or Ctrl-C: the worker and its browser end with this process
         kill_tree(proc)
         proc.wait()
@@ -333,7 +340,7 @@ def _run_worker(request, timeout=None):
         out_file.seek(0)
         raw = out_file.read(WORKER_OUTPUT_MAX + 1)
     if len(raw) > WORKER_OUTPUT_MAX:
-        raise MeasureError("the page produced too much measurement data")
+        raise MeasureError("the page produced too much measurement data", kind="data")
     lines = raw.decode("utf-8", errors="replace").strip().splitlines()
     try:
         return json.loads(lines[-1]) if lines else {"error": err.strip() or "no output"}

@@ -15,6 +15,7 @@ from pathlib import Path
 from unittest import mock
 
 from piggyback import __version__, mcp
+from piggyback import kit as kit_mod
 from piggyback.measure import MeasureError
 from tests.test_mcp import BUILD_URL, REF_URL, FakeMeasure, call, cli, exchange, load
 
@@ -133,6 +134,50 @@ class KitStartup(unittest.TestCase):
         done = cli("--kit", str(self.kit))
         self.assertEqual(done.returncode, 1)
         self.assertIn(b"BRIEF.md is not UTF-8", done.stderr)
+
+    def test_a_design_md_that_is_not_utf8_refuses_to_start(self):
+        (self.kit / "DESIGN.md").write_bytes(b"---\nname: \xff\n---\n")
+        data = json.loads((self.kit / "kit.json").read_text(encoding="utf-8"))
+        data["artifacts"]["DESIGN.md"] = digest(self.kit / "DESIGN.md")
+        (self.kit / "kit.json").write_text(json.dumps(data), encoding="utf-8")
+        done = cli("--kit", str(self.kit))
+        self.assertEqual(done.returncode, 1)
+        self.assertIn(b"DESIGN.md is not UTF-8", done.stderr)
+        self.assertEqual(done.stdout, b"")
+
+
+def snapshot(kit):
+    return {name: (kit / name).read_bytes() for name in (*kit_mod.FROZEN, "kit.json")}
+
+
+class SingleRead(unittest.TestCase):
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.root = Path(tmp.name)
+        self.kit = write_kit(self.root)
+
+    def test_startup_and_get_kit_use_only_the_first_verified_snapshot(self):
+        later = self.root / "later"
+        later.mkdir()
+        other = write_kit(later)
+        rewrite(other, "BRIEF.md", "# Brief\n\nHeading type: 99px\n")
+        first, second = snapshot(self.kit), snapshot(other)
+        reads = []
+
+        def sequenced(_folder, name, _cap):  # the first verified pass gets the first snapshot
+            reads.append(name)
+            return (first if len(reads) <= len(first) else second)[name]
+
+        with mock.patch("piggyback.kit._read", side_effect=sequenced):
+            session = kit_session(self.kit, BUILD_URL, None)
+            self.assertEqual(len(reads), len(first))  # one read per frozen file at startup
+            reply = exchange(session, call("get_kit"))[0]
+        self.assertTrue(reply["result"]["isError"])
+        self.assertIn(
+            "kit.json changed since the session started", reply["result"]["content"][0]["text"]
+        )
+        self.assertNotIn("99px", json.dumps(reply))
 
 
 class KitMode(unittest.TestCase):
@@ -256,8 +301,66 @@ class KitMode(unittest.TestCase):
         self.assertIn("BRIEF.md", text)
         self.assertNotIn("scroll/frame-0.png", text)
         self.assertIn("MOTION.md: 2 rows", text)
-        self.assertIn("Heading type: 40px", text)
+        self.assertIn("BRIEF.md: 3 lines", text)
+        self.assertNotIn("Heading type", text)
         self.assertNotIn(str(self.root), text)
+
+    def test_get_kit_renders_structured_fields_only(self):
+        rewrite(self.kit, "BRIEF.md", "# Brief\n\nSee /home/brodey/notes.md\n")
+        data = json.loads((self.kit / "kit.json").read_text(encoding="utf-8"))
+        data["piggyback"] = "/home/brodey/0.2"
+        (self.kit / "kit.json").write_text(json.dumps(data), encoding="utf-8")
+        brief = (self.kit / "BRIEF.md").read_bytes()
+        session = kit_session(self.kit, BUILD_URL, self.fake)
+        text = self.text(exchange(session, call("get_kit"))[0])
+        self.assertTrue(text.startswith(mcp.FRAMING + "\n\n"))
+        body = text[len(mcp.FRAMING) + 2 :]
+        self.assertEqual(
+            body.splitlines(),
+            [
+                "Kit ready: fingerprint.json, DESIGN.md, BRIEF.md and MOTION.md match kit.json.",
+                "Piggyback unknown, kit schema 1.",
+                "Other files present: none.",
+                f"BRIEF.md: 3 lines, {len(brief)} bytes.",
+                "MOTION.md: 2 rows.",
+                "Latest CHECK.md: none yet.",
+            ],
+        )
+
+    def test_get_kit_shows_a_schema_that_is_not_an_int_as_unknown(self):
+        data = json.loads((self.kit / "kit.json").read_text(encoding="utf-8"))
+        data["schema"] = "/home/brodey/x"
+        (self.kit / "kit.json").write_text(json.dumps(data), encoding="utf-8")
+        session = kit_session(self.kit, BUILD_URL, self.fake)
+        text = self.text(exchange(session, call("get_kit"))[0])
+        self.assertIn(f"Piggyback {__version__}, kit schema unknown.", text)
+
+    def test_a_measure_failure_is_one_fixed_sentence_whatever_its_text(self):
+        def boom(url, **_):
+            raise MeasureError(f"browser failed in {self.root}/tmp/run")
+
+        reply = exchange(kit_session(self.kit, BUILD_URL, boom), call("check"))[0]
+        self.assertTrue(reply["result"]["isError"])
+        self.assertEqual(self.text(reply), f"{mcp.FRAMING}\n\nthe build could not be measured")
+
+    def test_each_measure_kind_has_its_own_fixed_sentence(self):
+        sentences = {
+            "timeout": "the build measurement timed out",
+            "address": "the build address is not allowed",
+            "data": "the build produced too much measurement data",
+            "load": "the build page could not be loaded",
+        }
+
+        def failing(kind):
+            def fail(url, **_):
+                raise MeasureError(f"raw text in {self.root}", kind=kind)
+
+            return fail
+
+        for kind, sentence in sentences.items():
+            with self.subTest(kind=kind):
+                reply = exchange(kit_session(self.kit, BUILD_URL, failing(kind)), call("check"))[0]
+                self.assertEqual(self.text(reply), f"{mcp.FRAMING}\n\n{sentence}")
 
     def test_get_kit_claims_only_the_four_frozen_files_and_names_the_rest_as_present(self):
         (self.kit / "screenshot.png").write_bytes(b"\x89PNG")

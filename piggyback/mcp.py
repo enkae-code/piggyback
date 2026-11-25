@@ -6,6 +6,7 @@ to stderr. The URLs are fixed at startup by the human, and no tool takes a URL, 
 """
 
 import json
+import re
 import traceback
 
 from . import __version__, server, starters
@@ -61,6 +62,7 @@ KIT_TOOLS = [  # only in kit mode (piggyback mcp --kit)
     },
 ]
 KIT_ARGUMENTS = {"get_kit": set()}
+PIGGYBACK_VERSION = re.compile(r"\d+\.\d+\.\d+([.-][0-9A-Za-z]+)?", re.ASCII)
 KIT_CHECK_IMPECCABLE = "not run (read-only check)"
 REFRESH_HINT = "call get_brief with refresh: true to measure again"
 
@@ -85,8 +87,9 @@ class Session:
         self.kit = kit
         self.kit_pin = None  # kit.json's digest at startup: a later rewrite is refused
         if kit is not None:
-            kit_mod.readiness(kit)  # refuses a kit it cannot serve, before any call
-            self.kit_pin = kit_mod.digest(kit_mod.verified(kit, kit_mod.MCP_FILES)["kit.json"])
+            files = kit_mod.verified(kit, kit_mod.FROZEN)  # the one read: every pin and summary
+            kit_mod.readiness(kit, files)  # refuses a kit it cannot serve, before any call
+            self.kit_pin = kit_mod.digest(files["kit.json"])
         self.ref_pages = None
         self.ref_failure = None  # the error of a reference capture that failed, until refresh
         self.differing = set()  # concepts that differed at the previous check
@@ -114,7 +117,7 @@ class Session:
 
     def _frozen(self):
         # Every kit-mode call checks the digests and the startup pin: the folder is agent-writable.
-        files = kit_mod.verified(self.kit, kit_mod.MCP_FILES)
+        files = kit_mod.verified(self.kit, kit_mod.FROZEN)
         if kit_mod.digest(files["kit.json"]) != self.kit_pin:
             raise ValueError(
                 "kit.json changed since the session started: this kit can't be checked"
@@ -125,19 +128,18 @@ class Session:
         if self.kit is not None:
             if refresh:
                 raise ValueError("the reference is frozen in kit mode: refresh is not available")
-            return kit_mod.brief_text(self._frozen()["BRIEF.md"])
+            return kit_mod.utf8_text(self._frozen()["BRIEF.md"], "BRIEF.md")
         return brief_mod.brief(self._refs(refresh))
 
     def get_design_md(self):
         if self.kit is not None:
-            return self._frozen()["DESIGN.md"].decode("utf-8")
+            return kit_mod.utf8_text(self._frozen()["DESIGN.md"], "DESIGN.md")
         if not self.refs:
             raise ValueError("no reference configured: start the server with a reference URL")
         return brief_mod.design_md(self._refs()[0])
 
     def get_kit(self):
-        self._frozen()
-        return kit_summary(kit_mod.readiness(self.kit))
+        return kit_summary(kit_mod.readiness(self.kit, self._frozen()))
 
     def _kit_check(self):
         files = self._frozen()
@@ -146,7 +148,10 @@ class Session:
         if self.kit_attempts >= kit_mod.CAP:
             raise ValueError(kit_mod.CAP_REACHED)
         allow = server._on_this_machine(self.build)
-        build = self.measure_page(self.build, viewport=viewport, allow_loopback=allow)
+        try:
+            build = self.measure_page(self.build, viewport=viewport, allow_loopback=allow)
+        except Exception as exc:  # the error's text may hold a path: a fixed sentence instead
+            raise ValueError(kit_mod.measure_message(exc)) from None
         self.kit_attempts += 1
         found = kit_mod.compare(ref, build, self.differing)
         attempt = {
@@ -191,14 +196,17 @@ def _tables(session):
 
 
 def kit_summary(info):
-    """get_kit's text from kit_mod.readiness: short, cleaned, and no paths or whole files."""
+    """get_kit's text from kit_mod.readiness: structured fields only, never kit text or a path."""
+    piggyback = info["piggyback"]
+    if not (isinstance(piggyback, str) and PIGGYBACK_VERSION.fullmatch(piggyback)):
+        piggyback = "unknown"
+    schema = info["schema"] if type(info["schema"]) is int else "unknown"
     lines = [
         "Kit ready: fingerprint.json, DESIGN.md, BRIEF.md and MOTION.md match kit.json.",
-        f"Piggyback {fp.clean(info['piggyback'], 40)}, kit schema {fp.clean(info['schema'], 40)}.",
+        f"Piggyback {piggyback}, kit schema {schema}.",
         f"Other files present: {', '.join(info['artifacts']) or 'none'}.",
+        f"BRIEF.md: {info['brief_lines']} lines, {info['brief_bytes']} bytes.",
         f"MOTION.md: {info['motion_rows']} rows.",
-        "BRIEF.md, first lines:",
-        *[fp.clean(line, 120) for line in info["brief"]],
         f"Latest CHECK.md: {info['check'] or 'none yet'}.",
     ]
     return "\n".join(lines) + "\n"

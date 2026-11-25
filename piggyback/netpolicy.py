@@ -86,6 +86,16 @@ def resolve_allowed(host, port=None, loopback=None):
     return str(addresses[0])
 
 
+def several_loopback(url):
+    """True when the URL's name resolves to two or more addresses, all loopback: one pin is one."""
+    try:
+        name = (urlsplit(url).hostname or "").lower().rstrip(".")
+    except ValueError:
+        return False
+    addresses = [_unwrapped(ip) for ip in _addresses(name) or []]
+    return len(addresses) > 1 and all(ip is not None and ip.is_loopback for ip in addresses)
+
+
 def host_allowed(host, port=None, loopback=None):
     return resolve_allowed(host, port, loopback) is not None
 

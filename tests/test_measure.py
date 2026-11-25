@@ -2,6 +2,7 @@ import contextlib
 import io
 import json
 import os
+import socket
 import subprocess
 import sys
 import tempfile
@@ -189,6 +190,19 @@ class ReceiptAndLoopbackTests(unittest.TestCase):
     def test_localhost_without_flag_still_hints_loopback(self):
         with self.assertRaisesRegex(MeasureError, "--allow-loopback"):
             check_url("http://localhost:3000/")
+
+    def test_a_name_on_two_local_addresses_gets_the_specific_hint(self):
+        two = [
+            (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("127.0.0.1", 0)),
+            (socket.AF_INET6, socket.SOCK_STREAM, 6, "", ("::1", 0, 0, 0)),
+        ]
+        with mock.patch("socket.getaddrinfo", return_value=two):
+            with self.assertRaises(MeasureError) as caught:
+                check_url("http://svc.example:8123/", allow_loopback=True)
+        self.assertEqual(
+            str(caught.exception),
+            "this name resolves to more than one local address: use 127.0.0.1 or [::1] in the URL",
+        )
 
 
 class LinkGuardTests(unittest.TestCase):

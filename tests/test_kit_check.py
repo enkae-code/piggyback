@@ -4,6 +4,7 @@ import io
 import json
 import os
 import shutil
+import subprocess
 import sys
 import tempfile
 import threading
@@ -346,6 +347,21 @@ class KitCheckTests(unittest.TestCase):
         with contextlib.redirect_stdout(out), self.assertRaises(SystemExit):
             main(["kit", "--help"])
         self.assertIn("kit check", out.getvalue())
+
+    def test_allow_loopback_help_says_what_it_lets_through(self):
+        sentence = (
+            "let this local URL be measured; the page may reach only its own address and port"
+        )
+        for argv in (["measure"], ["measure-list"], ["kit"], ["kit", "check"]):
+            with self.subTest(argv=argv):
+                done = subprocess.run(
+                    [sys.executable, "-m", "piggyback", *argv, "--help"],
+                    capture_output=True,
+                    text=True,
+                    cwd=Path(__file__).resolve().parent.parent,
+                    timeout=60,
+                )
+                self.assertIn(sentence, " ".join(done.stdout.split()))
 
     def test_a_check_writes_no_home_path(self):
         self.check()

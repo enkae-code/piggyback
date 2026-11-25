@@ -50,15 +50,24 @@ BRIEF_MAX = 1024 * 1024
 MOTION_MAX = 1024 * 1024
 CHECK_MAX = 4 * 1024 * 1024
 CHECK_FILES = ("fingerprint.json", "DESIGN.md")  # what kit check verifies before measuring
-MCP_FILES = (*CHECK_FILES, "BRIEF.md")  # what the read-only MCP kit mode serves
-FROZEN = (*MCP_FILES, "MOTION.md")  # every file kit.json pins; get_kit names them, never others
+FROZEN = (
+    *CHECK_FILES,
+    "BRIEF.md",
+    "MOTION.md",
+)  # every file kit.json pins; get_kit names no others
 FROZEN_MAX = {
     "fingerprint.json": fingerprints.MAX_BYTES,
     "DESIGN.md": DESIGN_MAX,
     "BRIEF.md": BRIEF_MAX,
     "MOTION.md": MOTION_MAX,
 }
-SUMMARY_LINES = 6  # BRIEF.md lines in get_kit
+MEASURE_FAILED = {  # a kit-mode check's failure: fixed sentences for our kinds, never their text
+    "timeout": "the build measurement timed out",
+    "address": "the build address is not allowed",
+    "data": "the build produced too much measurement data",
+    "load": "the build page could not be loaded",
+}
+UNMEASURED = "the build could not be measured"
 KIT_ARTIFACTS = (  # logical names only: get_kit reports which exist, never a path
     "screenshot.png",
     *(f"scroll/frame-{n}.png" for n in range(6)),
@@ -273,12 +282,17 @@ def digest(raw):
     return hashlib.sha256(raw).hexdigest()
 
 
-def brief_text(raw):
-    """BRIEF.md as text. One decode rule for startup and get_brief: strict UTF-8."""
+def utf8_text(raw, name):
+    """A kit text file as text. One decode rule for startup and both getters: strict UTF-8."""
     try:
         return raw.decode("utf-8")
     except UnicodeDecodeError:
-        raise ValueError("BRIEF.md is not UTF-8: this kit can't be checked") from None
+        raise ValueError(f"{name} is not UTF-8: this kit can't be checked") from None
+
+
+def measure_message(exc):
+    """The fixed sentence a kit-mode check shows for a failed measure, never the error's text."""
+    return MEASURE_FAILED.get(getattr(exc, "kind", None), UNMEASURED)
 
 
 def _measure_build(url, viewport, allow_loopback):
@@ -405,21 +419,21 @@ def _check_summary(folder):
     )
 
 
-def readiness(kit_dir):
-    """What get_kit shows and what startup checks: the kit's version, the artifact names present
-    and short summaries. Every frozen digest is checked first, then the reference's viewport and
-    BRIEF.md's text. Nothing here is a path or a whole file."""
+def readiness(kit_dir, files):
+    """What get_kit shows and what startup checks, from one verified snapshot: files is what
+    verified(kit_dir, FROZEN) returned. Nothing here is a path, free text or a whole file."""
     folder = Path(kit_dir)
-    files = verified(folder, FROZEN)
     data = _kit_json(files["kit.json"])
     ref_viewport(parse_fingerprint(files["fingerprint.json"]))  # refuse a kit it cannot serve
+    utf8_text(files["DESIGN.md"], "DESIGN.md")
+    brief = utf8_text(files["BRIEF.md"], "BRIEF.md")
     motion = files["MOTION.md"].decode("utf-8", "replace").splitlines()
-    brief = brief_text(files["BRIEF.md"]).splitlines()
     return {
         "schema": data.get("schema"),
         "piggyback": data.get("piggyback"),
         "artifacts": [n for n in KIT_ARTIFACTS if n not in FROZEN and _is_file(folder, n)],
-        "brief": brief[:SUMMARY_LINES],
+        "brief_lines": len(brief.splitlines()),
+        "brief_bytes": len(files["BRIEF.md"]),
         "motion_rows": sum(line.startswith("| M") for line in motion),
         "check": _check_summary(folder),
     }

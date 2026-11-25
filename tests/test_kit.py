@@ -16,6 +16,8 @@ from unittest import mock
 from piggyback import kit, tools
 from piggyback import measure as measure_mod
 from piggyback.cli import main
+from tests.test_mcp import call
+from tests.test_mcp_kit import write_kit
 from tests.test_tools import ENV_OK
 
 URL = "https://93.184.216.34/"
@@ -1554,17 +1556,21 @@ class SigtermUnwinds(unittest.TestCase):
         self.driver.write_text(self.DRIVER, encoding="utf-8")
         self.pid_file = self.root / "worker.pid"
 
-    def run_then_sigterm(self, *argv):
-        """Start the CLI, wait for the stub worker to start, send SIGTERM. Returns (proc, pid)."""
+    def run_then_sigterm(self, *argv, stdin=b""):
+        """Start the CLI, wait for the stub worker to start, send SIGTERM. Returns (proc, pid).
+        stdin is written and left open, so an MCP session can start a measure."""
         env = {**os.environ, "STUB_PID_FILE": str(self.pid_file), "PYTHONPATH": str(ROOT)}
         proc = subprocess.Popen(
             [sys.executable, str(self.driver), str(self.stub), *argv],
             cwd=self.root,
             env=env,
+            stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
         )
         self.addCleanup(proc.kill)
+        proc.stdin.write(stdin)
+        proc.stdin.flush()
         deadline, text = time.monotonic() + 60, ""
         while time.monotonic() < deadline and not text:
             with contextlib.suppress(OSError):
@@ -1617,6 +1623,14 @@ class SigtermUnwinds(unittest.TestCase):
         )
         self.assert_unwound(proc, pid)
         self.assertFalse((kit_dir / "CHECK.md").exists())
+
+    def test_mcp_check_unwinds_on_sigterm_and_reaps_its_worker(self):
+        kit_dir = write_kit(self.root)
+        check = json.dumps(call("check")).encode() + b"\n"
+        proc, pid = self.run_then_sigterm(
+            "mcp", "--kit", str(kit_dir), "--build", "http://127.0.0.1:9/", stdin=check
+        )
+        self.assert_unwound(proc, pid)
 
 
 def _kill_quietly(pid):
