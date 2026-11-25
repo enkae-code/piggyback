@@ -198,7 +198,11 @@ def _tables(session):
 def kit_summary(info):
     """get_kit's text from kit_mod.readiness: structured fields only, never kit text or a path."""
     piggyback = info["piggyback"]
-    if not (isinstance(piggyback, str) and PIGGYBACK_VERSION.fullmatch(piggyback)):
+    if not (
+        isinstance(piggyback, str)
+        and len(piggyback) <= 40
+        and PIGGYBACK_VERSION.fullmatch(piggyback)
+    ):
         piggyback = "unknown"
     schema = info["schema"] if type(info["schema"]) is int else "unknown"
     lines = [

@@ -92,7 +92,7 @@ def several_loopback(url):
         name = (urlsplit(url).hostname or "").lower().rstrip(".")
     except ValueError:
         return False
-    addresses = [_unwrapped(ip) for ip in _addresses(name) or []]
+    addresses = {_unwrapped(ip) for ip in _addresses(name) or []}  # one row per socket type
     return len(addresses) > 1 and all(ip is not None and ip.is_loopback for ip in addresses)
 
 

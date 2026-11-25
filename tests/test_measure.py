@@ -204,6 +204,16 @@ class ReceiptAndLoopbackTests(unittest.TestCase):
             "this name resolves to more than one local address: use 127.0.0.1 or [::1] in the URL",
         )
 
+    def test_one_local_address_on_several_socket_types_gets_the_plain_refusal(self):
+        one = [
+            (socket.AF_INET, kind, 0, "", ("127.0.0.1", 0))
+            for kind in (socket.SOCK_STREAM, socket.SOCK_DGRAM, socket.SOCK_RAW)
+        ]
+        with mock.patch("socket.getaddrinfo", return_value=one):
+            with self.assertRaises(MeasureError) as caught:
+                check_url("http://svc.local:8123/", allow_loopback=True)
+        self.assertNotIn("more than one local address", str(caught.exception))
+
 
 class LinkGuardTests(unittest.TestCase):
     @unittest.skipUnless(
@@ -908,6 +918,26 @@ class ReaWorkerTests(unittest.TestCase):
                 rea_binary="rea",
             )
         return result, calls
+
+    def test_a_worker_refusal_keeps_its_kind_on_both_paths(self):
+        refusal = {"error": "/home/x/build returned 404", "refused": True, "kind": "load"}
+        for outcomes in ((refusal,), (CAPTURE, refusal)):
+            with self.assertRaises(MeasureError) as caught:
+                self.measure_with(*outcomes)
+            self.assertEqual(caught.exception.kind, "load")
+
+    def test_the_worker_envelope_carries_the_refusal_kind(self):
+        out = io.StringIO()
+        with (
+            mock.patch.object(sys, "stdin", io.StringIO("{}")),
+            mock.patch.object(sys, "stdout", out),
+            mock.patch.object(measure_mod.signal, "signal"),
+            mock.patch.object(
+                measure_mod, "_capture", side_effect=MeasureError("404", kind="load")
+            ),
+        ):
+            self.assertEqual(measure_mod._worker(), 1)
+        self.assertEqual(json.loads(out.getvalue())["kind"], "load")
 
     def test_the_rea_pass_runs_in_its_own_worker_after_the_capture(self):
         result, calls = self.measure_with(CAPTURE, {"rea": CAPTURED})

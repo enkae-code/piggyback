@@ -387,6 +387,25 @@ class KitMode(unittest.TestCase):
         text = self.text(exchange(session, call("get_kit"))[0])
         self.assertLess(len(text), 2000)
 
+    def test_a_long_valid_looking_version_is_shown_as_unknown(self):
+        data = json.loads((self.kit / "kit.json").read_text(encoding="utf-8"))
+        data["piggyback"] = "1.2.3-" + "a" * 8192
+        (self.kit / "kit.json").write_text(json.dumps(data), encoding="utf-8")
+        session = kit_session(self.kit, BUILD_URL, self.fake)
+        text = self.text(exchange(session, call("get_kit"))[0])
+        self.assertIn("Piggyback unknown, kit schema 1.", text)
+        self.assertLess(len(text), 2000)
+
+    def test_a_long_attempt_number_is_not_echoed(self):
+        (self.kit / "CHECK.md").write_text(
+            f"## Attempt {'9' * 8192}\n\nFixed: none\nStill open: none\nUncomparable: none\n",
+            encoding="utf-8",
+        )
+        session = kit_session(self.kit, BUILD_URL, self.fake)
+        text = self.text(exchange(session, call("get_kit"))[0])
+        self.assertNotIn("9" * 7, text)
+        self.assertLess(len(text), 2000)
+
     def test_get_kit_shows_the_latest_check_md_attempt_as_counts(self):
         (self.kit / "CHECK.md").write_text(
             "# Check\n\n## Attempt 1\n\nFixed: none\nStill open: accent\nUncomparable: none\n\n"

@@ -409,14 +409,20 @@ def _check_summary(folder):
     if not starts:
         return None
     block = lines[starts[-1] :]
-    number = block[0][len("## Attempt ") :].strip()
+    number = _attempt_number(block[0])
     counts = {key: _count(block, key) for key in ("Fixed", "Still open", "Uncomparable")}
-    if not number.isdigit() or None in counts.values():
+    if number is None or None in counts.values():
         return UNSUMMARISED
     return (
         f"Attempt {number}: open {counts['Still open']}, fixed {counts['Fixed']}, "
         f"uncomparable {counts['Uncomparable']}"
     )
+
+
+def _attempt_number(heading):
+    """The attempt number of a '## Attempt N' heading: a short ASCII number, or None."""
+    number = heading[len("## Attempt ") :].strip()
+    return number if number.isascii() and number.isdigit() and len(number) <= 6 else None
 
 
 def readiness(kit_dir, files):

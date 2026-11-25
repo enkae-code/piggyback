@@ -380,6 +380,7 @@ def measure(
     if "error" in result:
         raise MeasureError(
             result["error"],
+            kind=_worker_kind(result),
             status=result.get("status"),
             final_url=result.get("final_url"),
             screenshot=result.get("screenshot"),
@@ -393,6 +394,13 @@ def measure(
     return result
 
 
+def _worker_kind(result):
+    """The worker's error kind, kept only when it is a plain word: kit-mode checks map it to a
+    fixed sentence."""
+    kind = result.get("kind")
+    return kind if isinstance(kind, str) else None
+
+
 def _rea_worker(request):
     """REA in its own worker after the capture's: a hung REA call costs only that worker, and the
     capture is kept. A timeout is the rea stage; an error from the page refuses the kit."""
@@ -404,6 +412,7 @@ def _rea_worker(request):
         if result.get("refused"):
             raise MeasureError(
                 result["error"],
+                kind=_worker_kind(result),
                 status=result.get("status"),
                 final_url=result.get("final_url"),
                 screenshot=result.get("screenshot"),
@@ -1079,6 +1088,7 @@ def _worker():
         out: dict = {"error": text or repr(exc)}
         if isinstance(exc, MeasureError):  # a page refusal, not a setup failure
             out["refused"] = True
+            out["kind"] = exc.kind
             out["status"], out["final_url"] = exc.status, exc.final_url
             out["screenshot"] = exc.screenshot
         print(json.dumps(out))
