@@ -181,3 +181,10 @@ class MotionTableTests(unittest.TestCase):
             step(1, 200, elements=last),
         ]
         self.assertTrue(rows_with(motion.build(data(steps)), "opacity"))
+
+    def test_spread_counts_distinct_transforms_only_above_two(self):
+        a = [1.0, 0.0, 0.0, 1.0, 0.0, 0.0]
+        b = [1.0, 0.0, 0.0, 1.0, 5.0, 0.0]
+        c = [1.0, 0.0, 0.0, 1.0, 9.0, 0.0]
+        self.assertEqual(motion._spread("transform", [a, b, c]), "; 3 distinct transforms")
+        self.assertEqual(motion._spread("transform", [a, b, a]), "")

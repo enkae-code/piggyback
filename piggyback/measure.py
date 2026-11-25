@@ -150,45 +150,38 @@ def refuse_links(*paths):
             )
 
 
-def _temp_fd(path):
+def _temp_fd(path, mode):
     """(fd, name) of a new empty file beside path, created O_EXCL: never an existing file or link.
-    The umask sets its mode."""
+    mode is applied at creation (the umask narrows it), so no byte lands in a looser file."""
     path = Path(path)
     tmp = path.with_name(f".{path.name}.{secrets.token_hex(8)}.tmp")
-    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0), 0o666)
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0), mode)
     return fd, str(tmp)
 
 
-def _match_mode(path, tmp):
-    """An existing regular file at path only narrows the new temp file's mode."""
+def _mode_of(path):
+    """Mode for a replacement of path: an existing regular file's, else 0o666 (umask applies)."""
     try:
-        existing = os.lstat(path).st_mode
+        found = os.lstat(path)
     except FileNotFoundError:
-        existing = 0
-    if stat.S_ISREG(existing):
-        os.chmod(tmp, os.lstat(tmp).st_mode & existing & 0o777)
+        return 0o666
+    return found.st_mode & 0o777 if stat.S_ISREG(found.st_mode) else 0o666
 
 
 def _temp_beside(path):
     """Empty temp file beside path, for a writer that takes a file name (a screenshot)."""
-    fd, tmp = _temp_fd(path)
+    fd, tmp = _temp_fd(path, _mode_of(path))
     os.close(fd)
-    try:
-        _match_mode(path, tmp)
-    except BaseException:
-        os.unlink(tmp)
-        raise
     return tmp
 
 
 def publish_text(path, text):
     """Replace path with text in one rename: a crash never leaves a partial file. The text goes
     into the descriptor of the temp file this call created, so the name is never reopened."""
-    fd, tmp = _temp_fd(path)
+    fd, tmp = _temp_fd(path, _mode_of(path))
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as handle:
             handle.write(text)
-        _match_mode(path, tmp)
         os.replace(tmp, path)  # replaces a link at path, never writes through it
     except BaseException:
         with contextlib.suppress(OSError):

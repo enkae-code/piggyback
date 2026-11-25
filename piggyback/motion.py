@@ -161,8 +161,9 @@ def build(data):
     samples = list(_samples(data))
     animations = _animation_rows(samples)
     shown = animations[:ANIMATION_ROWS]
-    rows = shown + _element_rows(samples)[: MAX_ROWS - len(shown)]
-    hidden = len(animations) + len(_element_rows(samples)) - len(rows)
+    elements = _element_rows(samples)
+    rows = shown + elements[: MAX_ROWS - len(shown)]
+    hidden = len(animations) + len(elements) - len(rows)
     coverage = (data.get("coverage") or {}).get("scroll", "none")
     viewport = data.get("viewport") or {}
     lines = [

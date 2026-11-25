@@ -47,7 +47,12 @@ CHECK_MAX = 4 * 1024 * 1024
 HISTORY_UNREADABLE = "Earlier history in CHECK.md could not be read; starting attempt 1."
 IDS = ("open", "fixed", "uncomparable")
 CONCEPTS = frozenset(glossary.TERMS)
-ABS_PATH = re.compile(r"(?<![\w.])(?:[A-Za-z]:\\|~/|/)[^\s\"'`<>()]+")
+RUN = r"""[^<>"'`()\r\n]*"""  # a path runs to a delimiter or the end of its line
+# Quoted: through the closing quote. Unquoted: only at the start of text or after whitespace, so
+# markup ("</div>"), URLs ("https://") and "url(/x)" are not paths.
+ABS_PATH = re.compile(
+    r"""(["'`])(?:[A-Za-z]:\\|~/|/)[^"'`\r\n]*\1|(?<![^\s])(?:[A-Za-z]:\\|~/|/)(?=\S)""" + RUN
+)
 MARKER = "<!-- piggyback-check "
 CHECK_NOT_RUN = (
     "# Check\n\nNot run. Measure your build against this kit's frozen reference:\n"
@@ -287,36 +292,79 @@ class WorkspaceTooLarge(ValueError):
     """Over a workspace bound: Impeccable is skipped and the gap check still runs."""
 
 
+def _write_name(path, data):
+    """Write one staged file. A failure names the file only, never the temp path."""
+    try:
+        tools.write_new_bytes(path, data)
+    except OSError:
+        raise ValueError(f"{path.name} could not be written: this check can't run") from None
+
+
+def _copy_file(entry, dest_dir, state):
+    try:
+        data = read_plain(Path(entry.path), WORKSPACE_MAX - state["bytes"])
+    except ValueError:  # over the byte bound
+        raise WorkspaceTooLarge(SKIPPED_WORKSPACE) from None
+    except OSError:
+        state["skipped"] += 1
+        return
+    if data is None:
+        state["skipped"] += 1
+        return
+    dest = dest_dir / entry.name
+    if os.path.lexists(dest):  # only the kit's DESIGN.md is staged before the workspace
+        state["design"] = True
+        return
+    state["bytes"] += len(data)
+    _write_name(dest, data)
+
+
 def _copy_tree(source, target):
     """Copy the workspace's plain files into target. Every byte comes from a checked descriptor.
+    Returns the notes for CHECK.md. Links, special files and unreadable entries are skipped and
+    counted. The walk is one folder at a time through os.scandir, so the entry bound stops it early.
 
-    Links, special files and hard links are skipped, and os.walk never follows a folder link.
     ponytail: a folder swapped for a link during the walk is not caught. Upgrade: os.fwalk with
     directory descriptors.
     """
     if not stat.S_ISDIR(os.lstat(source).st_mode):
         raise ValueError("the workspace must be a real folder, not a link")
-    total = entries = 0
-    for dirpath, dirnames, filenames in os.walk(source):
-        rel = Path(dirpath).relative_to(source)
-        entries += len(dirnames) + len(filenames)
-        if entries > WORKSPACE_ENTRIES or len(rel.parts) > WORKSPACE_DEPTH:
+    state = {"bytes": 0, "entries": 0, "skipped": 0, "design": False}
+    folders = [Path()]
+    while folders:
+        rel = folders.pop()
+        if len(rel.parts) > WORKSPACE_DEPTH:
             raise WorkspaceTooLarge(SKIPPED_WORKSPACE)
-        (target / rel).mkdir(parents=True, exist_ok=True)
-        for name in filenames:
-            try:
-                data = read_plain(Path(dirpath) / name, WORKSPACE_MAX - total)
-            except ValueError:
-                raise WorkspaceTooLarge(SKIPPED_WORKSPACE) from None
-            if data is None:
-                continue
-            total += len(data)
-            tools.write_new_bytes(target / rel / name, data)
+        try:
+            listing = os.scandir(source / rel)
+        except OSError:
+            state["skipped"] += 1
+            continue
+        with listing:
+            for entry in listing:
+                state["entries"] += 1
+                if state["entries"] > WORKSPACE_ENTRIES:
+                    raise WorkspaceTooLarge(SKIPPED_WORKSPACE)
+                if entry.is_dir(follow_symlinks=False):
+                    folders.append(rel / entry.name)
+                    (target / rel / entry.name).mkdir(exist_ok=True)
+                else:
+                    _copy_file(entry, target / rel, state)
+    notes = []
+    if state["design"]:
+        notes.append("workspace DESIGN.md ignored; the kit's frozen DESIGN.md is used.")
+    if state["skipped"]:
+        notes.append(f"{state['skipped']} workspace files skipped (links, special, unreadable).")
+    return " ".join(notes)
 
 
-def _text(value, limit=TEXT_MAX):
-    """Detector text as one safe cell: absolute paths removed, markdown escaped, length capped."""
+def _text(value, limit=TEXT_MAX, roots=()):
+    """Detector text as one safe cell: the roots (staging and home folders) and absolute paths
+    removed, markdown escaped, length capped."""
     text = value if isinstance(value, str) else "?"
+    for root in roots:
+        if len(root) > 1:
+            text = re.sub(re.escape(root) + RUN, "[path]", text)
     return fingerprints.clean(ABS_PATH.sub("[path]", text), limit)
 
 
@@ -333,9 +381,10 @@ def _finding(item, stage):
     """One finding as a CHECK.md line; its file is shown relative to the staged site."""
     if not isinstance(item, dict):
         return "unreadable finding"
-    where = _text(_relative(item.get("file"), stage))
-    name, severity = _text(item.get("name")), _text(item.get("severity"), 20)
-    return f"{name} ({severity}) at {where}: {_text(item.get('snippet'))}"
+    roots = (str(stage), str(stage.resolve()), str(Path.home()))
+    where = _text(_relative(item.get("file"), stage), roots=roots)
+    name, severity = _text(item.get("name"), roots=roots), _text(item.get("severity"), 20)
+    return f"{name} ({severity}) at {where}: {_text(item.get('snippet'), roots=roots)}"
 
 
 def _detect(stage, workspace, skipped):
@@ -504,11 +553,12 @@ def check(kit_dir, build_url, *, workspace=None, allow_loopback=False):
     with tempfile.TemporaryDirectory() as tmp:
         stage = Path(tmp) / "site"
         stage.mkdir()
-        tools.write_new_bytes(stage / "DESIGN.md", design)
+        _write_name(stage / "DESIGN.md", design)
         skipped = None
+        copy_notes = ""
         if workspace is not None:
             try:
-                _copy_tree(Path(workspace), stage)
+                copy_notes = _copy_tree(Path(workspace), stage)
             except WorkspaceTooLarge as exc:
                 skipped = str(exc)
         build = _measure_build(url, viewport, allow_loopback)
@@ -524,6 +574,7 @@ def check(kit_dir, build_url, *, workspace=None, allow_loopback=False):
             "diffs": gap_mod.render(pins),
             **_detect(stage, workspace, skipped),
         }
-    text = _check_text(digest, earlier, current, note, urlsplit(url).hostname or "")
+    notes = " ".join(filter(None, [note, copy_notes]))
+    text = _check_text(digest, earlier, current, notes, urlsplit(url).hostname or "")
     publish_text(folder / "CHECK.md", text)
     return folder / "CHECK.md"

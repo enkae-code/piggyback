@@ -338,3 +338,157 @@ class KitCheckTests(unittest.TestCase):
         for path in self.kit.rglob("*"):
             if path.is_file():
                 self.assertNotIn(str(Path.home()), path.read_text(errors="ignore"))
+
+    def write_history(self, attempts):
+        state = {"build": kit_build_digest(BUILD), "attempts": attempts}
+        (self.kit / "CHECK.md").write_text(
+            f"# Check\n<!-- piggyback-check {json.dumps(state)} -->\n", encoding="utf-8"
+        )
+
+    def test_a_workspace_with_its_own_design_md_uses_the_kit_copy(self):
+        (self.workspace / "DESIGN.md").write_text("workspace design", encoding="utf-8")
+        self.fake.write_text(
+            f"#!{sys.executable}\n"
+            "import json, os, sys\n"
+            "design = open(os.path.join(sys.argv[-1], 'DESIGN.md')).read()\n"
+            "item = {'name': design, 'severity': 'warning', 'file': '', 'snippet': ''}\n"
+            "print(json.dumps([item]))\n",
+            encoding="utf-8",
+        )
+        text = self.check().read_text(encoding="utf-8")
+        self.assertIn("name: x", text)
+        self.assertNotIn("workspace design", text)
+        self.assertIn("workspace DESIGN.md ignored; the kit's frozen DESIGN.md is used.", text)
+
+    def test_a_workspace_that_is_the_kit_folder_itself_is_checked(self):
+        text = self.check(workspace=self.kit).read_text(encoding="utf-8")
+        self.assertIn("## Attempt 1", text)
+
+    def test_a_write_error_names_the_file_and_no_temp_path(self):
+        real_write = kit.tools.write_new_bytes
+
+        def fail_for_index(path, data):
+            if Path(path).name == "index.html":
+                raise OSError(28, "No space left", str(path))
+            return real_write(path, data)
+
+        with mock.patch.object(kit.tools, "write_new_bytes", side_effect=fail_for_index):
+            with self.assertRaises(ValueError) as caught:
+                self.check()
+        self.assertEqual(
+            str(caught.exception), "index.html could not be written: this check can't run"
+        )
+
+    @unittest.skipIf(getattr(os, "geteuid", lambda: 1)() == 0, "root reads mode-0 files")
+    def test_an_unreadable_workspace_file_is_skipped_and_counted(self):
+        locked = self.workspace / "locked.html"
+        locked.write_text("x", encoding="utf-8")
+        locked.chmod(0)
+        self.addCleanup(locked.chmod, 0o600)
+        text = self.check().read_text(encoding="utf-8")
+        self.assertIn("1 workspace files skipped", text)
+        self.assertIn("## Attempt 1", text)
+
+    def test_the_workspace_walk_stops_at_the_entry_bound(self):
+        for i in range(50):
+            (self.workspace / f"p{i}.html").write_text("x", encoding="utf-8")
+        seen = []
+        real_scandir = os.scandir
+
+        class Counting:
+            def __init__(self, listing):
+                self.listing = listing
+
+            def __enter__(self):
+                self.listing.__enter__()
+                return self
+
+            def __exit__(self, *exc):
+                return self.listing.__exit__(*exc)
+
+            def __iter__(self):
+                for entry in self.listing:
+                    seen.append(entry.name)
+                    yield entry
+
+        def spy(path):  # counts only the workspace's listing; other scans (cleanup) pass through
+            listing = real_scandir(path)
+            return Counting(listing) if path == self.workspace else listing
+
+        with (
+            mock.patch.object(kit, "WORKSPACE_ENTRIES", 10),
+            mock.patch.object(kit.os, "scandir", side_effect=spy),
+        ):
+            text = self.check().read_text(encoding="utf-8")
+        self.assertIn("Impeccable: skipped: workspace too large", text)
+        self.assertLessEqual(len(seen), 11)
+
+    def test_a_finding_that_names_the_staging_folder_shows_no_stage_path(self):
+        self.fake.write_text(
+            f"#!{sys.executable}\n"
+            "import json, sys\n"
+            "item = {'name': 'n', 'severity': 'warning', 'file': '',\n"
+            "        'snippet': '(' + sys.argv[-1] + '/a.html)'}\n"
+            "print(json.dumps([item]))\n",
+            encoding="utf-8",
+        )
+        text = self.check().read_text(encoding="utf-8")
+        self.assertNotIn("a.html", text)
+        self.assertIn("\\[path\\]", text)
+
+    def test_a_changed_design_md_refuses_the_check_before_measuring(self):
+        (self.kit / "DESIGN.md").write_text("edited", encoding="utf-8")
+        with mock.patch("piggyback.kit.write_measure") as measure:
+            with self.assertRaisesRegex(ValueError, "DESIGN.md changed since the kit was made"):
+                kit.check(self.kit, BUILD, workspace=self.workspace)
+        measure.assert_not_called()
+
+    def test_a_history_attempt_with_the_wrong_number_is_malformed(self):
+        self.write_history([{"n": 2, "open": [], "fixed": [], "uncomparable": [], "warnings": 0}])
+        text = self.check().read_text(encoding="utf-8")
+        self.assertIn("could not be read", text)
+        self.assertIn("## Attempt 1", text)
+
+    def test_a_history_warning_count_must_be_a_small_int(self):
+        for bad in (-1, kit.DETECT_MAX + 1, True, "1"):
+            with self.subTest(warnings=bad):
+                self.write_history(
+                    [{"n": 1, "open": [], "fixed": [], "uncomparable": [], "warnings": bad}]
+                )
+                text = self.check().read_text(encoding="utf-8")
+                self.assertIn("could not be read", text)
+
+    def test_a_history_longer_than_the_cap_is_malformed(self):
+        empty = {"open": [], "fixed": [], "uncomparable": [], "warnings": 0}
+        self.write_history([{"n": n, **empty} for n in range(1, kit.CAP + 2)])
+        text = self.check().read_text(encoding="utf-8")
+        self.assertIn("could not be read", text)
+        self.assertIn("## Attempt 1", text)
+
+
+@unittest.skipUnless(os.name == "posix", "POSIX only: the staging and home paths")
+class TextRedactionTests(unittest.TestCase):
+    def test_markup_and_urls_are_not_treated_as_paths(self):
+        self.assertNotIn("\\[path\\]", kit._text("</div>"))
+        self.assertIn("div", kit._text("</div>"))
+        self.assertIn("x.com/a.png", kit._text("https://x.com/a.png"))
+        self.assertNotIn("\\[path\\]", kit._text("url(/img/a.png)"))
+
+    def test_a_quoted_path_with_spaces_is_removed_through_its_closing_quote(self):
+        out = kit._text('bad "/home/user/My Site/index.html" here')
+        self.assertNotIn("Site", out)
+        self.assertNotIn("/home", out)
+        self.assertIn("here", out)
+
+    def test_a_windows_path_with_spaces_is_removed(self):
+        out = kit._text("C:\\Users\\A B\\x.html")
+        for leak in ("Users", "A B", "x.html"):
+            self.assertNotIn(leak, out)
+
+    def test_the_home_and_staging_folders_are_removed_literally(self):
+        # After "(" the regex sees no path, so only the literal roots can remove these.
+        home = str(Path.home())
+        out = kit._text(f"({home}/notes.txt) (/var/x/stage/a.html)", roots=(home, "/var/x/stage"))
+        self.assertNotIn(home, out)
+        self.assertNotIn("/var/x", out)
+        self.assertNotIn("notes", out)

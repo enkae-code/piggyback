@@ -649,6 +649,53 @@ class SafeReadTests(unittest.TestCase):
         self.assertEqual(outside.read_text(encoding="utf-8"), "keep")
 
 
+@unittest.skipUnless(os.name == "posix", "POSIX only: file modes and umask")
+class PublishModeTests(unittest.TestCase):
+    def test_the_temp_file_has_its_final_mode_before_any_byte_is_written(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "CHECK.md"
+            path.write_text("old", encoding="utf-8")
+            os.chmod(path, 0o600)
+            old_umask = os.umask(0o022)
+            self.addCleanup(os.umask, old_umask)
+            real_temp = measure._temp_fd
+            real_fdopen = os.fdopen
+            temps, writes, modes = [], [], []
+
+            def record_temp(*args, **kwargs):
+                fd, name = real_temp(*args, **kwargs)
+                temps.append(fd)
+                return fd, name
+
+            class Watch:
+                def __init__(self, handle, fd):
+                    self.handle, self.fd = handle, fd
+
+                def __enter__(self):
+                    return self
+
+                def __exit__(self, *exc):
+                    return self.handle.__exit__(*exc)
+
+                def write(self, text):
+                    writes.append(self.fd)
+                    modes.append(os.fstat(self.fd).st_mode & 0o777)
+                    return self.handle.write(text)
+
+            def watched_fdopen(fd, *args, **kwargs):
+                return Watch(real_fdopen(fd, *args, **kwargs), fd)
+
+            with (
+                mock.patch.object(measure, "_temp_fd", side_effect=record_temp),
+                mock.patch.object(measure.os, "fdopen", side_effect=watched_fdopen),
+            ):
+                measure.publish_text(path, "new text")
+            self.assertEqual(writes, temps)
+            self.assertEqual(modes, [0o600])
+            self.assertEqual(path.stat().st_mode & 0o777, 0o600)
+            self.assertEqual(path.read_text(encoding="utf-8"), "new text")
+
+
 @unittest.skipUnless(os.name == "posix", "POSIX only: process groups and background children")
 class ProcessCleanupTests(unittest.TestCase):
     def test_a_child_left_in_the_group_after_a_normal_exit_is_killed(self):
