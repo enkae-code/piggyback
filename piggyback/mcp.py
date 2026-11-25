@@ -204,7 +204,11 @@ def kit_summary(info):
         and PIGGYBACK_VERSION.fullmatch(piggyback)
     ):
         piggyback = "unknown"
-    schema = info["schema"] if type(info["schema"]) is int else "unknown"
+    schema = (
+        kit_mod.SCHEMA
+        if info["schema"] == kit_mod.SCHEMA and type(info["schema"]) is int
+        else "unknown"
+    )
     lines = [
         "Kit ready: fingerprint.json, DESIGN.md, BRIEF.md and MOTION.md match kit.json.",
         f"Piggyback {piggyback}, kit schema {schema}.",

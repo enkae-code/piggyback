@@ -396,6 +396,15 @@ class KitMode(unittest.TestCase):
         self.assertIn("Piggyback unknown, kit schema 1.", text)
         self.assertLess(len(text), 2000)
 
+    def test_a_huge_integer_schema_is_shown_as_unknown(self):
+        data = json.loads((self.kit / "kit.json").read_text(encoding="utf-8"))
+        data["schema"] = int("9" * 3000)
+        (self.kit / "kit.json").write_text(json.dumps(data), encoding="utf-8")
+        session = kit_session(self.kit, BUILD_URL, self.fake)
+        text = self.text(exchange(session, call("get_kit"))[0])
+        self.assertIn("kit schema unknown.", text)
+        self.assertLess(len(text), 2000)
+
     def test_a_long_attempt_number_is_not_echoed(self):
         (self.kit / "CHECK.md").write_text(
             f"## Attempt {'9' * 8192}\n\nFixed: none\nStill open: none\nUncomparable: none\n",
