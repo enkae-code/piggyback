@@ -583,6 +583,13 @@ class TextRedactionTests(unittest.TestCase):
         self.assertEqual(kit._text("calc(100% /3)"), "calc(100% /3)")
         self.assertEqual(kit._text("a // comment"), "a // comment")
 
+    def test_a_bare_windows_path_is_removed(self):
+        for text in ("err at D:\\Work\\Client\\x.html here", "C:\\Users\\Bob\\site\\x.html"):
+            out = kit._text(text)
+            for leak in ("Work", "Client", "Users", "Bob", "x.html"):
+                self.assertNotIn(leak, out)
+        self.assertEqual(kit._text("err at D:\\Work\\x.html here"), r"err at \[path\] here")
+
     def test_a_quoted_windows_path_with_spaces_is_removed(self):
         # ponytail: an unquoted Windows path with spaces is cut at the first space; quote it.
         out = kit._text('bad "C:\\Users\\A B\\x.html" here')

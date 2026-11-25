@@ -54,7 +54,7 @@ RUN = r"""[^<>"'`()\r\n]*"""  # a literal root takes the path to a delimiter or 
 # so markup ("</div>"), URLs ("https://"), "url(/x)", "1 /2" and "//" are not paths.
 ABS_PATH = re.compile(
     rf"""(?P<q>["'`]){ROOT}[^\r\n]*?(?P=q)"""
-    rf"""|(?<![^\s]){ROOT}[\w.~-][^\s"'`<>()]*/[^\s"'`<>()]*"""
+    rf"""|(?<![^\s]){ROOT}[\w.~-][^\s"'`<>()]*[\\/][^\s"'`<>()]*"""
 )
 MARKER = "<!-- piggyback-check "
 CHECK_NOT_RUN = (
