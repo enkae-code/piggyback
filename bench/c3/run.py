@@ -454,10 +454,12 @@ def run_lock(run):
         locked = True
         yield
     finally:
-        if locked and os.name == "nt":
-            os.lseek(fd, 0, os.SEEK_SET)
-            msvcrt.locking(fd, msvcrt.LK_UNLCK, 1)  # Windows may release late on close alone
-        os.close(fd)
+        try:
+            if locked and os.name == "nt":
+                os.lseek(fd, 0, os.SEEK_SET)
+                msvcrt.locking(fd, msvcrt.LK_UNLCK, 1)  # Windows may release late on close alone
+        finally:
+            os.close(fd)
 
 
 def _open_lock(lock):

@@ -945,6 +945,30 @@ class RunLock(unittest.TestCase):
             self.assertEqual(caught.exception.errno, errno.EIO)
             self.assertEqual(len(os.listdir("/dev/fd")), before)
 
+    def test_a_failed_windows_unlock_still_closes_the_lock_file(self):
+        fake = mock.Mock(LK_NBLCK=1, LK_UNLCK=0)
+
+        def locking(fd, mode, nbytes):
+            if mode == fake.LK_UNLCK:
+                raise OSError(errno.EIO, "I/O error")
+
+        fake.locking.side_effect = locking
+        with tempfile.TemporaryDirectory() as tmp:
+            run = Path(tmp)
+            closed = []
+            real_close = os.close
+            with (
+                mock.patch.object(runner, "msvcrt", fake, create=True),
+                mock.patch.object(runner.os, "name", "nt"),
+                mock.patch.object(
+                    runner.os, "close", side_effect=lambda fd: (closed.append(fd), real_close(fd))
+                ),
+            ):
+                with self.assertRaises(OSError) as caught, runner.run_lock(run):
+                    pass
+            self.assertEqual(caught.exception.errno, errno.EIO)
+            self.assertEqual(len(closed), 1)
+
 
 class TempdirScope(unittest.TestCase):
     def test_the_resolved_temp_folder_is_set_only_while_this_module_runs(self):
